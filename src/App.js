@@ -450,9 +450,20 @@ export default function App() {
   const updTg=t=>{setTags(t);save(tasks,t,templates);};
   const updTp=t=>{setTemplates(t);save(tasks,tags,t);};
 
+  const ALLOWED_UIDS = [
+    "w1HtaWxdSnMCV1miEm3yNF7g08J2",
+    "mszdWzOojoURpcIQdYdA3FRpQiG2"
+  ];
+
   const handleLogin=async()=>{
     setLoginLoading(true);
-    try{await signInWithPopup(auth,provider);}
+    try{
+      const result = await signInWithPopup(auth,provider);
+      if(!ALLOWED_UIDS.includes(result.user.uid)){
+        await signOut(auth);
+        alert("このアカウントはアクセスできません。");
+      }
+    }
     catch(e){console.error(e);}
     setLoginLoading(false);
   };
