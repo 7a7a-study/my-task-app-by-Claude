@@ -294,3 +294,34 @@ const MonthView = ({tasks,tags,today}) => {
   };
   const MN=["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
   return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:20}}>
+        <Btn onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1);}}>‹ 前月</Btn>
+        <span style={{fontWeight:700,fontSize:16}}>{vy}年 {MN[vm]}</span>
+        <Btn onClick={()=>{if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1);}}>次月 ›</Btn>
+      </div>
+      <div style={{overflowX:"auto"}}>
+        <div style={{minWidth:dim*30+180}}>
+          <div style={{display:"flex",borderBottom:`1px solid ${COLORS.border}`,paddingBottom:4,marginBottom:4}}>
+            <div style={{width:180,flexShrink:0}}></div>
+            {Array.from({length:dim},(_,i)=>{
+              const d=i+1,isT=`${vy}-${String(vm+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`===today;
+              return <div key={d} style={{width:30,flexShrink:0,textAlign:"center",fontSize:10,fontWeight:isT?700:400,color:isT?COLORS.accent:COLORS.textMuted}}>{d}</div>;
+            })}
+          </div>
+          {allTasks.map(task=>{
+            const bar=getBar(task),c=tags.find(t=>task.tags?.includes(t.id))?.color||COLORS.accent;
+            return <div key={task.id} style={{display:"flex",alignItems:"center",marginBottom:6,height:28}}>
+              <div style={{width:180,flexShrink:0,fontSize:12,paddingRight:8,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:COLORS.textSoft}}>{task.title}</div>
+              <div style={{position:"relative",height:"100%",flex:1}}>
+                {bar&&<div style={{position:"absolute",left:(bar.startDay-1)*30,width:bar.width*30-4,height:22,top:3,background:c+"33",border:`1px solid ${c}55`,borderRadius:6,display:"flex",alignItems:"center",paddingLeft:8,fontSize:10,color:c,fontWeight:600,overflow:"hidden",whiteSpace:"nowrap"}}>
+                  {bar.width>2?task.title.slice(0,15):""}
+                </div>}
+              </div>
+            </div>;
+          })}
+        </div>
+      </div>
+    </div>
+  );
+};
