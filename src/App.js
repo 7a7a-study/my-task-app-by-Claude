@@ -325,3 +325,233 @@ const MonthView = ({tasks,tags,today}) => {
     </div>
   );
 };
+
+const TemplatesView = ({templates,setTemplates,onUse}) => {
+  const [show,setShow]=useState(false);
+  const [form,setForm]=useState({name:"",tasks:[""]});
+  const save=()=>{if(!form.name.trim())return;setTemplates(t=>[...t,{id:"tpl_"+Date.now(),name:form.name,tasks:form.tasks.filter(Boolean)}]);setForm({name:"",tasks:[""]});setShow(false);};
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:20}}>
+        <Btn variant="accent" onClick={()=>setShow(true)}>+ テンプレートを作成</Btn>
+      </div>
+      {templates.length===0&&<div style={{textAlign:"center",padding:40,color:COLORS.textMuted}}>テンプレートがまだありません</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:16}}>
+        {templates.map(tpl=>(
+          <div key={tpl.id} style={{background:COLORS.surface,borderRadius:14,padding:20,border:`1px solid ${COLORS.border}`}}>
+            <div style={{fontWeight:700,fontSize:15,marginBottom:12}}>{tpl.name}</div>
+            <div style={{marginBottom:14}}>
+              {tpl.tasks.map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"5px 0",borderBottom:`1px solid ${COLORS.border}22`,fontSize:13,color:COLORS.textSoft}}><div style={{width:6,height:6,borderRadius:"50%",background:COLORS.accent,flexShrink:0}}></div>{t}</div>)}
+            </div>
+            <div style={{display:"flex",gap:8}}>
+              <Btn variant="accent" onClick={()=>onUse(tpl)} style={{flex:1,textAlign:"center"}}>使う</Btn>
+              <Btn variant="danger" onClick={()=>setTemplates(t=>t.filter(x=>x.id!==tpl.id))}>削除</Btn>
+            </div>
+          </div>
+        ))}
+      </div>
+      {show&&(
+        <Modal title="テンプレートを作成" onClose={()=>setShow(false)}>
+          <Inp label="テンプレート名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="例: 週次レビュー"/>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:8,fontWeight:600}}>タスク一覧</div>
+            {form.tasks.map((t,i)=>(
+              <div key={i} style={{display:"flex",gap:8,marginBottom:6}}>
+                <input value={t} onChange={e=>{const ts=[...form.tasks];ts[i]=e.target.value;setForm(f=>({...f,tasks:ts}));}} placeholder={`タスク ${i+1}`}
+                  style={{flex:1,background:COLORS.bg,color:COLORS.text,padding:"8px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:13}}/>
+                <button onClick={()=>setForm(f=>({...f,tasks:f.tasks.filter((_,idx)=>idx!==i)}))} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:6,width:32}}>✕</button>
+              </div>
+            ))}
+            <Btn onClick={()=>setForm(f=>({...f,tasks:[...f.tasks,""]}))}>+ 追加</Btn>
+          </div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+            <Btn onClick={()=>setShow(false)}>キャンセル</Btn>
+            <Btn variant="accent" onClick={save}>保存</Btn>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
+};
+
+const TagsView = ({tags,setTags}) => {
+  const [form,setForm]=useState({name:"",color:"#6c63ff"});
+  const add=()=>{if(!form.name.trim())return;setTags(t=>[...t,{id:"tag_"+Date.now(),...form}]);setForm({name:"",color:"#6c63ff"});};
+  return (
+    <div>
+      <div style={{background:COLORS.surface,borderRadius:14,padding:20,border:`1px solid ${COLORS.border}`,marginBottom:20}}>
+        <div style={{fontWeight:700,marginBottom:14}}>新しいタグを作成</div>
+        <div style={{display:"flex",gap:12,alignItems:"flex-end"}}>
+          <div style={{flex:1}}><Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/></div>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>色</div>
+            <input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} style={{width:44,height:38,borderRadius:8,border:`1px solid ${COLORS.border}`,background:"none",cursor:"pointer",padding:2}}/>
+          </div>
+          <div style={{marginBottom:14}}><Btn variant="accent" onClick={add}>追加</Btn></div>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(200px,1fr))",gap:12}}>
+        {tags.map(t=>(
+          <div key={t.id} style={{background:COLORS.surface,borderRadius:12,padding:"14px 16px",border:`1px solid ${t.color}44`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div style={{width:12,height:12,borderRadius:"50%",background:t.color}}></div>
+              <span style={{fontWeight:600,color:t.color}}>{t.name}</span>
+            </div>
+            <button onClick={()=>setTags(ts=>ts.filter(x=>x.id!==t.id))} style={{background:"none",border:"none",color:COLORS.textMuted,fontSize:14}}>✕</button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default function App() {
+  const today=new Date().toISOString().slice(0,10);
+  const [user,setUser]=useState(null);
+  const [authLoading,setAuthLoading]=useState(true);
+  const [loginLoading,setLoginLoading]=useState(false);
+  const [saving,setSaving]=useState(false);
+  const [tasks,setTasks]=useState([]);
+  const [tags,setTags]=useState(TAG_PRESETS);
+  const [templates,setTemplates]=useState([]);
+  const [view,setView]=useState("list");
+  const [showForm,setShowForm]=useState(false);
+  const [editTask,setEditTask]=useState(null);
+  const [addChildTo,setAddChildTo]=useState(null);
+  const [filters,setFilters]=useState({tag:"",search:"",hideCompleted:false});
+
+  useEffect(()=>{
+    const unsub=onAuthStateChanged(auth,u=>{setUser(u);setAuthLoading(false);});
+    return unsub;
+  },[]);
+
+  useEffect(()=>{
+    if(!user)return;
+    const unsub=onSnapshot(doc(db,"users",user.uid),snap=>{
+      if(snap.exists()){
+        const data=snap.data();
+        if(data.tasks)setTasks(data.tasks);
+        if(data.tags)setTags(data.tags);
+        if(data.templates)setTemplates(data.templates);
+      }
+    });
+    return unsub;
+  },[user]);
+
+  const save=async(t,tg,tp)=>{
+    if(!user)return;
+    setSaving(true);
+    try{await setDoc(doc(db,"users",user.uid),{tasks:t,tags:tg,templates:tp,updatedAt:new Date().toISOString()});}
+    catch(e){console.error(e);}
+    setSaving(false);
+  };
+
+  const updT=t=>{setTasks(t);save(t,tags,templates);};
+  const updTg=t=>{setTags(t);save(tasks,t,templates);};
+  const updTp=t=>{setTemplates(t);save(tasks,tags,t);};
+
+  const handleLogin=async()=>{
+    setLoginLoading(true);
+    try{await signInWithPopup(auth,provider);}
+    catch(e){console.error(e);}
+    setLoginLoading(false);
+  };
+
+  const updTree=(ts,id,fn)=>ts.map(t=>t.id===id?fn(t):{...t,children:updTree(t.children||[],id,fn)});
+  const delTree=(ts,id)=>ts.filter(t=>t.id!==id).map(t=>({...t,children:delTree(t.children||[],id)}));
+  const addChild=(ts,pid,c)=>ts.map(t=>t.id===pid?{...t,children:[...(t.children||[]),c]}:{...t,children:addChild(t.children||[],pid,c)});
+
+  const handleSave=f=>{
+    let nt;
+    if(editTask)nt=updTree(tasks,f.id,()=>f);
+    else if(addChildTo)nt=addChild(tasks,addChildTo,f);
+    else nt=[...tasks,f];
+    updT(nt);
+    setEditTask(null);setAddChildTo(null);
+  };
+
+  const allFlat=flattenTasks(tasks);
+  const done=allFlat.filter(t=>t.done).length;
+  const total=allFlat.length;
+  const pct=total>0?Math.round((done/total)*100):0;
+
+  const NAV=[
+    {id:"list",label:"リスト",icon:"☰"},{id:"day",label:"日",icon:"📆"},
+    {id:"week",label:"週",icon:"📅"},{id:"month",label:"月(ガント)",icon:"📊"},
+    {id:"templates",label:"テンプレート",icon:"📋"},{id:"tagmgr",label:"タグ管理",icon:"🏷"},
+  ];
+
+  if(authLoading)return<div style={{minHeight:"100vh",background:COLORS.bg,display:"flex",alignItems:"center",justifyContent:"center",color:COLORS.textMuted}}>読み込み中...</div>;
+  if(!user)return<LoginScreen onLogin={handleLogin} loading={loginLoading}/>;
+
+  return (
+    <>
+      <style>{G}</style>
+      <div style={{minHeight:"100vh",background:COLORS.bg,display:"flex"}}>
+        <div style={{width:216,flexShrink:0,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",padding:"24px 0",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto"}}>
+          <div style={{padding:"0 18px 20px",borderBottom:`1px solid ${COLORS.border}`}}>
+            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:17,letterSpacing:-.5}}>
+              <span style={{color:COLORS.accent}}>◈</span> マイタスク
+            </div>
+            <div style={{fontSize:11,color:COLORS.textMuted,marginTop:4}}>{user.email}</div>
+            {saving&&<div style={{fontSize:10,color:COLORS.success,marginTop:4}}>💾 保存中...</div>}
+            <div style={{marginTop:12}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:COLORS.textMuted,marginBottom:6}}>
+                <span>全体進捗</span><span style={{fontWeight:700,color:COLORS.accent}}>{pct}%</span>
+              </div>
+              <div style={{background:COLORS.bg,borderRadius:10,height:6,overflow:"hidden"}}>
+                <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${COLORS.accent},${COLORS.success})`,borderRadius:10,transition:"width .4s"}}></div>
+              </div>
+              <div style={{fontSize:10,color:COLORS.textMuted,marginTop:4}}>{done}/{total} 完了</div>
+            </div>
+          </div>
+          <div style={{padding:"14px 10px",flex:1}}>
+            {NAV.map(n=>(
+              <button key={n.id} className="nb" onClick={()=>setView(n.id)} style={{display:"flex",alignItems:"center",gap:10,width:"100%",padding:"10px 12px",borderRadius:10,marginBottom:3,background:view===n.id?COLORS.accentSoft:"transparent",color:view===n.id?COLORS.accent:COLORS.textSoft,border:view===n.id?`1px solid ${COLORS.accent}33`:"1px solid transparent",fontSize:13,fontWeight:view===n.id?700:400,textAlign:"left"}}>
+                <span style={{fontSize:15}}>{n.icon}</span>{n.label}
+              </button>
+            ))}
+          </div>
+          <div style={{padding:"14px 10px",borderTop:`1px solid ${COLORS.border}`}}>
+            <div style={{fontSize:11,color:COLORS.textMuted,marginBottom:8,fontWeight:600}}>フィルター</div>
+            <input value={filters.search} onChange={e=>setFilters(f=>({...f,search:e.target.value}))} placeholder="検索..."
+              style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"7px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:8}}/>
+            <select value={filters.tag} onChange={e=>setFilters(f=>({...f,tag:e.target.value}))}
+              style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"7px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:8}}>
+              <option value="">すべてのタグ</option>
+              {tags.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}
+            </select>
+            <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+              <Checkbox checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={16}/>
+              <span style={{fontSize:12,color:COLORS.textMuted}}>完了を隠す</span>
+            </div>
+            <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"7px",fontSize:12,cursor:"pointer"}}>ログアウト</button>
+          </div>
+        </div>
+
+        <div style={{marginLeft:216,flex:1,padding:32,maxWidth:"calc(100% - 216px)"}}>
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:28}}>
+            <div>
+              <h1 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:22,letterSpacing:-.5}}>
+                {NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}
+              </h1>
+              <div style={{fontSize:12,color:COLORS.textMuted,marginTop:2}}>
+                {new Date(today).toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"long"})}
+              </div>
+            </div>
+            {["list","day","week"].includes(view)&&(
+              <Btn variant="accent" onClick={()=>{setEditTask(null);setAddChildTo(null);setShowForm(true);}}>+ タスクを追加</Btn>
+            )}
+          </div>
+          {view==="list"&&<ListView tasks={tasks} tags={tags} filters={filters} onEdit={t=>{setEditTask(t);setShowForm(true);}} onDelete={id=>updT(delTree(tasks,id))} onToggle={id=>updT(updTree(tasks,id,t=>({...t,done:!t.done})))} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}}/>}
+          {view==="week"&&<WeekView tasks={tasks} tags={tags} today={today}/>}
+          {view==="day"&&<DayView tasks={tasks} tags={tags} today={today}/>}
+          {view==="month"&&<MonthView tasks={tasks} tags={tags} today={today}/>}
+          {view==="templates"&&<TemplatesView templates={templates} setTemplates={updTp} onUse={tpl=>{updT([...tasks,...tpl.tasks.map(title=>({id:"task_"+Date.now()+Math.random(),title,done:false,tags:[],memo:"",startDate:today,dueDate:"",startTime:"",endTime:"",repeat:"なし",children:[],isLater:false}))]);setView("list");}}/>}
+          {view==="tagmgr"&&<TagsView tags={tags} setTags={updTg}/>}
+        </div>
+      </div>
+      {showForm&&<TaskForm task={editTask} tags={tags} isChild={!!addChildTo} onSave={handleSave} onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);}}/>}
+    </>
+  );
+}
