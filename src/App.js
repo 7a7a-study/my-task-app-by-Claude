@@ -1,0 +1,296 @@
+import { useState, useMemo, useEffect } from "react";
+import { auth, provider, db } from "./firebase";
+import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
+
+const COLORS = {
+  bg:"#0f1117",surface:"#1a1d27",surfaceHover:"#21253a",border:"#2a2d3e",
+  accent:"#6c63ff",accentSoft:"rgba(108,99,255,0.15)",
+  success:"#22d3a5",warning:"#f59e0b",danger:"#f43f5e",
+  text:"#e2e8f0",textMuted:"#64748b",textSoft:"#94a3b8",
+};
+const TAG_PRESETS = [
+  {id:"t1",name:"仕事",color:"#6c63ff"},{id:"t2",name:"個人",color:"#22d3a5"},
+  {id:"t3",name:"緊急",color:"#f43f5e"},{id:"t4",name:"学習",color:"#f59e0b"},
+  {id:"t5",name:"健康",color:"#10b981"},
+];
+const REPEAT_OPTIONS = ["なし","毎日","毎週","毎月","平日のみ"];
+const DAYS_JP = ["月","火","水","木","金","土","日"];
+const HOURS = Array.from({length:24},(_,i)=>`${String(i).padStart(2,"0")}:00`);
+
+const flattenTasks = (tasks,result=[]) => { tasks.forEach(t=>{result.push(t);if(t.children?.length)flattenTasks(t.children,result);}); return result; };
+const getDaysInMonth = (y,m) => new Date(y,m+1,0).getDate();
+const formatDate = d => { if(!d)return""; const dt=new Date(d); return `${dt.getMonth()+1}/${dt.getDate()}`; };
+const isSameDay = (d1,d2) => (!d1||!d2)?false:d1.slice(0,10)===d2.slice(0,10);
+const getWeekDates = base => { const d=new Date(base),day=d.getDay(),mon=new Date(d); mon.setDate(d.getDate()-day+1); return Array.from({length:7},(_,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return dt.toISOString().slice(0,10);}); };
+
+const G = `
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700&family=Space+Grotesk:wght@600;700&display=swap');
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{background:#0f1117;color:#e2e8f0;font-family:'Noto Sans JP',sans-serif}
+  ::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:#0f1117}::-webkit-scrollbar-thumb{background:#2a2d3e;border-radius:3px}
+  input,textarea,select{font-family:'Noto Sans JP',sans-serif;outline:none;border:none}
+  button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:none}
+  .tr:hover .ta{opacity:1!important}
+  .nb:hover{background:#21253a!important}
+  .ba:hover{filter:brightness(1.1);box-shadow:0 0 16px rgba(108,99,255,0.4)}
+  .mo{animation:fi .15s ease}.mc{animation:su .2s ease}
+  @keyframes fi{from{opacity:0}to{opacity:1}}
+  @keyframes su{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
+`;
+
+const TagChip = ({tag,onRemove}) => (
+  <span style={{display:"inline-flex",alignItems:"center",gap:4,padding:"2px 8px",borderRadius:20,background:tag.color+"22",color:tag.color,fontSize:11,fontWeight:600,border:`1px solid ${tag.color}44`}}>
+    {tag.name}{onRemove&&<span onClick={onRemove} style={{cursor:"pointer",fontSize:10,opacity:.7}}>✕</span>}
+  </span>
+);
+
+const Checkbox = ({checked,onChange,size=18}) => (
+  <div onClick={onChange} style={{width:size,height:size,borderRadius:5,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"all .15s"}}>
+    {checked&&<span style={{color:"#fff",fontSize:size*.6,fontWeight:700}}>✓</span>}
+  </div>
+);
+
+const Btn = ({children,onClick,variant="ghost",style={},disabled}) => {
+  const v={ghost:{background:"transparent",color:COLORS.textSoft,border:`1px solid ${COLORS.border}`},accent:{background:COLORS.accent,color:"#fff",border:"none"},danger:{background:COLORS.danger+"22",color:COLORS.danger,border:`1px solid ${COLORS.danger}44`}};
+  return <button className={variant==="accent"?"ba":""} onClick={onClick} disabled={disabled} style={{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:600,transition:"all .15s",opacity:disabled?.5:1,...v[variant],...style}}>{children}</button>;
+};
+
+const Modal = ({title,children,onClose,wide}) => (
+  <div className="mo" onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}>
+    <div className="mc" onClick={e=>e.stopPropagation()} style={{background:COLORS.surface,borderRadius:16,width:"100%",maxWidth:wide?720:520,border:`1px solid ${COLORS.border}`,maxHeight:"90vh",overflow:"auto"}}>
+      <div style={{padding:"18px 24px",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <span style={{fontWeight:700,fontSize:16}}>{title}</span>
+        <button onClick={onClose} style={{background:"none",color:COLORS.textMuted,fontSize:20}}>✕</button>
+      </div>
+      <div style={{padding:"20px 24px"}}>{children}</div>
+    </div>
+  </div>
+);
+
+const Inp = ({label,value,onChange,type="text",placeholder=""}) => (
+  <div style={{marginBottom:14}}>
+    {label&&<div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>{label}</div>}
+    <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+      style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14}}/>
+  </div>
+);
+
+const Sel = ({label,value,onChange,options}) => (
+  <div style={{marginBottom:14}}>
+    {label&&<div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>{label}</div>}
+    <select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14}}>
+      {options.map(o=><option key={o} value={o}>{o}</option>)}
+    </select>
+  </div>
+);
+
+const LoginScreen = ({onLogin,loading}) => (
+  <div style={{minHeight:"100vh",background:COLORS.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+    <div style={{textAlign:"center",padding:40}}>
+      <div style={{fontSize:56,marginBottom:16}}>✅</div>
+      <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:28,marginBottom:8}}>
+        <span style={{color:COLORS.accent}}>◈</span> マイタスク
+      </div>
+      <div style={{color:COLORS.textMuted,marginBottom:32,fontSize:14}}>あなただけのタスク管理アプリ</div>
+      <button onClick={onLogin} disabled={loading} style={{display:"flex",alignItems:"center",gap:12,background:"#fff",color:"#333",border:"none",borderRadius:12,padding:"14px 28px",fontSize:15,fontWeight:600,cursor:"pointer",margin:"0 auto",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",opacity:loading?0.7:1}}>
+        <svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+        {loading?"ログイン中...":"Googleでログイン"}
+      </button>
+    </div>
+  </div>
+);
+
+const TaskForm = ({task,tags,onSave,onClose,isChild}) => {
+  const empty={id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:"",dueDate:"",startTime:"",endTime:"",repeat:"なし",children:[],isLater:false};
+  const [f,setF]=useState(task||empty);
+  const upd=(k,v)=>setF(p=>({...p,[k]:v}));
+  const tog=tid=>upd("tags",f.tags.includes(tid)?f.tags.filter(x=>x!==tid):[...f.tags,tid]);
+  return (
+    <Modal title={task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide>
+      <Inp label="タスク名 *" value={f.title} onChange={v=>upd("title",v)} placeholder="タスク名..."/>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:6,fontWeight:600}}>タグ</div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:6}}>
+          {tags.map(t=><div key={t.id} onClick={()=>tog(t.id)} style={{padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:600,cursor:"pointer",border:`1px solid ${t.color}44`,background:f.tags.includes(t.id)?t.color+"33":"transparent",color:f.tags.includes(t.id)?t.color:COLORS.textMuted,transition:"all .15s"}}>{t.name}</div>)}
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+        <Inp label="開始日" value={f.startDate} onChange={v=>upd("startDate",v)} type="date"/>
+        <Inp label="締切日" value={f.dueDate} onChange={v=>upd("dueDate",v)} type="date"/>
+        <Inp label="開始時刻" value={f.startTime} onChange={v=>upd("startTime",v)} type="time"/>
+        <Inp label="終了時刻" value={f.endTime} onChange={v=>upd("endTime",v)} type="time"/>
+      </div>
+      <Sel label="繰り返し" value={f.repeat} onChange={v=>upd("repeat",v)} options={REPEAT_OPTIONS}/>
+      <div style={{marginBottom:14}}>
+        <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>メモ</div>
+        <textarea value={f.memo} onChange={e=>upd("memo",e.target.value)} placeholder="メモ..." rows={3} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14,resize:"vertical"}}/>
+      </div>
+      <div style={{marginBottom:16,display:"flex",alignItems:"center",gap:10}}>
+        <Checkbox checked={f.isLater} onChange={()=>upd("isLater",!f.isLater)}/>
+        <span style={{fontSize:13,color:COLORS.textSoft}}>「あとでやる」リストに追加</span>
+      </div>
+      <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}>
+        <Btn onClick={onClose}>キャンセル</Btn>
+        <Btn variant="accent" onClick={()=>{if(f.title.trim()){onSave(f);onClose();}}}>保存</Btn>
+      </div>
+    </Modal>
+  );
+};
+
+const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild}) => {
+  const [exp,setExp]=useState(true);
+  const tTags=tags.filter(t=>task.tags?.includes(t.id));
+  const isOverdue=task.dueDate&&!task.done&&new Date(task.dueDate)<new Date();
+  return (
+    <div style={{marginLeft:depth*22}}>
+      <div className="tr" style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:10,marginBottom:4,background:depth===0?COLORS.surface:"transparent",border:depth===0?`1px solid ${COLORS.border}`:undefined,borderLeft:depth>0?`2px solid ${COLORS.border}`:undefined,paddingLeft:depth>0?14:12,opacity:task.done?.55:1,position:"relative"}}>
+        <div style={{paddingTop:2}}><Checkbox checked={task.done} onChange={()=>onToggle(task.id)}/></div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+            {task.children?.length>0&&<span onClick={()=>setExp(!exp)} style={{cursor:"pointer",fontSize:10,color:COLORS.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
+            <span style={{fontSize:14,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?COLORS.textMuted:COLORS.text}}>{task.title}</span>
+            {task.repeat!=="なし"&&<span style={{fontSize:10,color:COLORS.success,background:COLORS.success+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>↻ {task.repeat}</span>}
+            {task.isLater&&<span style={{fontSize:10,color:COLORS.warning,background:COLORS.warning+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>📌 あとで</span>}
+          </div>
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:5,alignItems:"center"}}>
+            {tTags.map(t=><TagChip key={t.id} tag={t}/>)}
+            {task.startDate&&<span style={{fontSize:11,color:COLORS.textMuted}}>{formatDate(task.startDate)}{task.dueDate?` → ${formatDate(task.dueDate)}`:""}</span>}
+            {isOverdue&&<span style={{fontSize:11,color:COLORS.danger,fontWeight:700}}>⚠ 期限超過</span>}
+            {task.startTime&&<span style={{fontSize:11,color:COLORS.textMuted}}>{task.startTime}{task.endTime?`〜${task.endTime}`:""}</span>}
+            {task.memo&&<span style={{fontSize:11,color:COLORS.textMuted,fontStyle:"italic"}}>{task.memo.slice(0,30)}{task.memo.length>30?"...":""}</span>}
+          </div>
+        </div>
+        <div className="ta" style={{display:"flex",gap:4,opacity:0,transition:"opacity .15s",flexShrink:0}}>
+          <button onClick={()=>onAddChild(task.id)} style={{background:COLORS.accentSoft,color:COLORS.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:16}}>+</button>
+          <button onClick={()=>onEdit(task)} style={{background:COLORS.surfaceHover,color:COLORS.textSoft,border:"none",borderRadius:6,width:28,height:28,fontSize:12}}>✎</button>
+          <button onClick={()=>onDelete(task.id)} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12}}>✕</button>
+        </div>
+      </div>
+      {exp&&task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild}/>)}
+    </div>
+  );
+};
+
+const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild}) => {
+  const filtered=useMemo(()=>{
+    let list=tasks;
+    if(filters.tag)list=list.filter(t=>t.tags?.includes(filters.tag));
+    if(filters.search)list=list.filter(t=>t.title.toLowerCase().includes(filters.search.toLowerCase()));
+    if(filters.hideCompleted)list=list.filter(t=>!t.done);
+    return list;
+  },[tasks,filters]);
+  const later=filtered.filter(t=>t.isLater);
+  const habits=filtered.filter(t=>!t.isLater&&t.repeat!=="なし");
+  const regular=filtered.filter(t=>!t.isLater&&t.repeat==="なし");
+  const Sec=({title,items,accent})=>items.length===0?null:(
+    <div style={{marginBottom:28}}>
+      <div style={{fontSize:12,fontWeight:700,color:accent,textTransform:"uppercase",letterSpacing:1,marginBottom:12,display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:20,height:2,background:accent}}></div>{title} ({items.length})
+      </div>
+      {items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild}/>)}
+    </div>
+  );
+  return (
+    <div>
+      <Sec title="習慣・繰り返し" items={habits} accent={COLORS.success}/>
+      <Sec title="タスク" items={regular} accent={COLORS.accent}/>
+      <Sec title="あとでやる" items={later} accent={COLORS.warning}/>
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:COLORS.textMuted}}><div style={{fontSize:48,marginBottom:12}}>🎉</div><div>タスクがありません</div></div>}
+    </div>
+  );
+};
+
+const WeekView = ({tasks,tags,today}) => {
+  const weekDates=getWeekDates(today);
+  const allTasks=flattenTasks(tasks);
+  const getDay=date=>allTasks.filter(t=>{
+    if(t.repeat==="毎日")return true;
+    if(t.repeat==="平日のみ"){const d=new Date(date).getDay();return d>=1&&d<=5;}
+    if(t.repeat==="毎週"&&t.startDate)return new Date(t.startDate).getDay()===new Date(date).getDay();
+    return isSameDay(t.startDate,date)||isSameDay(t.dueDate,date);
+  });
+  return (
+    <div style={{overflowX:"auto"}}>
+      <div style={{display:"grid",gridTemplateColumns:"56px repeat(7,1fr)",minWidth:700}}>
+        <div></div>
+        {weekDates.map((d,i)=>{const isT=d===today,dt=new Date(d);return(
+          <div key={d} style={{padding:"8px 4px",textAlign:"center",borderBottom:`2px solid ${isT?COLORS.accent:COLORS.border}`,color:isT?COLORS.accent:COLORS.textSoft}}>
+            <div style={{fontSize:11,fontWeight:700}}>{DAYS_JP[i]}</div>
+            <div style={{fontSize:18,fontWeight:isT?700:400}}>{dt.getDate()}</div>
+          </div>
+        );})}
+        {HOURS.slice(6,23).map(hour=>[
+          <div key={hour+"l"} style={{fontSize:10,color:COLORS.textMuted,paddingRight:6,textAlign:"right",paddingTop:4,borderTop:`1px solid ${COLORS.border}22`,height:52,display:"flex",alignItems:"flex-start",justifyContent:"flex-end"}}>{hour}</div>,
+          ...weekDates.map(d=>{
+            const dts=getDay(d).filter(t=>t.startTime?.slice(0,2)===hour.slice(0,2));
+            return <div key={d+hour} style={{borderTop:`1px solid ${COLORS.border}22`,height:52,padding:2}}>
+              {dts.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return(
+                <div key={t.id} style={{background:c+"33",borderLeft:`3px solid ${c}`,borderRadius:"0 6px 6px 0",padding:"2px 6px",fontSize:10,color:c,fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",marginBottom:2}}>{t.startTime} {t.title}</div>
+              );})}
+            </div>;
+          })
+        ])}
+      </div>
+    </div>
+  );
+};
+
+const DayView = ({tasks,tags,today}) => {
+  const allTasks=flattenTasks(tasks);
+  const todayTasks=allTasks.filter(t=>{
+    if(t.repeat==="毎日")return true;
+    if(t.repeat==="平日のみ"){const d=new Date(today).getDay();return d>=1&&d<=5;}
+    return isSameDay(t.startDate,today)||isSameDay(t.dueDate,today);
+  });
+  const timed=todayTasks.filter(t=>t.startTime);
+  const untimed=todayTasks.filter(t=>!t.startTime);
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"1fr 280px",gap:24}}>
+      <div>
+        <div style={{fontSize:12,fontWeight:700,color:COLORS.textMuted,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>タイムライン</div>
+        {HOURS.slice(6,23).map(hour=>{
+          const ht=timed.filter(t=>t.startTime?.slice(0,2)===hour.slice(0,2));
+          return <div key={hour} style={{display:"grid",gridTemplateColumns:"50px 1fr",minHeight:60,borderTop:`1px solid ${COLORS.border}`}}>
+            <div style={{fontSize:11,color:COLORS.textMuted,paddingTop:4,paddingRight:8,textAlign:"right"}}>{hour}</div>
+            <div style={{padding:"4px 0 4px 12px"}}>
+              {ht.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return(
+                <div key={t.id} style={{background:c+"22",borderLeft:`4px solid ${c}`,borderRadius:"0 10px 10px 0",padding:"8px 12px",marginBottom:4}}>
+                  <div style={{fontSize:13,fontWeight:700,color:c}}>{t.title}</div>
+                  <div style={{fontSize:11,color:COLORS.textMuted}}>{t.startTime}{t.endTime?` 〜 ${t.endTime}`:""}{t.repeat!=="なし"?` · ↻ ${t.repeat}`:""}</div>
+                </div>
+              );})}
+            </div>
+          </div>;
+        })}
+      </div>
+      <div>
+        <div style={{fontSize:12,fontWeight:700,color:COLORS.textMuted,marginBottom:12,textTransform:"uppercase",letterSpacing:1}}>時間未定</div>
+        {untimed.length===0?<div style={{color:COLORS.textMuted,fontSize:13}}>なし</div>:untimed.map(t=>{
+          const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;
+          return <div key={t.id} style={{background:COLORS.surface,borderRadius:10,padding:"10px 14px",marginBottom:8,borderLeft:`3px solid ${c}`}}>
+            <div style={{fontSize:13,fontWeight:600}}>{t.title}</div>
+            {t.dueDate&&<div style={{fontSize:11,color:COLORS.textMuted,marginTop:2}}>{formatDate(t.dueDate)}まで</div>}
+          </div>;
+        })}
+      </div>
+    </div>
+  );
+};
+
+const MonthView = ({tasks,tags,today}) => {
+  const [vy,setVy]=useState(new Date(today).getFullYear());
+  const [vm,setVm]=useState(new Date(today).getMonth());
+  const dim=getDaysInMonth(vy,vm);
+  const allTasks=flattenTasks(tasks).filter(t=>t.startDate||t.dueDate);
+  const getBar=task=>{
+    const s=task.startDate?new Date(task.startDate):task.dueDate?new Date(task.dueDate):null;
+    const e=task.dueDate?new Date(task.dueDate):s;
+    if(!s)return null;
+    const ms=new Date(vy,vm,1),me=new Date(vy,vm,dim);
+    if(e<ms||s>me)return null;
+    const cs=s<ms?ms:s,ce=e>me?me:e;
+    return{startDay:cs.getDate(),width:ce.getDate()-cs.getDate()+1};
+  };
+  const MN=["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
+  return (
