@@ -27,8 +27,8 @@ const parseMemo=(memo,onToggle)=>{
   if(!memo)return null;
   return memo.split("\n").map((line,i)=>{
     const m=line.match(/^- \[(x| )\] (.*)$/);
-    if(m){const checked=m[1]==="x";return(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:2}}><div onClick={()=>onToggle(i)} style={{width:14,height:14,borderRadius:3,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{checked&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}</div><span style={{fontSize:12,color:checked?COLORS.textMuted:COLORS.textSoft,textDecoration:checked?"line-through":"none"}}>{m[2]}</span></div>);}
-    return <div key={i} style={{fontSize:12,color:COLORS.textSoft,marginBottom:2}}>{line}</div>;
+    if(m){const checked=m[1]==="x";return(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}><div onClick={e=>{e.stopPropagation();onToggle&&onToggle(i);}} style={{width:14,height:14,borderRadius:3,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>{checked&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}</div><span style={{fontSize:12,color:checked?COLORS.textMuted:COLORS.textSoft,textDecoration:checked?"line-through":"none"}}>{m[2]}</span></div>);}
+    return <div key={i} style={{fontSize:12,color:COLORS.textSoft,marginBottom:2}}>{line||<br/>}</div>;
   });
 };
 const toggleMemoCheck=(memo,idx)=>{const lines=memo.split("\n");const m=lines[idx]?.match(/^- \[(x| )\] (.*)$/);if(m)lines[idx]=`- [${m[1]==="x"?" ":"x"}] ${m[2]}`;return lines.join("\n");};
@@ -98,13 +98,15 @@ const LaterPanel=({tasks,tags,dragTask,setDragTask})=>{
       {laterTasks.map(t=>{
         const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;
         const isDragging=dragTask?.id===t.id;
+        const childTag=tags.find(tg=>t.tags?.includes(tg.id)&&tg.parentId);
         return (
           <div key={t.id} draggable className="chip-drag" onDragStart={e=>{e.dataTransfer.effectAllowed="move";setDragTask(t);}} onDragEnd={()=>setDragTask(null)}
             style={{background:isDragging?COLORS.accentSoft:COLORS.bg,borderLeft:`3px solid ${c}`,borderRadius:"0 8px 8px 0",padding:"7px 9px",marginBottom:7,opacity:isDragging?0.5:1,transition:"all .15s"}}>
+            {t._parentTitle&&<div style={{fontSize:9,color:COLORS.textMuted,marginBottom:2}}>📁 {t._parentTitle}</div>}
             <div style={{fontSize:12,fontWeight:600,color:COLORS.text,marginBottom:2}}>{t.title}</div>
             {t.duration&&<div style={{fontSize:10,color:COLORS.accent}}>⏱ {t.duration}分</div>}
             {t.deadlineDate&&<div style={{fontSize:10,color:COLORS.warning}}>⚠ {formatDate(t.deadlineDate)}</div>}
-            <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:3}}>{tags.filter(tg=>t.tags?.includes(tg.id)).map(tg=><span key={tg.id} style={{fontSize:9,color:tg.color,background:tg.color+"22",padding:"1px 5px",borderRadius:10}}>{tg.name}</span>)}</div>
+            {childTag&&<span style={{fontSize:9,color:childTag.color,background:childTag.color+"22",padding:"1px 5px",borderRadius:10,marginTop:3,display:"inline-block"}}>{childTag.name}</span>}
           </div>
         );
       })}
@@ -182,7 +184,7 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
 
 const TaskRow=({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild})=>{
   const [exp,setExp]=useState(true);
-  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&!t.parentId);// 親タグのみ表示
+  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId); // 子タグのみ表示
   const today=new Date().toISOString().slice(0,10);
   const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<today;
   const isUrgent=task.deadlineDate&&!task.done&&task.deadlineDate===today;
@@ -433,6 +435,7 @@ const TagsView=({tags,setTags})=>{
 };
 
 export default function App(){
+  const [sideOpen,setSideOpen]=useState(true);
   const today=new Date().toISOString().slice(0,10);
   const [user,setUser]=useState(null);
   const [authLoading,setAuthLoading]=useState(true);
@@ -483,29 +486,38 @@ export default function App(){
     <>
       <style>{G}</style>
       <div style={{minHeight:"100vh",background:COLORS.bg,display:"flex"}}>
-        <div style={{width:210,flexShrink:0,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",padding:"20px 0",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10}}>
-          <div style={{padding:"0 16px 16px",borderBottom:`1px solid ${COLORS.border}`}}>
-            <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,letterSpacing:-.5}}><span style={{color:COLORS.accent}}>◈</span> マイタスク</div>
-            <div style={{fontSize:11,color:COLORS.textMuted,marginTop:3}}>{user.email}</div>
-            {saving&&<div style={{fontSize:10,color:COLORS.success,marginTop:3}}>💾 保存中...</div>}
-            <div style={{marginTop:10}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:COLORS.textMuted,marginBottom:4}}><span>進捗</span><span style={{fontWeight:700,color:COLORS.accent}}>{pct}%</span></div>
-              <div style={{background:COLORS.bg,borderRadius:10,height:5,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${COLORS.accent},${COLORS.success})`,borderRadius:10,transition:"width .4s"}}></div></div>
-              <div style={{fontSize:10,color:COLORS.textMuted,marginTop:3}}>{done}/{total} 完了</div>
-            </div>
+        {/* 折りたたみサイドバー */}
+        <div style={{width:sideOpen?210:44,flexShrink:0,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",padding:"16px 0",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10,transition:"width .2s"}}>
+          <div style={{padding:`0 ${sideOpen?16:6}px 14px`,borderBottom:`1px solid ${COLORS.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+            {sideOpen&&<div style={{minWidth:0}}>
+              <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,letterSpacing:-.5,whiteSpace:"nowrap"}}><span style={{color:COLORS.accent}}>◈</span> マイタスク</div>
+              <div style={{fontSize:11,color:COLORS.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
+              {saving&&<div style={{fontSize:10,color:COLORS.success,marginTop:2}}>💾 保存中...</div>}
+              <div style={{marginTop:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:COLORS.textMuted,marginBottom:3}}><span>進捗</span><span style={{fontWeight:700,color:COLORS.accent}}>{pct}%</span></div>
+                <div style={{background:COLORS.bg,borderRadius:10,height:5,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${COLORS.accent},${COLORS.success})`,borderRadius:10,transition:"width .4s"}}></div></div>
+                <div style={{fontSize:10,color:COLORS.textMuted,marginTop:2}}>{done}/{total} 完了</div>
+              </div>
+            </div>}
+            <button onClick={()=>setSideOpen(!sideOpen)} style={{background:COLORS.accentSoft,color:COLORS.accent,border:"none",borderRadius:8,width:28,height:28,fontSize:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{sideOpen?"◀":"▶"}</button>
           </div>
-          <div style={{padding:"10px 8px",flex:1}}>{NAV.map(n=>(<button key={n.id} className="nb" onClick={()=>setView(n.id)} style={{display:"flex",alignItems:"center",gap:9,width:"100%",padding:"9px 10px",borderRadius:10,marginBottom:2,background:view===n.id?COLORS.accentSoft:"transparent",color:view===n.id?COLORS.accent:COLORS.textSoft,border:view===n.id?`1px solid ${COLORS.accent}33`:"1px solid transparent",fontSize:13,fontWeight:view===n.id?700:400,textAlign:"left"}}><span style={{fontSize:14}}>{n.icon}</span>{n.label}</button>))}</div>
-          <div style={{padding:"10px 8px",borderTop:`1px solid ${COLORS.border}`}}>
+          <div style={{padding:`10px ${sideOpen?8:4}px`,flex:1}}>
+            {NAV.map(n=>(<button key={n.id} className="nb" onClick={()=>setView(n.id)} title={n.label} style={{display:"flex",alignItems:"center",gap:sideOpen?9:0,justifyContent:sideOpen?"flex-start":"center",width:"100%",padding:"9px 8px",borderRadius:10,marginBottom:2,background:view===n.id?COLORS.accentSoft:"transparent",color:view===n.id?COLORS.accent:COLORS.textSoft,border:view===n.id?`1px solid ${COLORS.accent}33`:"1px solid transparent",fontSize:13,fontWeight:view===n.id?700:400,textAlign:"left"}}><span style={{fontSize:16,flexShrink:0}}>{n.icon}</span>{sideOpen&&n.label}</button>))}
+          </div>
+          {sideOpen&&<div style={{padding:"10px 8px",borderTop:`1px solid ${COLORS.border}`}}>
             <input value={filters.search} onChange={e=>setFilters(f=>({...f,search:e.target.value}))} placeholder="🔍 検索..." style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"6px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:6}}/>
             <select value={filters.tag} onChange={e=>setFilters(f=>({...f,tag:e.target.value}))} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"6px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:6}}>
               <option value="">すべてのタグ</option>
               {parentTags.map(pt=>(<optgroup key={pt.id} label={pt.name}><option value={pt.id}>{pt.name}（全体）</option>{tags.filter(t=>t.parentId===pt.id&&!t.archived).map(ct=><option key={ct.id} value={ct.id}>└ {ct.name}</option>)}</optgroup>))}
             </select>
-            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:10}}><Checkbox checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={15}/><span style={{fontSize:12,color:COLORS.textMuted}}>完了を隠す</span></div>
+            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}><Checkbox checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={15}/><span style={{fontSize:12,color:COLORS.textMuted}}>完了を隠す</span></div>
             <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"6px",fontSize:12,cursor:"pointer"}}>ログアウト</button>
-          </div>
+          </div>}
+          {!sideOpen&&<div style={{padding:"8px 4px",borderTop:`1px solid ${COLORS.border}`}}>
+            <button onClick={()=>signOut(auth)} title="ログアウト" style={{background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"6px",fontSize:12,cursor:"pointer",width:"100%"}}>↩</button>
+          </div>}
         </div>
-        <div style={{marginLeft:210,flex:1,display:"flex",minHeight:"100vh"}}>
+        <div style={{marginLeft:sideOpen?210:44,flex:1,display:"flex",minHeight:"100vh",transition:"margin .2s"}}>
           <div style={{flex:1,padding:"24px 28px",minWidth:0}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <div><h1 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:20,letterSpacing:-.5}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1><div style={{fontSize:11,color:COLORS.textMuted,marginTop:1}}>{new Date(today).toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"long"})}</div></div>
@@ -524,4 +536,3 @@ export default function App(){
       {showForm&&<TaskForm task={editTask} tags={tags} isChild={!!addChildTo} onSave={handleSave} defaultDate={defaultDate} defaultTime={defaultTime} onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefaultDate(null);setDefaultTime(null);}}/>}
     </>
   );
-}
