@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
@@ -9,8 +9,9 @@ const REPEAT_OPTIONS=["なし","毎日","毎週","毎月","平日のみ"];
 const DAYS_JP=["月","火","水","木","金","土","日"];
 const HOURS=Array.from({length:24},(_,i)=>`${String(i).padStart(2,"0")}:00`);
 const ALLOWED_UIDS=["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
+const SORT_OPTIONS=["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
 
-const flattenTasks=(tasks,result=[],parentTitle=null)=>{tasks.forEach(t=>{result.push({...t,_parentTitle:parentTitle});if(t.children?.length)flattenTasks(t.children,result,t.title);});return result;};
+const flattenTasks=(tasks,result=[],parentTitle=null,parentId=null)=>{tasks.forEach(t=>{result.push({...t,_parentTitle:parentTitle,_parentId:parentId});if(t.children?.length)flattenTasks(t.children,result,t.title,t.id);});return result;};
 const getDaysInMonth=(y,m)=>new Date(y,m+1,0).getDate();
 const formatDate=d=>{if(!d)return"";const dt=new Date(d);return`${dt.getMonth()+1}/${dt.getDate()}`;};
 const formatDateTime=(d,t)=>{if(!d)return"";return t?`${formatDate(d)} ${t}`:formatDate(d);};
@@ -18,29 +19,42 @@ const isSameDay=(d1,d2)=>(!d1||!d2)?false:d1.slice(0,10)===d2.slice(0,10);
 const getWeekDates=base=>{const d=new Date(base),day=d.getDay(),mon=new Date(d);mon.setDate(d.getDate()-day+1);return Array.from({length:7},(_,i)=>{const dt=new Date(mon);dt.setDate(mon.getDate()+i);return dt.toISOString().slice(0,10);});};
 const isAutoLater=task=>!task.startDate&&!task.startTime;
 const timeToMin=t=>{if(!t)return null;const[h,m]=t.split(":").map(Number);return h*60+m;};
-const minToTime=m=>`${String(Math.floor(m/60)%24).padStart(2,"0")}:${String(m%60).padStart(2,"0")}`;
+const minToTime=m=>`${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,"0")}:${String(Math.max(0,m)%60).padStart(2,"0")}`;
 const calcDuration=(st,et)=>{if(!st||!et)return null;const d=timeToMin(et)-timeToMin(st);return d>0?d:null;};
-const applyDuration=(st,dur)=>{if(!st||!dur)return"";return minToTime(timeToMin(st)+dur);};
+const applyDuration=(st,dur)=>{if(!st||!dur)return"";return minToTime(timeToMin(st)+Number(dur));};
 
-// タグ連動：子タスク・孫タスクに親タグを伝播
-const propagateTagsToChildren=(task,allTags)=>{
+const syncTagsUp=(tasks,allTags)=>{
+  const syncNode=(task)=>{
+    if(!task.children?.length)return task;
+    const syncedChildren=task.children.map(c=>syncNode(c));
+    const childTagIds=[...new Set(syncedChildren.flatMap(c=>c.tags||[]))];
+    let merged=[...new Set([...(task.tags||[]),...childTagIds])];
+    merged=merged.reduce((acc,tid)=>{
+      if(!acc.includes(tid))acc.push(tid);
+      const tag=allTags.find(t=>t.id===tid);
+      if(tag?.parentId&&!acc.includes(tag.parentId))acc.push(tag.parentId);
+      return acc;
+    },[]);
+    return{...task,tags:merged,children:syncedChildren};
+  };
+  return tasks.map(t=>syncNode(t));
+};
+
+const propagateTagsDown=(task,allTags)=>{
   if(!task.children?.length)return task;
   const updatedChildren=task.children.map(child=>{
-    // 親タスクのタグを子に引き継ぐ（既存タグは保持しつつ追加）
-    const inherited=task.tags||[];
-    const childTags=[...new Set([...(child.tags||[]),...inherited])];
-    // さらに子タグがあれば親タグも連動
-    const withParents=childTags.reduce((acc,tid)=>{
+    let merged=[...new Set([...(child.tags||[]),...(task.tags||[])])];
+    merged=merged.reduce((acc,tid)=>{
+      if(!acc.includes(tid))acc.push(tid);
       const tag=allTags.find(t=>t.id===tid);
-      if(tag?.parentId&&!acc.includes(tag.parentId))return[...acc,tag.parentId];
+      if(tag?.parentId&&!acc.includes(tag.parentId))acc.push(tag.parentId);
       return acc;
-    },[...childTags]);
-    return propagateTagsToChildren({...child,tags:withParents},allTags);
+    },[]);
+    return propagateTagsDown({...child,tags:merged},allTags);
   });
   return{...task,children:updatedChildren};
 };
 
-// メモのチェックボックス記法パーサー（ポップアップを閉じない）
 const parseMemo=(memo,onToggle)=>{
   if(!memo)return null;
   return memo.split("\n").map((line,i)=>{
@@ -49,10 +63,10 @@ const parseMemo=(memo,onToggle)=>{
       const checked=m[1]==="x";
       return(
         <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
-          <div
-            onClick={e=>{e.stopPropagation();e.preventDefault();onToggle&&onToggle(i);}}
-            style={{width:14,height:14,borderRadius:3,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
-          >{checked&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}</div>
+          <div onClick={e=>{e.stopPropagation();e.preventDefault();onToggle&&onToggle(i);}}
+            style={{width:14,height:14,borderRadius:3,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>
+            {checked&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}
+          </div>
           <span style={{fontSize:12,color:checked?COLORS.textMuted:COLORS.textSoft,textDecoration:checked?"line-through":"none"}}>{m[2]}</span>
         </div>
       );
@@ -73,29 +87,26 @@ const G=`
   .mo{animation:fi .15s ease}.mc{animation:su .2s ease}
   .task-chip:hover{filter:brightness(1.15);}
   .chip-drag{cursor:grab;} .chip-drag:active{cursor:grabbing;opacity:0.5;}
+  .resize-handle{cursor:ns-resize;background:rgba(108,99,255,0.35);border-radius:0 0 4px 4px;}
+  .resize-handle:hover{background:rgba(108,99,255,0.7);}
   @keyframes fi{from{opacity:0}to{opacity:1}}@keyframes su{from{transform:translateY(16px);opacity:0}to{transform:translateY(0);opacity:1}}
 `;
 
 const Checkbox=({checked,onChange,size=18})=>(<div onClick={e=>{e.stopPropagation();onChange();}} style={{width:size,height:size,borderRadius:5,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"all .15s"}}>{checked&&<span style={{color:"#fff",fontSize:size*.6,fontWeight:700}}>✓</span>}</div>);
-const Btn=({children,onClick,variant="ghost",style={},disabled})=>{const v={ghost:{background:"transparent",color:COLORS.textSoft,border:`1px solid ${COLORS.border}`},accent:{background:COLORS.accent,color:"#fff",border:"none"},danger:{background:COLORS.danger+"22",color:COLORS.danger,border:`1px solid ${COLORS.danger}44`}};return <button className={variant==="accent"?"ba":""} onClick={onClick} disabled={disabled} style={{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:600,transition:"all .15s",opacity:disabled?.5:1,...v[variant],...style}}>{children}</button>;};
+const Btn=({children,onClick,variant="ghost",style={},disabled})=>{const v={ghost:{background:"transparent",color:COLORS.textSoft,border:`1px solid ${COLORS.border}`},accent:{background:COLORS.accent,color:"#fff",border:"none"},danger:{background:COLORS.danger+"22",color:COLORS.danger,border:`1px solid ${COLORS.danger}44`},success:{background:COLORS.success+"22",color:COLORS.success,border:`1px solid ${COLORS.success}44`}};return <button className={variant==="accent"?"ba":""} onClick={onClick} disabled={disabled} style={{padding:"6px 14px",borderRadius:8,fontSize:13,fontWeight:600,transition:"all .15s",opacity:disabled?.5:1,...v[variant],...style}}>{children}</button>;};
 const Modal=({title,children,onClose,wide})=>(<div className="mo" onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(0,0,0,.72)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:20}}><div className="mc" onClick={e=>e.stopPropagation()} style={{background:COLORS.surface,borderRadius:16,width:"100%",maxWidth:wide?720:520,border:`1px solid ${COLORS.border}`,maxHeight:"90vh",overflow:"auto"}}><div style={{padding:"18px 24px",borderBottom:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center"}}><span style={{fontWeight:700,fontSize:16}}>{title}</span><button onClick={onClose} style={{background:"none",color:COLORS.textMuted,fontSize:20}}>✕</button></div><div style={{padding:"20px 24px"}}>{children}</div></div></div>);
 const Inp=({label,value,onChange,type="text",placeholder=""})=>(<div style={{marginBottom:14}}>{label&&<div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>{label}</div>}<input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14}}/></div>);
 const Sel=({label,value,onChange,options})=>(<div style={{marginBottom:14}}>{label&&<div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>{label}</div>}<select value={value} onChange={e=>onChange(e.target.value)} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14}}>{options.map(o=><option key={o} value={o}>{o}</option>)}</select></div>);
 
 const LoginScreen=({onLogin,loading})=>(<div style={{minHeight:"100vh",background:COLORS.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center",padding:40}}><div style={{fontSize:56,marginBottom:16}}>✅</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:28,marginBottom:8}}><span style={{color:COLORS.accent}}>◈</span> マイタスク</div><div style={{color:COLORS.textMuted,marginBottom:32,fontSize:14}}>あなただけのタスク管理アプリ</div><button onClick={onLogin} disabled={loading} style={{display:"flex",alignItems:"center",gap:12,background:"#fff",color:"#333",border:"none",borderRadius:12,padding:"14px 28px",fontSize:15,fontWeight:600,cursor:"pointer",margin:"0 auto",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",opacity:loading?0.7:1}}><svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{loading?"ログイン中...":"Googleでログイン"}</button></div></div>);
 
-const TaskPopup=({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,anchor})=>{
-  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId);// 子タグのみ表示
+const TaskPopup=({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,anchor})=>{
+  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId);
   const today=new Date().toISOString().slice(0,10);
   const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<today;
-  // メモのチェックボックスはポップアップを閉じずに更新
-  const handleMemoToggle=(idx)=>{
-    onMemoToggle(task.id,idx);
-    // ポップアップは閉じない
-  };
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500}}>
-      <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:anchor?.y||100,left:anchor?.x||100,background:COLORS.surface,borderRadius:14,padding:16,border:`1px solid ${COLORS.border}`,width:290,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",zIndex:501}}>
+      <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:anchor?.y||100,left:Math.min(anchor?.x||100,window.innerWidth-300),background:COLORS.surface,borderRadius:14,padding:16,border:`1px solid ${COLORS.border}`,width:290,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",zIndex:501}}>
         <div style={{display:"flex",alignItems:"flex-start",gap:10,marginBottom:10}}>
           <Checkbox checked={task.done} onChange={()=>{onToggle(task.id);onClose();}} size={20}/>
           <div style={{flex:1}}>
@@ -111,10 +122,11 @@ const TaskPopup=({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,anchor
           {task.deadlineDate&&<div style={{color:isOverdue?COLORS.danger:COLORS.warning}}>⚠ 締切: {formatDateTime(task.deadlineDate,task.deadlineTime)}</div>}
           {task.repeat!=="なし"&&<div style={{color:COLORS.success}}>↻ {task.repeat}</div>}
         </div>
-        {task.memo&&<div onClick={e=>e.stopPropagation()} style={{background:COLORS.bg,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{parseMemo(task.memo,handleMemoToggle)}</div>}
-        <div style={{display:"flex",gap:8}}>
-          <Btn variant="accent" onClick={()=>{onEdit(task);onClose();}} style={{flex:1,textAlign:"center"}}>編集</Btn>
-          <Btn variant="danger" onClick={()=>{onDelete(task.id);onClose();}}>削除</Btn>
+        {task.memo&&<div onClick={e=>e.stopPropagation()} style={{background:COLORS.bg,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{parseMemo(task.memo,idx=>onMemoToggle(task.id,idx))}</div>}
+        <div style={{display:"flex",gap:6}}>
+          <Btn variant="accent" onClick={()=>{onEdit(task);onClose();}} style={{flex:1,textAlign:"center",padding:"6px 8px"}}>編集</Btn>
+          <Btn variant="success" onClick={()=>{onDuplicate(task);onClose();}} style={{padding:"6px 10px"}}>複製</Btn>
+          <Btn variant="danger" onClick={()=>{onDelete(task.id);onClose();}} style={{padding:"6px 10px"}}>削除</Btn>
         </div>
       </div>
     </div>
@@ -124,8 +136,8 @@ const TaskPopup=({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,anchor
 const LaterPanel=({tasks,tags,dragTask,setDragTask})=>{
   const laterTasks=flattenTasks(tasks).filter(t=>t.isLater||isAutoLater(t));
   return (
-    <div style={{width:196,flexShrink:0,background:COLORS.surface,borderLeft:`1px solid ${COLORS.border}`,padding:12,overflowY:"auto"}}>
-      <div style={{fontSize:11,fontWeight:700,color:COLORS.warning,marginBottom:4,textTransform:"uppercase",letterSpacing:1}}>📌 あとでやる</div>
+    <div style={{width:188,flexShrink:0,background:COLORS.surface,borderLeft:`1px solid ${COLORS.border}`,padding:10,overflowY:"auto"}}>
+      <div style={{fontSize:11,fontWeight:700,color:COLORS.warning,marginBottom:3,textTransform:"uppercase",letterSpacing:1}}>📌 あとでやる</div>
       <div style={{fontSize:10,color:COLORS.textMuted,marginBottom:8}}>ドラッグして日時設定</div>
       {laterTasks.length===0&&<div style={{fontSize:12,color:COLORS.textMuted,textAlign:"center",padding:"16px 0"}}>なし</div>}
       {laterTasks.map(t=>{
@@ -133,8 +145,10 @@ const LaterPanel=({tasks,tags,dragTask,setDragTask})=>{
         const isDragging=dragTask?.id===t.id;
         const childTag=tags.find(tg=>t.tags?.includes(tg.id)&&tg.parentId);
         return (
-          <div key={t.id} draggable className="chip-drag" onDragStart={e=>{e.dataTransfer.effectAllowed="move";setDragTask(t);}} onDragEnd={()=>setDragTask(null)}
-            style={{background:isDragging?COLORS.accentSoft:COLORS.bg,borderLeft:`3px solid ${c}`,borderRadius:"0 8px 8px 0",padding:"7px 9px",marginBottom:7,opacity:isDragging?0.5:1,transition:"all .15s"}}>
+          <div key={t.id} draggable className="chip-drag"
+            onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("laterTaskId",t.id);setDragTask(t);}}
+            onDragEnd={()=>setDragTask(null)}
+            style={{background:isDragging?COLORS.accentSoft:COLORS.bg,borderLeft:`3px solid ${c}`,borderRadius:"0 8px 8px 0",padding:"7px 9px",marginBottom:6,opacity:isDragging?0.5:1,transition:"all .15s"}}>
             {t._parentTitle&&<div style={{fontSize:9,color:COLORS.textMuted,marginBottom:2}}>📁 {t._parentTitle}</div>}
             <div style={{fontSize:12,fontWeight:600,color:COLORS.text,marginBottom:2}}>{t.title}</div>
             {t.duration&&<div style={{fontSize:10,color:COLORS.accent}}>⏱ {t.duration}分</div>}
@@ -151,47 +165,29 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
   const empty={id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defaultDate||"",startTime:defaultTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false};
   const [f,setF]=useState(task?{duration:"",...task}:empty);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
-
-  // 小タグ選択時に親タグ自動連動（子・孫タスクにも伝播）
   const tog=tid=>{
     const tag=tags.find(t=>t.id===tid);
     let newTags=[...f.tags];
     if(newTags.includes(tid)){
       newTags=newTags.filter(x=>x!==tid);
-      // 親タグを外した場合、その子タグも外す
-      if(!tag?.parentId){
-        const childIds=tags.filter(t=>t.parentId===tid).map(t=>t.id);
-        newTags=newTags.filter(x=>!childIds.includes(x));
-      }
+      if(!tag?.parentId){const childIds=tags.filter(t=>t.parentId===tid).map(t=>t.id);newTags=newTags.filter(x=>!childIds.includes(x));}
     } else {
       newTags=[...newTags,tid];
       if(tag?.parentId&&!newTags.includes(tag.parentId))newTags=[...newTags,tag.parentId];
     }
     upd("tags",newTags);
   };
-
-  const handleStartTime=v=>{
-    upd("startTime",v);
-    if(f.duration&&v){upd("endTime",applyDuration(v,Number(f.duration)));}
-    else if(f.endTime&&v){const d=calcDuration(v,f.endTime);if(d)upd("duration",String(d));}
-  };
-  const handleEndTime=v=>{
-    upd("endTime",v);
-    if(f.startTime&&v){const d=calcDuration(f.startTime,v);if(d)upd("duration",String(d));}
-  };
-  const handleDuration=v=>{
-    upd("duration",v);
-    if(f.startTime&&v){upd("endTime",applyDuration(f.startTime,Number(v)));}
-  };
-
+  const handleStartTime=v=>{upd("startTime",v);if(f.duration&&v){upd("endTime",applyDuration(v,Number(f.duration)));}else if(f.endTime&&v){const d=calcDuration(v,f.endTime);if(d)upd("duration",String(d));}};
+  const handleEndTime=v=>{upd("endTime",v);if(f.startTime&&v){const d=calcDuration(f.startTime,v);if(d)upd("duration",String(d));}};
+  const handleDuration=v=>{upd("duration",v);if(f.startTime&&v){upd("endTime",applyDuration(f.startTime,Number(v)));}};
   const parentTags=tags.filter(t=>!t.parentId&&!t.archived);
-  const childTags=pid=>tags.filter(t=>t.parentId===pid&&!t.archived);
+  const childTagsOf=pid=>tags.filter(t=>t.parentId===pid&&!t.archived);
   return (
     <Modal title={task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide>
       <Inp label="タスク名 *" value={f.title} onChange={v=>upd("title",v)} placeholder="タスク名..."/>
       <div style={{marginBottom:14}}>
         <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:6,fontWeight:600}}>タグ</div>
-        {parentTags.map(pt=>(<div key={pt.id} style={{marginBottom:6}}><div onClick={()=>tog(pt.id)} style={{display:"inline-flex",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",border:`1px solid ${pt.color}44`,background:f.tags.includes(pt.id)?pt.color+"33":"transparent",color:f.tags.includes(pt.id)?pt.color:COLORS.textMuted,marginBottom:3}}>{pt.name}</div>{childTags(pt.id).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,paddingLeft:14}}>{childTags(pt.id).map(ct=><div key={ct.id} onClick={()=>tog(ct.id)} style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${ct.color}44`,background:f.tags.includes(ct.id)?ct.color+"33":"transparent",color:f.tags.includes(ct.id)?ct.color:COLORS.textMuted}}>└ {ct.name}</div>)}</div>}</div>))}
+        {parentTags.map(pt=>(<div key={pt.id} style={{marginBottom:6}}><div onClick={()=>tog(pt.id)} style={{display:"inline-flex",padding:"4px 12px",borderRadius:20,fontSize:12,fontWeight:700,cursor:"pointer",border:`1px solid ${pt.color}44`,background:f.tags.includes(pt.id)?pt.color+"33":"transparent",color:f.tags.includes(pt.id)?pt.color:COLORS.textMuted,marginBottom:3}}>{pt.name}</div>{childTagsOf(pt.id).length>0&&<div style={{display:"flex",flexWrap:"wrap",gap:5,paddingLeft:14}}>{childTagsOf(pt.id).map(ct=><div key={ct.id} onClick={()=>tog(ct.id)} style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${ct.color}44`,background:f.tags.includes(ct.id)?ct.color+"33":"transparent",color:f.tags.includes(ct.id)?ct.color:COLORS.textMuted}}>└ {ct.name}</div>)}</div>}</div>))}
       </div>
       <div style={{background:COLORS.bg,borderRadius:10,padding:12,marginBottom:12}}>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:4}}>
@@ -208,10 +204,10 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
           <Inp label="締切時刻" value={f.deadlineTime} onChange={v=>upd("deadlineTime",v)} type="time"/>
         </div>
       </div>
-      <div style={{fontSize:11,color:COLORS.textMuted,marginBottom:12,padding:"7px 10px",background:COLORS.accentSoft,borderRadius:8}}>💡 開始日未設定→「あとでやる」に自動追加 / ドラッグ時に所要時間で終了時刻自動設定</div>
+      <div style={{fontSize:11,color:COLORS.textMuted,marginBottom:12,padding:"7px 10px",background:COLORS.accentSoft,borderRadius:8}}>💡 開始日未設定→「あとでやる」/ ドラッグで日時・所要時間変更可</div>
       <Sel label="繰り返し" value={f.repeat} onChange={v=>upd("repeat",v)} options={REPEAT_OPTIONS}/>
       <div style={{marginBottom:14}}>
-        <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>メモ <span style={{fontWeight:400,fontSize:11}}>（チェックボックス: <code style={{background:COLORS.bg,padding:"1px 4px",borderRadius:4}}>- [ ] テキスト</code>）</span></div>
+        <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>メモ <span style={{fontWeight:400,fontSize:11}}>（<code style={{background:COLORS.bg,padding:"1px 4px",borderRadius:4}}>- [ ] テキスト</code> でチェックボックス）</span></div>
         <textarea value={f.memo} onChange={e=>upd("memo",e.target.value)} placeholder={`メモ...\n- [ ] チェック項目1\n- [ ] チェック項目2`} rows={4} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:13,resize:"vertical",lineHeight:1.6}}/>
       </div>
       <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><Btn onClick={onClose}>キャンセル</Btn><Btn variant="accent" onClick={()=>{if(f.title.trim()){onSave({...f,isLater:isAutoLater(f)});onClose();}}}>保存</Btn></div>
@@ -219,75 +215,129 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
   );
 };
 
-const TaskRow=({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild})=>{
+const TaskRow=({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate})=>{
   const [exp,setExp]=useState(true);
-  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId);// 子タグのみ表示
+  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId);
   const today=new Date().toISOString().slice(0,10);
   const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<today;
   const isUrgent=task.deadlineDate&&!task.done&&task.deadlineDate===today;
   const isLater=task.isLater||isAutoLater(task);
   return (
-    <div style={{marginLeft:depth*22}}>
-      <div className="tr" style={{display:"flex",alignItems:"flex-start",gap:10,padding:"10px 12px",borderRadius:10,marginBottom:4,background:depth===0?COLORS.surface:"transparent",border:depth===0?`1px solid ${isOverdue?COLORS.danger+"66":COLORS.border}`:undefined,borderLeft:depth>0?`2px solid ${COLORS.border}`:undefined,paddingLeft:depth>0?14:12,opacity:task.done?.55:1}}>
-        <div style={{paddingTop:2}}><Checkbox checked={task.done} onChange={()=>onToggle(task.id)}/></div>
+    <div style={{marginLeft:depth*20}}>
+      <div className="tr" style={{display:"flex",alignItems:"flex-start",gap:8,padding:"9px 12px",borderRadius:10,marginBottom:3,background:depth===0?COLORS.surface:"transparent",border:depth===0?`1px solid ${isOverdue?COLORS.danger+"66":COLORS.border}`:undefined,borderLeft:depth>0?`2px solid ${COLORS.border}`:undefined,paddingLeft:depth>0?12:12,opacity:task.done?.55:1}}>
+        <div style={{paddingTop:2,flexShrink:0}}><Checkbox checked={task.done} onChange={()=>onToggle(task.id)}/></div>
         <div style={{flex:1,minWidth:0}}>
-          <div style={{display:"flex",alignItems:"center",gap:8,flexWrap:"wrap"}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
             {task.children?.length>0&&<span onClick={()=>setExp(!exp)} style={{cursor:"pointer",fontSize:10,color:COLORS.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:14,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?COLORS.textMuted:COLORS.text}}>{task.title}</span>
             {task.repeat!=="なし"&&<span style={{fontSize:10,color:COLORS.success,background:COLORS.success+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>↻ {task.repeat}</span>}
-            {isLater&&<span style={{fontSize:10,color:COLORS.warning,background:COLORS.warning+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>📌 あとで</span>}
-            {isOverdue&&<span style={{fontSize:10,color:COLORS.danger,background:COLORS.danger+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>⚠ 期限超過</span>}
-            {isUrgent&&<span style={{fontSize:10,color:COLORS.warning,background:COLORS.warning+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>🔥 今日締切</span>}
+            {isLater&&<span style={{fontSize:10,color:COLORS.warning,background:COLORS.warning+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>📌</span>}
+            {isOverdue&&<span style={{fontSize:10,color:COLORS.danger,background:COLORS.danger+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>⚠ 超過</span>}
+            {isUrgent&&<span style={{fontSize:10,color:COLORS.warning,background:COLORS.warning+"22",padding:"1px 6px",borderRadius:10,fontWeight:600}}>🔥 今日</span>}
           </div>
-          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:4,alignItems:"center"}}>
+          <div style={{display:"flex",gap:5,flexWrap:"wrap",marginTop:3,alignItems:"center"}}>
             {tTags.map(t=><span key={t.id} style={{fontSize:10,color:t.color,background:t.color+"22",padding:"1px 6px",borderRadius:10,fontWeight:600,border:`1px solid ${t.color}44`}}>{t.name}</span>)}
             {task.startDate&&<span style={{fontSize:11,color:COLORS.textMuted}}>▶ {formatDateTime(task.startDate,task.startTime)}</span>}
             {task.duration&&<span style={{fontSize:11,color:COLORS.accent}}>⏱{task.duration}分</span>}
             {task.deadlineDate&&<span style={{fontSize:11,color:isOverdue?COLORS.danger:COLORS.warning,fontWeight:600}}>⚠ {formatDateTime(task.deadlineDate,task.deadlineTime)}</span>}
-            {task.memo&&<span style={{fontSize:11,color:COLORS.textMuted,fontStyle:"italic"}}>{task.memo.replace(/- \[[ x]\] /g,"").slice(0,28)}...</span>}
+            {task.memo&&<span style={{fontSize:11,color:COLORS.textMuted,fontStyle:"italic"}}>{task.memo.replace(/- \[[ x]\] /g,"").slice(0,24)}…</span>}
           </div>
         </div>
-        <div className="ta" style={{display:"flex",gap:4,opacity:0,transition:"opacity .15s",flexShrink:0}}>
-          <button onClick={()=>onAddChild(task.id)} style={{background:COLORS.accentSoft,color:COLORS.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:16}}>+</button>
-          <button onClick={()=>onEdit(task)} style={{background:COLORS.surfaceHover,color:COLORS.textSoft,border:"none",borderRadius:6,width:28,height:28,fontSize:12}}>✎</button>
-          <button onClick={()=>onDelete(task.id)} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12}}>✕</button>
+        <div className="ta" style={{display:"flex",gap:3,opacity:0,transition:"opacity .15s",flexShrink:0}}>
+          <button title="子タスク" onClick={()=>onAddChild(task.id)} style={{background:COLORS.accentSoft,color:COLORS.accent,border:"none",borderRadius:6,width:26,height:26,fontSize:14}}>+</button>
+          <button title="複製" onClick={()=>onDuplicate(task)} style={{background:COLORS.success+"22",color:COLORS.success,border:"none",borderRadius:6,width:26,height:26,fontSize:11}}>⧉</button>
+          <button title="編集" onClick={()=>onEdit(task)} style={{background:COLORS.surfaceHover,color:COLORS.textSoft,border:"none",borderRadius:6,width:26,height:26,fontSize:12}}>✎</button>
+          <button title="削除" onClick={()=>onDelete(task.id)} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:6,width:26,height:26,fontSize:12}}>✕</button>
         </div>
       </div>
-      {exp&&task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild}/>)}
+      {exp&&task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate}/>)}
     </div>
   );
 };
 
-const ListView=({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild})=>{
-  const filtered=useMemo(()=>{let list=tasks;if(filters.tag)list=list.filter(t=>t.tags?.includes(filters.tag));if(filters.search)list=list.filter(t=>t.title.toLowerCase().includes(filters.search.toLowerCase()));if(filters.hideCompleted)list=list.filter(t=>!t.done);return list;},[tasks,filters]);
+const ListView=({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDuplicate,sortOrder,setSortOrder})=>{
+  const filtered=useMemo(()=>{
+    let list=tasks;
+    if(filters.tag)list=list.filter(t=>t.tags?.includes(filters.tag));
+    if(filters.search)list=list.filter(t=>t.title.toLowerCase().includes(filters.search.toLowerCase()));
+    if(filters.hideCompleted)list=list.filter(t=>!t.done);
+    if(sortOrder==="開始日順")list=[...list].sort((a,b)=>(a.startDate||"9")>(b.startDate||"9")?1:-1);
+    else if(sortOrder==="締切日順")list=[...list].sort((a,b)=>(a.deadlineDate||"9")>(b.deadlineDate||"9")?1:-1);
+    else if(sortOrder==="タググループ順")list=[...list].sort((a,b)=>(a.tags?.[0]||"")>(b.tags?.[0]||"")?1:-1);
+    else if(sortOrder==="完了を最後に")list=[...list].sort((a,b)=>a.done===b.done?0:a.done?1:-1);
+    return list;
+  },[tasks,filters,sortOrder]);
   const later=filtered.filter(t=>t.isLater||isAutoLater(t));
   const habits=filtered.filter(t=>!(t.isLater||isAutoLater(t))&&t.repeat!=="なし");
   const regular=filtered.filter(t=>!(t.isLater||isAutoLater(t))&&t.repeat==="なし");
-  const Sec=({title,items,accent})=>items.length===0?null:(<div style={{marginBottom:24}}><div style={{fontSize:12,fontWeight:700,color:accent,textTransform:"uppercase",letterSpacing:1,marginBottom:10,display:"flex",alignItems:"center",gap:8}}><div style={{width:20,height:2,background:accent}}></div>{title} ({items.length})</div>{items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild}/>)}</div>);
-  return (<div><Sec title="習慣・繰り返し" items={habits} accent={COLORS.success}/><Sec title="タスク" items={regular} accent={COLORS.accent}/><Sec title="あとでやる" items={later} accent={COLORS.warning}/>{filtered.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:COLORS.textMuted}}><div style={{fontSize:48,marginBottom:12}}>🎉</div><div>タスクがありません</div></div>}</div>);
-};
-
-const TaskChip=({task,tags,color,onPopup,onToggle,onUpdateTask,compact,allTasks})=>{
-  const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<new Date().toISOString().slice(0,10);
-  const parentTitle=task._parentTitle;
-  return (
-    <div className="task-chip chip-drag"
-      draggable
-      onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
-      onClick={e=>{e.stopPropagation();onPopup(e,task);}}
-      style={{background:task.done?COLORS.border+"44":color+"33",borderLeft:`3px solid ${task.done?COLORS.textMuted:color}`,borderRadius:"0 6px 6px 0",padding:compact?"2px 6px":"5px 8px",marginBottom:2,transition:"all .15s",opacity:task.done?.6:1,userSelect:"none"}}>
-      <div style={{display:"flex",alignItems:"center",gap:4}}>
-        <div onClick={e=>{e.stopPropagation();onToggle(task.id);}} style={{width:10,height:10,borderRadius:3,border:`2px solid ${task.done?COLORS.textMuted:color}`,background:task.done?color:"transparent",flexShrink:0,cursor:"pointer"}}/>
-        <span style={{fontSize:compact?10:12,fontWeight:600,color:task.done?COLORS.textMuted:color,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none"}}>{task.startTime&&!compact?`${task.startTime} `:""}{task.title}</span>
-        {isOverdue&&!compact&&<span style={{fontSize:9,color:COLORS.danger}}>⚠</span>}
+  const Sec=({title,items,accent})=>items.length===0?null:(
+    <div style={{marginBottom:20}}>
+      <div style={{fontSize:12,fontWeight:700,color:accent,textTransform:"uppercase",letterSpacing:1,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+        <div style={{width:18,height:2,background:accent}}></div>{title} ({items.length})
       </div>
-      {parentTitle&&!compact&&<div style={{fontSize:9,color:COLORS.textMuted,paddingLeft:14}}>📁{parentTitle}</div>}
-      {task.duration&&!compact&&<div style={{fontSize:9,color:COLORS.accent,paddingLeft:14}}>⏱{task.duration}分</div>}
+      {items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate}/>)}
+    </div>
+  );
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:14,flexWrap:"wrap"}}>
+        <div style={{fontSize:11,color:COLORS.textMuted,fontWeight:600}}>並び替え:</div>
+        {SORT_OPTIONS.map(s=><button key={s} onClick={()=>setSortOrder(s)} style={{fontSize:11,padding:"3px 9px",borderRadius:20,border:`1px solid ${sortOrder===s?COLORS.accent:COLORS.border}`,background:sortOrder===s?COLORS.accentSoft:"transparent",color:sortOrder===s?COLORS.accent:COLORS.textMuted,cursor:"pointer",fontWeight:sortOrder===s?700:400}}>{s}</button>)}
+      </div>
+      <Sec title="習慣・繰り返し" items={habits} accent={COLORS.success}/>
+      <Sec title="タスク" items={regular} accent={COLORS.accent}/>
+      <Sec title="あとでやる" items={later} accent={COLORS.warning}/>
+      {filtered.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:COLORS.textMuted}}><div style={{fontSize:48,marginBottom:12}}>🎉</div><div>タスクがありません</div></div>}
     </div>
   );
 };
 
-const DayView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete,dragTask,setDragTask})=>{
+const TaskChip=({task,tags,color,onPopup,onToggle,onUpdateTask,compact,hourHeight=52})=>{
+  const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<new Date().toISOString().slice(0,10);
+  const resizing=useRef(false);
+  const startY=useRef(0);
+  const startDur=useRef(0);
+  const onResizeStart=useCallback((e)=>{
+    e.stopPropagation();e.preventDefault();
+    resizing.current=true;
+    startY.current=e.clientY||(e.touches?.[0]?.clientY)||0;
+    startDur.current=Number(task.duration)||60;
+    const onMove=(ev)=>{
+      if(!resizing.current)return;
+      const y=(ev.clientY||(ev.touches?.[0]?.clientY)||0);
+      const dy=y-startY.current;
+      const minPerPx=60/hourHeight;
+      const newDur=Math.max(15,Math.round((startDur.current+dy*minPerPx)/15)*15);
+      const et=task.startTime?applyDuration(task.startTime,newDur):"";
+      onUpdateTask({...task,duration:String(newDur),endTime:et});
+    };
+    const onUp=()=>{resizing.current=false;document.removeEventListener("mousemove",onMove);document.removeEventListener("mouseup",onUp);document.removeEventListener("touchmove",onMove);document.removeEventListener("touchend",onUp);};
+    document.addEventListener("mousemove",onMove);document.addEventListener("mouseup",onUp);
+    document.addEventListener("touchmove",onMove,{passive:false});document.addEventListener("touchend",onUp);
+  },[task,onUpdateTask,hourHeight]);
+  const durMin=Number(task.duration)||0;
+  const chipHeight=durMin>0&&!compact?Math.max(26,durMin/60*hourHeight):undefined;
+  return (
+    <div className="task-chip chip-drag" draggable
+      onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
+      onClick={e=>{e.stopPropagation();onPopup(e,task);}}
+      style={{background:task.done?COLORS.border+"44":color+"33",borderLeft:`3px solid ${task.done?COLORS.textMuted:color}`,borderRadius:"0 6px 6px 0",padding:compact?"2px 5px":"4px 8px",marginBottom:2,opacity:task.done?.6:1,userSelect:"none",position:"relative",height:chipHeight,overflow:"hidden",display:"flex",flexDirection:"column",justifyContent:"space-between",transition:"background .15s"}}>
+      <div>
+        <div style={{display:"flex",alignItems:"center",gap:4}}>
+          <div onClick={e=>{e.stopPropagation();onToggle(task.id);}} style={{width:10,height:10,borderRadius:3,border:`2px solid ${task.done?COLORS.textMuted:color}`,background:task.done?color:"transparent",flexShrink:0,cursor:"pointer"}}/>
+          <span style={{fontSize:compact?10:12,fontWeight:600,color:task.done?COLORS.textMuted:color,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none"}}>{task.startTime&&!compact?`${task.startTime} `:""}{task.title}</span>
+          {isOverdue&&!compact&&<span style={{fontSize:9,color:COLORS.danger}}>⚠</span>}
+        </div>
+        {task._parentTitle&&!compact&&<div style={{fontSize:9,color:COLORS.textMuted,paddingLeft:14}}>📁{task._parentTitle}</div>}
+        {task.duration&&!compact&&<div style={{fontSize:9,color:COLORS.accent,paddingLeft:14}}>⏱{task.duration}分</div>}
+      </div>
+      {chipHeight&&!compact&&<div className="resize-handle" onMouseDown={onResizeStart} onTouchStart={onResizeStart} onClick={e=>e.stopPropagation()} style={{height:6,width:"100%",marginTop:2}}/>}
+    </div>
+  );
+};
+
+const DayView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete,onDuplicate,dragTask,setDragTask})=>{
+  const HOUR_H=56;
   const [dropHour,setDropHour]=useState(null);
   const [popup,setPopup]=useState(null);
   const allFlat=flattenTasks(tasks);
@@ -298,11 +348,11 @@ const DayView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete
   });
   const timed=todayTasks.filter(t=>t.startTime&&!(t.isLater||isAutoLater(t)));
   const untimed=todayTasks.filter(t=>!t.startTime&&!(t.isLater||isAutoLater(t)));
-  const handlePopup=(e,task)=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-300),y:Math.min(r.top,window.innerHeight-320)});};
+  const handlePopup=(e,task)=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-300),y:Math.min(r.top,window.innerHeight-340)});};
   const handleDrop=(e,h)=>{
     e.preventDefault();setDropHour(null);
-    const tid=e.dataTransfer.getData("taskId");
-    const t=tid?allFlat.find(x=>x.id===tid):dragTask;
+    const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
+    const t=tid?allFlat.find(x=>x.id===tid)||dragTask:dragTask;
     if(!t)return;
     const st=`${String(h).padStart(2,"0")}:00`;
     const et=t.duration?applyDuration(st,Number(t.duration)):"";
@@ -311,36 +361,34 @@ const DayView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete
   };
   const handleMemoToggle=(id,idx)=>{
     const t=allFlat.find(x=>x.id===id);
-    if(t){onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});}
-    // popupを更新するためにstateを更新
+    if(t)onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});
     setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemoCheck(p.task.memo,idx)}}:null);
   };
   return (
-    <div style={{display:"grid",gridTemplateColumns:"1fr",gap:16}}>
-      <div>
-        {HOURS.slice(6,23).map((hour,i)=>{
-          const h=6+i;
-          const ht=timed.filter(t=>t.startTime?.slice(0,2)===String(h).padStart(2,"0"));
-          const isDrop=dropHour===h;
-          return (
-            <div key={hour} onDragOver={e=>{e.preventDefault();setDropHour(h);}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropHour(null);}} onDrop={e=>handleDrop(e,h)}
-              style={{display:"grid",gridTemplateColumns:"46px 1fr",minHeight:52,borderTop:`1px solid ${COLORS.border}`,background:isDrop?"rgba(108,99,255,0.1)":"transparent",transition:"background .15s"}}>
-              <div style={{fontSize:11,color:isDrop?COLORS.accent:COLORS.textMuted,paddingTop:3,paddingRight:6,textAlign:"right",fontWeight:isDrop?700:400}}>{hour}</div>
-              <div style={{padding:"2px 0 2px 6px",position:"relative"}}>
-                {isDrop?<div style={{position:"absolute",inset:"2px 4px",border:`2px dashed ${COLORS.accent}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:COLORS.accent,pointerEvents:"none",background:COLORS.accentSoft}}>{(dragTask||{title:"タスク"}).title} → {hour}</div>:
-                ht.length>0?ht.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} allTasks={allFlat}/>;}):<div onClick={()=>onAddTask(today,h)} style={{height:44,cursor:"pointer",borderRadius:6,display:"flex",alignItems:"center",paddingLeft:6,fontSize:11,color:"transparent",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="rgba(108,99,255,0.07)";e.currentTarget.style.color=COLORS.textMuted;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="transparent";}}>+ 追加</div>}
-              </div>
+    <div>
+      {HOURS.slice(6,23).map((hour,i)=>{
+        const h=6+i;
+        const ht=timed.filter(t=>t.startTime?.slice(0,2)===String(h).padStart(2,"0"));
+        const isDrop=dropHour===h;
+        return (
+          <div key={hour} onDragOver={e=>{e.preventDefault();setDropHour(h);}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropHour(null);}} onDrop={e=>handleDrop(e,h)}
+            style={{display:"grid",gridTemplateColumns:"44px 1fr",minHeight:HOUR_H,borderTop:`1px solid ${COLORS.border}`,background:isDrop?"rgba(108,99,255,0.08)":"transparent",transition:"background .15s"}}>
+            <div style={{fontSize:11,color:isDrop?COLORS.accent:COLORS.textMuted,paddingTop:3,paddingRight:6,textAlign:"right",fontWeight:isDrop?700:400}}>{hour}</div>
+            <div style={{padding:"2px 0 2px 6px",position:"relative"}}>
+              {isDrop?<div style={{position:"absolute",inset:"2px 4px",border:`2px dashed ${COLORS.accent}`,borderRadius:8,display:"flex",alignItems:"center",justifyContent:"center",fontSize:11,color:COLORS.accent,pointerEvents:"none",background:COLORS.accentSoft}}>{(dragTask||{title:"タスク"}).title} → {hour}</div>:
+              ht.length>0?ht.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} hourHeight={HOUR_H}/>;}):<div onClick={()=>onAddTask(today,h)} style={{height:HOUR_H-4,cursor:"pointer",borderRadius:6,display:"flex",alignItems:"center",paddingLeft:6,fontSize:11,color:"transparent",transition:"all .15s"}} onMouseEnter={e=>{e.currentTarget.style.background="rgba(108,99,255,0.07)";e.currentTarget.style.color=COLORS.textMuted;}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color="transparent";}}>+ 追加</div>}
             </div>
-          );
-        })}
-        {untimed.length>0&&<div style={{marginTop:12}}><div style={{fontSize:11,fontWeight:700,color:COLORS.textMuted,marginBottom:6}}>時間未定</div>{untimed.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} allTasks={allFlat}/>;})}</div>}
-      </div>
-      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={handleMemoToggle}/>}
+          </div>
+        );
+      })}
+      {untimed.length>0&&<div style={{marginTop:10}}><div style={{fontSize:11,fontWeight:700,color:COLORS.textMuted,marginBottom:5}}>時間未定</div>{untimed.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} hourHeight={HOUR_H}/>;})}</div>}
+      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={handleMemoToggle}/>}
     </div>
   );
 };
 
-const WeekView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete,dragTask,setDragTask})=>{
+const WeekView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete,onDuplicate,dragTask,setDragTask})=>{
+  const HOUR_H=48;
   const weekDates=getWeekDates(today);
   const [dropCell,setDropCell]=useState(null);
   const [popup,setPopup]=useState(null);
@@ -352,11 +400,11 @@ const WeekView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelet
     return isSameDay(t.startDate,date)||isSameDay(t.deadlineDate,date);
   }).filter(t=>!(t.isLater||isAutoLater(t)));
   const cellKey=(d,h)=>`${d}_${h}`;
-  const handlePopup=(e,task)=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-300),y:Math.min(r.top,window.innerHeight-320)});};
+  const handlePopup=(e,task)=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-300),y:Math.min(r.top,window.innerHeight-340)});};
   const handleDrop=(e,d,h)=>{
     e.preventDefault();setDropCell(null);
-    const tid=e.dataTransfer.getData("taskId");
-    const t=tid?allFlat.find(x=>x.id===tid):dragTask;
+    const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
+    const t=tid?allFlat.find(x=>x.id===tid)||dragTask:dragTask;
     if(!t)return;
     const st=`${String(h).padStart(2,"0")}:00`;
     const et=t.duration?applyDuration(st,Number(t.duration)):"";
@@ -365,90 +413,178 @@ const WeekView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelet
   };
   const handleMemoToggle=(id,idx)=>{
     const t=allFlat.find(x=>x.id===id);
-    if(t){onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});}
+    if(t)onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});
     setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemoCheck(p.task.memo,idx)}}:null);
   };
   return (
     <div style={{overflowX:"auto"}}>
-      <div style={{display:"grid",gridTemplateColumns:"46px repeat(7,1fr)",minWidth:640}}>
+      <div style={{display:"grid",gridTemplateColumns:"44px repeat(7,1fr)",minWidth:600}}>
         <div></div>
-        {weekDates.map((d,i)=>{const isT=d===today,dt=new Date(d);return(<div key={d} style={{padding:"6px 2px",textAlign:"center",borderBottom:`2px solid ${isT?COLORS.accent:COLORS.border}`,color:isT?COLORS.accent:COLORS.textSoft}}><div style={{fontSize:10,fontWeight:700}}>{DAYS_JP[i]}</div><div style={{fontSize:16,fontWeight:isT?700:400}}>{dt.getDate()}</div></div>);})}
+        {weekDates.map((d,i)=>{const isT=d===today,dt=new Date(d);return(<div key={d} style={{padding:"5px 2px",textAlign:"center",borderBottom:`2px solid ${isT?COLORS.accent:COLORS.border}`,color:isT?COLORS.accent:COLORS.textSoft}}><div style={{fontSize:10,fontWeight:700}}>{DAYS_JP[i]}</div><div style={{fontSize:15,fontWeight:isT?700:400}}>{dt.getDate()}</div></div>);})}
         {HOURS.slice(6,23).map((hour,i)=>{
           const h=6+i;
           return [
-            <div key={hour+"l"} style={{fontSize:10,color:COLORS.textMuted,paddingRight:4,textAlign:"right",paddingTop:3,borderTop:`1px solid ${COLORS.border}22`,height:48,display:"flex",alignItems:"flex-start",justifyContent:"flex-end"}}>{hour}</div>,
+            <div key={hour+"l"} style={{fontSize:10,color:COLORS.textMuted,paddingRight:4,textAlign:"right",paddingTop:3,borderTop:`1px solid ${COLORS.border}22`,height:HOUR_H,display:"flex",alignItems:"flex-start",justifyContent:"flex-end"}}>{hour}</div>,
             ...weekDates.map(d=>{
               const dts=getDay(d).filter(t=>t.startTime?.slice(0,2)===String(h).padStart(2,"0"));
               const key=cellKey(d,h);const isDrop=dropCell===key;
               return (
                 <div key={d+hour} onDragOver={e=>{e.preventDefault();setDropCell(key);}} onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDropCell(null);}} onDrop={e=>handleDrop(e,d,h)}
-                  style={{borderTop:`1px solid ${COLORS.border}22`,height:48,padding:1,background:isDrop?"rgba(108,99,255,0.15)":"transparent",transition:"background .15s",cursor:"pointer"}} onClick={()=>{if(!dragTask)onAddTask(d,h);}}>
-                  {isDrop?<div style={{height:"100%",border:`2px dashed ${COLORS.accent}`,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:COLORS.accent}}>{hour}</div>:dts.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} compact allTasks={allFlat}/>;})}</div>
+                  style={{borderTop:`1px solid ${COLORS.border}22`,height:HOUR_H,padding:1,background:isDrop?"rgba(108,99,255,0.15)":"transparent",transition:"background .15s",cursor:"pointer"}} onClick={()=>{if(!dragTask)onAddTask(d,h);}}>
+                  {isDrop?<div style={{height:"100%",border:`2px dashed ${COLORS.accent}`,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:9,color:COLORS.accent}}>{hour}</div>:dts.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} compact hourHeight={HOUR_H}/>;})}</div>
               );
             })
           ];
         })}
       </div>
-      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={handleMemoToggle}/>}
+      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={handleMemoToggle}/>}
     </div>
   );
 };
 
-const MonthView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete,dragTask,setDragTask})=>{
+const MonthView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete,onDuplicate,dragTask,setDragTask})=>{
   const [vy,setVy]=useState(new Date(today).getFullYear());
   const [vm,setVm]=useState(new Date(today).getMonth());
   const [dropDay,setDropDay]=useState(null);
   const [popup,setPopup]=useState(null);
+  const [draggingBar,setDraggingBar]=useState(null);
+  const [dropBarDay,setDropBarDay]=useState(null);
   const dim=getDaysInMonth(vy,vm);
+  const DAY_W=32;
   const allFlat=flattenTasks(tasks);
   const allTasks=allFlat.filter(t=>(t.startDate||t.deadlineDate)&&!(t.isLater||isAutoLater(t)));
   const getBar=task=>{const s=task.startDate?new Date(task.startDate):task.deadlineDate?new Date(task.deadlineDate):null;const e=task.deadlineDate?new Date(task.deadlineDate):s;if(!s)return null;const ms=new Date(vy,vm,1),me=new Date(vy,vm,dim);if(e<ms||s>me)return null;const cs=s<ms?ms:s,ce=e>me?me:e;return{startDay:cs.getDate(),width:ce.getDate()-cs.getDate()+1};};
   const MN=["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
   const dateStr=d=>`${vy}-${String(vm+1).padStart(2,"0")}-${String(d).padStart(2,"0")}`;
-  const handlePopup=(e,task)=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-300),y:Math.min(r.top,window.innerHeight-320)});};
-  const handleDrop=(e,d)=>{
-    e.preventDefault();setDropDay(null);
-    const tid=e.dataTransfer.getData("taskId");
-    const t=tid?allFlat.find(x=>x.id===tid):dragTask;
-    if(!t)return;
-    onUpdateTask({...t,startDate:dateStr(d),isLater:false});
-    setDragTask(null);
-  };
+  const handlePopup=(e,task)=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-300),y:Math.min(r.top,window.innerHeight-340)});};
   const handleMemoToggle=(id,idx)=>{
     const t=allFlat.find(x=>x.id===id);
-    if(t){onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});}
+    if(t)onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});
     setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemoCheck(p.task.memo,idx)}}:null);
+  };
+  const handleDrop=(e,d)=>{
+    e.preventDefault();setDropDay(null);setDropBarDay(null);
+    if(draggingBar){
+      const diff=d-draggingBar.startDay;
+      const t=draggingBar.task;
+      const shiftDate=(ds,diff)=>{if(!ds)return ds;const dt=new Date(ds);dt.setDate(dt.getDate()+diff);return dt.toISOString().slice(0,10);};
+      onUpdateTask({...t,startDate:shiftDate(t.startDate,diff),deadlineDate:shiftDate(t.deadlineDate,diff),isLater:false});
+      setDraggingBar(null);
+    } else {
+      const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
+      const t=tid?allFlat.find(x=>x.id===tid)||dragTask:dragTask;
+      if(t){onUpdateTask({...t,startDate:dateStr(d),isLater:false});setDragTask(null);}
+    }
   };
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}><Btn onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1);}}>‹</Btn><span style={{fontWeight:700,fontSize:15}}>{vy}年 {MN[vm]}</span><Btn onClick={()=>{if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1);}}>›</Btn></div>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:10}}><Btn onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1);}}>‹</Btn><span style={{fontWeight:700,fontSize:15}}>{vy}年 {MN[vm]}</span><Btn onClick={()=>{if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1);}}>›</Btn></div>
       <div style={{overflowX:"auto"}}>
-        <div style={{minWidth:dim*30+180}}>
+        <div style={{minWidth:dim*DAY_W+188}}>
           <div style={{display:"flex",borderBottom:`1px solid ${COLORS.border}`,paddingBottom:4,marginBottom:4}}>
-            <div style={{width:180,flexShrink:0}}></div>
-            {Array.from({length:dim},(_,i)=>{const d=i+1,isT=dateStr(d)===today,isDrop=dropDay===d;return <div key={d} onDragOver={e=>{e.preventDefault();setDropDay(d);}} onDragLeave={()=>setDropDay(null)} onDrop={e=>handleDrop(e,d)} onClick={()=>{if(!dragTask)onAddTask(dateStr(d),null);}} style={{width:30,flexShrink:0,textAlign:"center",fontSize:10,fontWeight:isT?700:400,color:isDrop?COLORS.accent:isT?COLORS.accent:COLORS.textMuted,background:isDrop?"rgba(108,99,255,0.2)":"transparent",borderRadius:4,cursor:"pointer",padding:"2px 0"}}>{d}</div>;})}
+            <div style={{width:188,flexShrink:0}}></div>
+            {Array.from({length:dim},(_,i)=>{
+              const d=i+1,isT=dateStr(d)===today,isDrop=dropDay===d||dropBarDay===d;
+              return <div key={d}
+                onDragOver={e=>{e.preventDefault();draggingBar?setDropBarDay(d):setDropDay(d);}}
+                onDragLeave={()=>{setDropDay(null);setDropBarDay(null);}}
+                onDrop={e=>handleDrop(e,d)}
+                onClick={()=>{if(!dragTask&&!draggingBar)onAddTask(dateStr(d),null);}}
+                style={{width:DAY_W,flexShrink:0,textAlign:"center",fontSize:10,fontWeight:isT?700:400,color:isDrop?COLORS.accent:isT?COLORS.accent:COLORS.textMuted,background:isDrop?"rgba(108,99,255,0.18)":"transparent",borderRadius:4,cursor:"pointer",padding:"2px 0"}}>{d}</div>;
+            })}
           </div>
           {allTasks.map(task=>{
             const bar=getBar(task),c=tags.find(t=>task.tags?.includes(t.id))?.color||COLORS.accent;
-            return <div key={task.id} style={{display:"flex",alignItems:"center",marginBottom:5,height:26}}>
-              <div style={{width:180,flexShrink:0,fontSize:12,paddingRight:8,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:COLORS.textSoft}}>{task._parentTitle&&<span style={{fontSize:10,color:COLORS.textMuted}}>📁</span>}{task.title}</div>
+            const isBeingDragged=draggingBar?.task?.id===task.id;
+            return <div key={task.id} style={{display:"flex",alignItems:"center",marginBottom:4,height:26}}>
+              <div style={{width:188,flexShrink:0,fontSize:12,paddingRight:8,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",color:COLORS.textSoft,display:"flex",alignItems:"center",gap:4}}>
+                {task._parentTitle&&<span style={{fontSize:10,color:COLORS.textMuted}}>📁</span>}
+                <span>{task.title}</span>
+              </div>
               <div style={{position:"relative",height:"100%",flex:1}}>
-                {bar&&<div draggable onDragStart={e=>{e.dataTransfer.setData("taskId",task.id);e.dataTransfer.effectAllowed="move";}} onClick={e=>handlePopup(e,task)} style={{position:"absolute",left:(bar.startDay-1)*30,width:bar.width*30-4,height:20,top:3,background:task.done?COLORS.border+"44":c+"33",border:`1px solid ${task.done?COLORS.textMuted:c}55`,borderRadius:5,display:"flex",alignItems:"center",paddingLeft:6,fontSize:10,color:task.done?COLORS.textMuted:c,fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",cursor:"grab",textDecoration:task.done?"line-through":"none"}} className="task-chip">{bar.width>2?task.title.slice(0,14):""}</div>}
+                {bar&&<div
+                  draggable
+                  onDragStart={e=>{e.dataTransfer.effectAllowed="move";setDraggingBar({task,startDay:bar.startDay});}}
+                  onDragEnd={()=>{setDraggingBar(null);setDropBarDay(null);}}
+                  onClick={e=>handlePopup(e,task)}
+                  style={{position:"absolute",left:(bar.startDay-1)*DAY_W,width:bar.width*DAY_W-4,height:20,top:3,background:isBeingDragged?"rgba(108,99,255,0.3)":task.done?COLORS.border+"44":c+"33",border:`1px solid ${isBeingDragged?COLORS.accent:task.done?COLORS.textMuted:c}55`,borderRadius:5,display:"flex",alignItems:"center",paddingLeft:6,fontSize:10,color:task.done?COLORS.textMuted:c,fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",cursor:"grab",textDecoration:task.done?"line-through":"none",transition:"background .15s"}} className="task-chip">
+                  {bar.width>2?task.title.slice(0,14):""}
+                </div>}
               </div>
             </div>;
           })}
         </div>
       </div>
-      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={handleMemoToggle}/>}
+      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={handleMemoToggle}/>}
     </div>
   );
 };
 
-const TemplatesView=({templates,setTemplates,onUse})=>{
+const TemplatesView=({templates,setTemplates,onUse,tags})=>{
   const [show,setShow]=useState(false);
-  const [form,setForm]=useState({name:"",tasks:[""]});
-  const save=()=>{if(!form.name.trim())return;setTemplates(t=>[...t,{id:"tpl_"+Date.now(),name:form.name,tasks:form.tasks.filter(Boolean)}]);setForm({name:"",tasks:[""]});setShow(false);};
-  return (<div><div style={{display:"flex",justifyContent:"flex-end",marginBottom:16}}><Btn variant="accent" onClick={()=>setShow(true)}>+ テンプレートを作成</Btn></div>{templates.length===0&&<div style={{textAlign:"center",padding:40,color:COLORS.textMuted}}>テンプレートがまだありません</div>}<div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:14}}>{templates.map(tpl=>(<div key={tpl.id} style={{background:COLORS.surface,borderRadius:14,padding:18,border:`1px solid ${COLORS.border}`}}><div style={{fontWeight:700,fontSize:15,marginBottom:10}}>{tpl.name}</div><div style={{marginBottom:12}}>{tpl.tasks.map((t,i)=><div key={i} style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:`1px solid ${COLORS.border}22`,fontSize:13,color:COLORS.textSoft}}><div style={{width:6,height:6,borderRadius:"50%",background:COLORS.accent,flexShrink:0}}></div>{t}</div>)}</div><div style={{display:"flex",gap:8}}><Btn variant="accent" onClick={()=>onUse(tpl)} style={{flex:1,textAlign:"center"}}>使う</Btn><Btn variant="danger" onClick={()=>setTemplates(t=>t.filter(x=>x.id!==tpl.id))}>削除</Btn></div></div>))}</div>{show&&(<Modal title="テンプレートを作成" onClose={()=>setShow(false)}><Inp label="テンプレート名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="例: 週次レビュー"/><div style={{marginBottom:14}}><div style={{fontSize:12,color:COLORS.textMuted,marginBottom:8,fontWeight:600}}>タスク一覧</div>{form.tasks.map((t,i)=>(<div key={i} style={{display:"flex",gap:8,marginBottom:6}}><input value={t} onChange={e=>{const ts=[...form.tasks];ts[i]=e.target.value;setForm(f=>({...f,tasks:ts}));}} placeholder={`タスク ${i+1}`} style={{flex:1,background:COLORS.bg,color:COLORS.text,padding:"8px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:13}}/><button onClick={()=>setForm(f=>({...f,tasks:f.tasks.filter((_,idx)=>idx!==i)}))} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:6,width:32}}>✕</button></div>))}<Btn onClick={()=>setForm(f=>({...f,tasks:[...f.tasks,""]}))}>+ 追加</Btn></div><div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><Btn onClick={()=>setShow(false)}>キャンセル</Btn><Btn variant="accent" onClick={save}>保存</Btn></div></Modal>)}</div>);
+  const [form,setForm]=useState({name:"",tasks:[{title:"",memo:"",tags:[],children:[]}]});
+  const addTask=()=>setForm(f=>({...f,tasks:[...f.tasks,{title:"",memo:"",tags:[],children:[]}]}));
+  const updTask=(i,k,v)=>setForm(f=>{const ts=[...f.tasks];ts[i]={...ts[i],[k]:v};return{...f,tasks:ts};});
+  const addChild=(i)=>setForm(f=>{const ts=[...f.tasks];ts[i]={...ts[i],children:[...(ts[i].children||[]),{title:"",memo:"",tags:[]}]};return{...f,tasks:ts};});
+  const updChild=(i,j,k,v)=>setForm(f=>{const ts=[...f.tasks];ts[i].children[j]={...ts[i].children[j],[k]:v};return{...f,tasks:ts};});
+  const parentTags=tags.filter(t=>!t.parentId&&!t.archived);
+  const togTag=(i,tid)=>{const cur=form.tasks[i].tags||[];updTask(i,"tags",cur.includes(tid)?cur.filter(x=>x!==tid):[...cur,tid]);};
+  const save=()=>{
+    if(!form.name.trim())return;
+    setTemplates(t=>[...t,{id:"tpl_"+Date.now(),name:form.name,tasks:form.tasks.filter(t=>t.title)}]);
+    setForm({name:"",tasks:[{title:"",memo:"",tags:[],children:[]}]});
+    setShow(false);
+  };
+  return (
+    <div>
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:14}}><Btn variant="accent" onClick={()=>setShow(true)}>+ テンプレートを作成</Btn></div>
+      {templates.length===0&&<div style={{textAlign:"center",padding:40,color:COLORS.textMuted}}>テンプレートがまだありません</div>}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(280px,1fr))",gap:12}}>
+        {templates.map(tpl=>(<div key={tpl.id} style={{background:COLORS.surface,borderRadius:14,padding:16,border:`1px solid ${COLORS.border}`}}>
+          <div style={{fontWeight:700,fontSize:15,marginBottom:10}}>{tpl.name}</div>
+          <div style={{marginBottom:12}}>
+            {tpl.tasks.map((t,i)=>(
+              <div key={i}>
+                <div style={{display:"flex",alignItems:"center",gap:8,padding:"4px 0",borderBottom:`1px solid ${COLORS.border}22`,fontSize:13,color:COLORS.textSoft}}><div style={{width:6,height:6,borderRadius:"50%",background:COLORS.accent,flexShrink:0}}></div>{t.title}</div>
+                {(t.children||[]).map((c,j)=><div key={j} style={{display:"flex",alignItems:"center",gap:8,padding:"3px 0 3px 14px",fontSize:12,color:COLORS.textMuted}}><div style={{width:4,height:4,borderRadius:"50%",background:COLORS.textMuted,flexShrink:0}}></div>{c.title}</div>)}
+              </div>
+            ))}
+          </div>
+          <div style={{display:"flex",gap:8}}><Btn variant="accent" onClick={()=>onUse(tpl)} style={{flex:1,textAlign:"center"}}>使う</Btn><Btn variant="danger" onClick={()=>setTemplates(t=>t.filter(x=>x.id!==tpl.id))}>削除</Btn></div>
+        </div>))}
+      </div>
+      {show&&(
+        <Modal title="テンプレートを作成" onClose={()=>setShow(false)} wide>
+          <Inp label="テンプレート名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="例: 週次レビュー"/>
+          <div style={{marginBottom:14}}>
+            <div style={{fontSize:12,color:COLORS.textMuted,marginBottom:8,fontWeight:600}}>タスク一覧</div>
+            {form.tasks.map((t,i)=>(
+              <div key={i} style={{background:COLORS.bg,borderRadius:10,padding:10,marginBottom:8,border:`1px solid ${COLORS.border}`}}>
+                <div style={{display:"flex",gap:8,marginBottom:6}}>
+                  <input value={t.title} onChange={e=>updTask(i,"title",e.target.value)} placeholder={`タスク ${i+1}`} style={{flex:1,background:COLORS.surface,color:COLORS.text,padding:"7px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:13}}/>
+                  <button onClick={()=>setForm(f=>({...f,tasks:f.tasks.filter((_,idx)=>idx!==i)}))} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:6,width:30}}>✕</button>
+                </div>
+                <textarea value={t.memo} onChange={e=>updTask(i,"memo",e.target.value)} placeholder="メモ（任意）" rows={2} style={{width:"100%",background:COLORS.surface,color:COLORS.text,padding:"6px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,resize:"none",marginBottom:6}}/>
+                <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:6}}>
+                  {parentTags.map(pt=><div key={pt.id} onClick={()=>togTag(i,pt.id)} style={{padding:"2px 10px",borderRadius:20,fontSize:11,fontWeight:600,cursor:"pointer",border:`1px solid ${pt.color}44`,background:(t.tags||[]).includes(pt.id)?pt.color+"33":"transparent",color:(t.tags||[]).includes(pt.id)?pt.color:COLORS.textMuted}}>{pt.name}</div>)}
+                </div>
+                {(t.children||[]).map((c,j)=>(
+                  <div key={j} style={{marginLeft:14,marginBottom:4,display:"flex",gap:6,alignItems:"center"}}>
+                    <span style={{color:COLORS.textMuted,fontSize:12}}>└</span>
+                    <input value={c.title} onChange={e=>updChild(i,j,"title",e.target.value)} placeholder={`子タスク ${j+1}`} style={{flex:1,background:COLORS.surface,color:COLORS.text,padding:"5px 8px",borderRadius:6,border:`1px solid ${COLORS.border}`,fontSize:12}}/>
+                    <button onClick={()=>setForm(f=>{const ts=[...f.tasks];ts[i].children=ts[i].children.filter((_,idx)=>idx!==j);return{...f,tasks:ts};})} style={{background:COLORS.danger+"22",color:COLORS.danger,border:"none",borderRadius:5,width:24,height:24,fontSize:11}}>✕</button>
+                  </div>
+                ))}
+                <button onClick={()=>addChild(i)} style={{background:"none",color:COLORS.accent,border:`1px dashed ${COLORS.accent}44`,borderRadius:6,padding:"3px 10px",fontSize:11,cursor:"pointer",marginTop:4}}>+ 子タスク追加</button>
+              </div>
+            ))}
+            <Btn onClick={addTask}>+ タスク追加</Btn>
+          </div>
+          <div style={{display:"flex",gap:10,justifyContent:"flex-end"}}><Btn onClick={()=>setShow(false)}>キャンセル</Btn><Btn variant="accent" onClick={save}>保存</Btn></div>
+        </Modal>
+      )}
+    </div>
+  );
 };
 
 const TagsView=({tags,setTags})=>{
@@ -464,29 +600,27 @@ const TagsView=({tags,setTags})=>{
   const parentTags=tags.filter(t=>!t.parentId&&!t.archived);
   const childTags=pid=>tags.filter(t=>t.parentId===pid&&!t.archived);
   const archivedTags=tags.filter(t=>t.archived);
-  const handleParentChange=pid=>{
-    const parent=tags.find(t=>t.id===pid);
-    setForm(f=>({...f,parentId:pid||null,color:parent?parent.color:f.color}));
-  };
+  const handleParentChange=pid=>{const parent=tags.find(t=>t.id===pid);setForm(f=>({...f,parentId:pid||null,color:parent?parent.color:f.color}));};
   const EditRow=({t})=>editId===t.id&&editForm?(<div style={{background:COLORS.bg,borderRadius:10,padding:10,marginTop:6,display:"flex",gap:10,alignItems:"flex-end"}}><div style={{flex:1}}><Inp label="タグ名" value={editForm.name} onChange={v=>setEditForm(f=>({...f,name:v}))}/></div><div style={{marginBottom:14}}><div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>色</div><input type="color" value={editForm.color} onChange={e=>setEditForm(f=>({...f,color:e.target.value}))} style={{width:44,height:38,borderRadius:8,border:`1px solid ${COLORS.border}`,background:"none",cursor:"pointer",padding:2}}/></div><div style={{marginBottom:14,display:"flex",gap:6}}><Btn variant="accent" onClick={()=>saveEdit(t.id)}>保存</Btn><Btn onClick={()=>setEditId(null)}>✕</Btn></div></div>):null;
   return (
     <div>
-      <div style={{background:COLORS.surface,borderRadius:14,padding:18,border:`1px solid ${COLORS.border}`,marginBottom:16}}>
-        <div style={{fontWeight:700,marginBottom:12}}>新しいタグを作成</div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 70px",gap:10,marginBottom:10}}><Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/><div><div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>色</div><input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} style={{width:"100%",height:38,borderRadius:8,border:`1px solid ${COLORS.border}`,background:"none",cursor:"pointer",padding:2}}/></div></div>
-        <div style={{marginBottom:10}}><div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>親タグ（小タグとして追加する場合）</div><select value={form.parentId||""} onChange={e=>handleParentChange(e.target.value||null)} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14}}><option value="">なし（親タグとして作成）</option>{parentTags.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
+      <div style={{background:COLORS.surface,borderRadius:14,padding:16,border:`1px solid ${COLORS.border}`,marginBottom:14}}>
+        <div style={{fontWeight:700,marginBottom:10}}>新しいタグを作成</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 60px",gap:10,marginBottom:8}}><Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/><div><div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>色</div><input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} style={{width:"100%",height:38,borderRadius:8,border:`1px solid ${COLORS.border}`,background:"none",cursor:"pointer",padding:2}}/></div></div>
+        <div style={{marginBottom:8}}><div style={{fontSize:12,color:COLORS.textMuted,marginBottom:5,fontWeight:600}}>親タグ</div><select value={form.parentId||""} onChange={e=>handleParentChange(e.target.value||null)} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"9px 12px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:14}}><option value="">なし（親タグ）</option>{parentTags.map(t=><option key={t.id} value={t.id}>{t.name}</option>)}</select></div>
         <Btn variant="accent" onClick={add}>追加</Btn>
       </div>
-      <div style={{display:"flex",flexDirection:"column",gap:10}}>
-        {parentTags.map(pt=>(<div key={pt.id} style={{background:COLORS.surface,borderRadius:12,padding:14,border:`1px solid ${pt.color}44`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:12,height:12,borderRadius:"50%",background:pt.color}}></div><span style={{fontWeight:700,color:pt.color,fontSize:14}}>{pt.name}</span><span style={{fontSize:11,color:COLORS.textMuted}}>親タグ</span></div><div style={{display:"flex",gap:6}}><Btn onClick={()=>startEdit(pt)} style={{padding:"3px 10px",fontSize:11}}>編集</Btn><Btn variant="danger" onClick={()=>archive(pt.id)} style={{padding:"3px 10px",fontSize:11}}>アーカイブ</Btn></div></div><EditRow t={pt}/>{childTags(pt.id).length>0&&<div style={{paddingLeft:20,marginTop:10,display:"flex",flexDirection:"column",gap:5}}>{childTags(pt.id).map(ct=>(<div key={ct.id} style={{background:COLORS.bg,borderRadius:8,border:`1px solid ${ct.color}33`,padding:"5px 10px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:ct.color}}></div><span style={{fontSize:13,color:ct.color,fontWeight:600}}>{ct.name}</span><span style={{fontSize:10,color:COLORS.textMuted}}>小タグ</span></div><div style={{display:"flex",gap:6}}><Btn onClick={()=>startEdit(ct)} style={{padding:"2px 8px",fontSize:11}}>編集</Btn><Btn variant="danger" onClick={()=>archive(ct.id)} style={{padding:"2px 8px",fontSize:11}}>アーカイブ</Btn></div></div><EditRow t={ct}/></div>))}</div>}</div>))}
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {parentTags.map(pt=>(<div key={pt.id} style={{background:COLORS.surface,borderRadius:12,padding:12,border:`1px solid ${pt.color}44`}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:12,height:12,borderRadius:"50%",background:pt.color}}></div><span style={{fontWeight:700,color:pt.color,fontSize:14}}>{pt.name}</span><span style={{fontSize:11,color:COLORS.textMuted}}>親タグ</span></div><div style={{display:"flex",gap:6}}><Btn onClick={()=>startEdit(pt)} style={{padding:"3px 10px",fontSize:11}}>編集</Btn><Btn variant="danger" onClick={()=>archive(pt.id)} style={{padding:"3px 10px",fontSize:11}}>アーカイブ</Btn></div></div><EditRow t={pt}/>{childTags(pt.id).length>0&&<div style={{paddingLeft:18,marginTop:8,display:"flex",flexDirection:"column",gap:4}}>{childTags(pt.id).map(ct=>(<div key={ct.id} style={{background:COLORS.bg,borderRadius:8,border:`1px solid ${ct.color}33`,padding:"5px 10px"}}><div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:8,height:8,borderRadius:"50%",background:ct.color}}></div><span style={{fontSize:13,color:ct.color,fontWeight:600}}>{ct.name}</span><span style={{fontSize:10,color:COLORS.textMuted}}>小タグ</span></div><div style={{display:"flex",gap:6}}><Btn onClick={()=>startEdit(ct)} style={{padding:"2px 8px",fontSize:11}}>編集</Btn><Btn variant="danger" onClick={()=>archive(ct.id)} style={{padding:"2px 8px",fontSize:11}}>アーカイブ</Btn></div></div><EditRow t={ct}/></div>))}</div>}</div>))}
       </div>
-      {archivedTags.length>0&&<div style={{marginTop:20}}><button onClick={()=>setShowArchived(!showArchived)} style={{background:"none",border:"none",color:COLORS.textMuted,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,marginBottom:10}}>{showArchived?"▼":"▶"} アーカイブ済み ({archivedTags.length})</button>{showArchived&&<div style={{display:"flex",flexDirection:"column",gap:7}}>{archivedTags.map(t=>(<div key={t.id} style={{background:COLORS.surface,borderRadius:10,padding:"9px 14px",border:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.6}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:10,height:10,borderRadius:"50%",background:t.color}}></div><span style={{fontSize:13,color:COLORS.textSoft}}>{t.name}</span><span style={{fontSize:10,color:COLORS.textMuted}}>{t.parentId?"小タグ":"親タグ"}</span></div><div style={{display:"flex",gap:6}}><Btn onClick={()=>restore(t.id)} style={{padding:"3px 10px",fontSize:11}}>復元</Btn><Btn variant="danger" onClick={()=>setTags(ts=>ts.filter(x=>x.id!==t.id))} style={{padding:"3px 10px",fontSize:11}}>完全削除</Btn></div></div>))}</div>}</div>}
+      {archivedTags.length>0&&<div style={{marginTop:18}}><button onClick={()=>setShowArchived(!showArchived)} style={{background:"none",border:"none",color:COLORS.textMuted,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6,marginBottom:8}}>{showArchived?"▼":"▶"} アーカイブ済み ({archivedTags.length})</button>{showArchived&&<div style={{display:"flex",flexDirection:"column",gap:6}}>{archivedTags.map(t=>(<div key={t.id} style={{background:COLORS.surface,borderRadius:10,padding:"8px 14px",border:`1px solid ${COLORS.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.6}}><div style={{display:"flex",alignItems:"center",gap:8}}><div style={{width:10,height:10,borderRadius:"50%",background:t.color}}></div><span style={{fontSize:13,color:COLORS.textSoft}}>{t.name}</span><span style={{fontSize:10,color:COLORS.textMuted}}>{t.parentId?"小タグ":"親タグ"}</span></div><div style={{display:"flex",gap:6}}><Btn onClick={()=>restore(t.id)} style={{padding:"3px 10px",fontSize:11}}>復元</Btn><Btn variant="danger" onClick={()=>setTags(ts=>ts.filter(x=>x.id!==t.id))} style={{padding:"3px 10px",fontSize:11}}>完全削除</Btn></div></div>))}</div>}</div>}
     </div>
   );
 };
 
 export default function App(){
   const [sideOpen,setSideOpen]=useState(true);
+  const [sortOrder,setSortOrder]=useState("デフォルト");
   const today=new Date().toISOString().slice(0,10);
   const [user,setUser]=useState(null);
   const [authLoading,setAuthLoading]=useState(true);
@@ -514,24 +648,43 @@ export default function App(){
   const handleLogin=async()=>{setLoginLoading(true);try{const result=await signInWithPopup(auth,provider);if(!ALLOWED_UIDS.includes(result.user.uid)){await signOut(auth);alert("このアカウントはアクセスできません。");}}catch(e){console.error(e);}setLoginLoading(false);};
   const updTree=(ts,id,fn)=>ts.map(t=>t.id===id?fn(t):{...t,children:updTree(t.children||[],id,fn)});
   const delTree=(ts,id)=>ts.filter(t=>t.id!==id).map(t=>({...t,children:delTree(t.children||[],id)}));
-  const addChild=(ts,pid,c)=>ts.map(t=>t.id===pid?{...t,children:[...(t.children||[]),c]}:{...t,children:addChild(t.children||[],pid,c)});
+  const addChildFn=(ts,pid,c)=>ts.map(t=>t.id===pid?{...t,children:[...(t.children||[]),c]}:{...t,children:addChildFn(t.children||[],pid,c)});
 
-  // タスク保存時に子・孫タスクへタグを伝播
   const handleSave=f=>{
     const fw={...f,isLater:isAutoLater(f)};
-    const fwWithPropagated=propagateTagsToChildren(fw,tags);
+    const fwDown=propagateTagsDown(fw,tags);
     let nt;
-    if(editTask)nt=updTree(tasks,f.id,()=>fwWithPropagated);
-    else if(addChildTo)nt=addChild(tasks,addChildTo,fwWithPropagated);
-    else nt=[...tasks,fwWithPropagated];
-    updT(nt);setEditTask(null);setAddChildTo(null);
+    if(editTask)nt=updTree(tasks,f.id,()=>fwDown);
+    else if(addChildTo)nt=addChildFn(tasks,addChildTo,fwDown);
+    else nt=[...tasks,fwDown];
+    updT(syncTagsUp(nt,tags));
+    setEditTask(null);setAddChildTo(null);
   };
-
-  const handleUpdateTask=updated=>{const clean={...updated};delete clean._parentTitle;updT(updTree(tasks,clean.id,()=>clean));setDragTask(null);};
+  const handleUpdateTask=updated=>{
+    const clean={...updated};delete clean._parentTitle;delete clean._parentId;
+    updT(syncTagsUp(updTree(tasks,clean.id,()=>clean),tags));
+    setDragTask(null);
+  };
   const handleAddTask=(date,hour)=>{setDefaultDate(date);setDefaultTime(hour!=null?`${String(hour).padStart(2,"0")}:00`:null);setEditTask(null);setAddChildTo(null);setShowForm(true);};
   const handleToggle=id=>updT(updTree(tasks,id,t=>({...t,done:!t.done})));
   const handleDelete=id=>updT(delTree(tasks,id));
   const handleEdit=t=>{setEditTask(t);setShowForm(true);};
+  const handleDuplicate=t=>{
+    const dup=(task)=>({...task,id:"task_"+Date.now()+Math.random(),title:task.title+" (コピー)",done:false,children:(task.children||[]).map(c=>dup(c))});
+    const duped=dup(t);
+    let nt;
+    if(t._parentId){nt=addChildFn(tasks,t._parentId,duped);}
+    else{const idx=tasks.findIndex(x=>x.id===t.id);nt=[...tasks.slice(0,idx+1),duped,...tasks.slice(idx+1)];}
+    updT(nt);
+  };
+  const handleUseTemplate=tpl=>{
+    const newTasks=tpl.tasks.map(t=>({
+      id:"task_"+Date.now()+Math.random(),title:t.title,done:false,tags:t.tags||[],memo:t.memo||"",
+      startDate:"",startTime:"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",isLater:true,
+      children:(t.children||[]).map(c=>({id:"task_"+Date.now()+Math.random(),title:c.title,done:false,tags:c.tags||[],memo:c.memo||"",startDate:"",startTime:"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",isLater:true,children:[]}))
+    }));
+    updT([...tasks,...newTasks]);setView("list");
+  };
 
   const allFlat=flattenTasks(tasks);
   const done=allFlat.filter(t=>t.done).length;
@@ -548,47 +701,47 @@ export default function App(){
     <>
       <style>{G}</style>
       <div style={{minHeight:"100vh",background:COLORS.bg,display:"flex"}}>
-        <div style={{width:sideOpen?210:44,flexShrink:0,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",padding:"16px 0",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10,transition:"width .2s"}}>
-          <div style={{padding:`0 ${sideOpen?16:6}px 14px`,borderBottom:`1px solid ${COLORS.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
+        <div style={{width:sideOpen?206:42,flexShrink:0,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",padding:"14px 0",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10,transition:"width .2s"}}>
+          <div style={{padding:`0 ${sideOpen?14:5}px 12px`,borderBottom:`1px solid ${COLORS.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:5}}>
             {sideOpen&&<div style={{minWidth:0}}>
-              <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:16,letterSpacing:-.5,whiteSpace:"nowrap"}}><span style={{color:COLORS.accent}}>◈</span> マイタスク</div>
-              <div style={{fontSize:11,color:COLORS.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
-              {saving&&<div style={{fontSize:10,color:COLORS.success,marginTop:2}}>💾 保存中...</div>}
-              <div style={{marginTop:8}}>
-                <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:COLORS.textMuted,marginBottom:3}}><span>進捗</span><span style={{fontWeight:700,color:COLORS.accent}}>{pct}%</span></div>
-                <div style={{background:COLORS.bg,borderRadius:10,height:5,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${COLORS.accent},${COLORS.success})`,borderRadius:10,transition:"width .4s"}}></div></div>
+              <div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:15,letterSpacing:-.5,whiteSpace:"nowrap"}}><span style={{color:COLORS.accent}}>◈</span> マイタスク</div>
+              <div style={{fontSize:10,color:COLORS.textMuted,marginTop:2,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
+              {saving&&<div style={{fontSize:10,color:COLORS.success,marginTop:1}}>💾 保存中...</div>}
+              <div style={{marginTop:7}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,color:COLORS.textMuted,marginBottom:3}}><span>進捗</span><span style={{fontWeight:700,color:COLORS.accent}}>{pct}%</span></div>
+                <div style={{background:COLORS.bg,borderRadius:10,height:4,overflow:"hidden"}}><div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${COLORS.accent},${COLORS.success})`,borderRadius:10,transition:"width .4s"}}></div></div>
                 <div style={{fontSize:10,color:COLORS.textMuted,marginTop:2}}>{done}/{total} 完了</div>
               </div>
             </div>}
-            <button onClick={()=>setSideOpen(!sideOpen)} style={{background:COLORS.accentSoft,color:COLORS.accent,border:"none",borderRadius:8,width:28,height:28,fontSize:14,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{sideOpen?"◀":"▶"}</button>
+            <button onClick={()=>setSideOpen(!sideOpen)} style={{background:COLORS.accentSoft,color:COLORS.accent,border:"none",borderRadius:8,width:26,height:26,fontSize:13,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{sideOpen?"◀":"▶"}</button>
           </div>
-          <div style={{padding:`10px ${sideOpen?8:4}px`,flex:1}}>
-            {NAV.map(n=>(<button key={n.id} className="nb" onClick={()=>setView(n.id)} title={n.label} style={{display:"flex",alignItems:"center",gap:sideOpen?9:0,justifyContent:sideOpen?"flex-start":"center",width:"100%",padding:"9px 8px",borderRadius:10,marginBottom:2,background:view===n.id?COLORS.accentSoft:"transparent",color:view===n.id?COLORS.accent:COLORS.textSoft,border:view===n.id?`1px solid ${COLORS.accent}33`:"1px solid transparent",fontSize:13,fontWeight:view===n.id?700:400,textAlign:"left"}}><span style={{fontSize:16,flexShrink:0}}>{n.icon}</span>{sideOpen&&n.label}</button>))}
+          <div style={{padding:`8px ${sideOpen?7:3}px`,flex:1}}>
+            {NAV.map(n=>(<button key={n.id} className="nb" onClick={()=>setView(n.id)} title={n.label} style={{display:"flex",alignItems:"center",gap:sideOpen?8:0,justifyContent:sideOpen?"flex-start":"center",width:"100%",padding:"8px 7px",borderRadius:9,marginBottom:2,background:view===n.id?COLORS.accentSoft:"transparent",color:view===n.id?COLORS.accent:COLORS.textSoft,border:view===n.id?`1px solid ${COLORS.accent}33`:"1px solid transparent",fontSize:12,fontWeight:view===n.id?700:400,textAlign:"left"}}><span style={{fontSize:15,flexShrink:0}}>{n.icon}</span>{sideOpen&&n.label}</button>))}
           </div>
-          {sideOpen&&<div style={{padding:"10px 8px",borderTop:`1px solid ${COLORS.border}`}}>
-            <input value={filters.search} onChange={e=>setFilters(f=>({...f,search:e.target.value}))} placeholder="🔍 検索..." style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"6px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:6}}/>
-            <select value={filters.tag} onChange={e=>setFilters(f=>({...f,tag:e.target.value}))} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"6px 10px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:6}}>
+          {sideOpen&&<div style={{padding:"8px 7px",borderTop:`1px solid ${COLORS.border}`}}>
+            <input value={filters.search} onChange={e=>setFilters(f=>({...f,search:e.target.value}))} placeholder="🔍 検索..." style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"6px 9px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:5}}/>
+            <select value={filters.tag} onChange={e=>setFilters(f=>({...f,tag:e.target.value}))} style={{width:"100%",background:COLORS.bg,color:COLORS.text,padding:"6px 9px",borderRadius:8,border:`1px solid ${COLORS.border}`,fontSize:12,marginBottom:5}}>
               <option value="">すべてのタグ</option>
               {parentTags.map(pt=>(<optgroup key={pt.id} label={pt.name}><option value={pt.id}>{pt.name}（全体）</option>{tags.filter(t=>t.parentId===pt.id&&!t.archived).map(ct=><option key={ct.id} value={ct.id}>└ {ct.name}</option>)}</optgroup>))}
             </select>
-            <div style={{display:"flex",alignItems:"center",gap:7,marginBottom:8}}><Checkbox checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={15}/><span style={{fontSize:12,color:COLORS.textMuted}}>完了を隠す</span></div>
-            <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"6px",fontSize:12,cursor:"pointer"}}>ログアウト</button>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}><Checkbox checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={14}/><span style={{fontSize:11,color:COLORS.textMuted}}>完了を隠す</span></div>
+            <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"5px",fontSize:11,cursor:"pointer"}}>ログアウト</button>
           </div>}
-          {!sideOpen&&<div style={{padding:"8px 4px",borderTop:`1px solid ${COLORS.border}`}}>
-            <button onClick={()=>signOut(auth)} title="ログアウト" style={{background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"6px",fontSize:12,cursor:"pointer",width:"100%"}}>↩</button>
+          {!sideOpen&&<div style={{padding:"6px 3px",borderTop:`1px solid ${COLORS.border}`}}>
+            <button onClick={()=>signOut(auth)} title="ログアウト" style={{background:"transparent",color:COLORS.textMuted,border:`1px solid ${COLORS.border}`,borderRadius:8,padding:"5px",fontSize:11,cursor:"pointer",width:"100%"}}>↩</button>
           </div>}
         </div>
-        <div style={{marginLeft:sideOpen?210:44,flex:1,display:"flex",minHeight:"100vh",transition:"margin .2s"}}>
-          <div style={{flex:1,padding:"24px 28px",minWidth:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
-              <div><h1 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:20,letterSpacing:-.5}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1><div style={{fontSize:11,color:COLORS.textMuted,marginTop:1}}>{new Date(today).toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"long"})}</div></div>
+        <div style={{marginLeft:sideOpen?206:42,flex:1,display:"flex",minHeight:"100vh",transition:"margin .2s"}}>
+          <div style={{flex:1,padding:"20px 24px",minWidth:0}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:16}}>
+              <div><h1 style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:19,letterSpacing:-.5}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1><div style={{fontSize:11,color:COLORS.textMuted,marginTop:1}}>{new Date(today).toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"long"})}</div></div>
               {["list","day","week","month"].includes(view)&&<Btn variant="accent" onClick={()=>{setDefaultDate(null);setDefaultTime(null);setEditTask(null);setAddChildTo(null);setShowForm(true);}}>+ 追加</Btn>}
             </div>
-            {view==="list"&&<ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}}/>}
-            {view==="day"&&<DayView tasks={tasks} tags={tags} today={today} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view==="week"&&<WeekView tasks={tasks} tags={tags} today={today} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view==="month"&&<MonthView tasks={tasks} tags={tags} today={today} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view==="templates"&&<TemplatesView templates={templates} setTemplates={updTp} onUse={tpl=>{updT([...tasks,...tpl.tasks.map(title=>({id:"task_"+Date.now()+Math.random(),title,done:false,tags:[],memo:"",startDate:"",startTime:"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:true}))]);setView("list");}}/>}
+            {view==="list"&&<ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}} onDuplicate={handleDuplicate} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
+            {view==="day"&&<DayView tasks={tasks} tags={tags} today={today} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="week"&&<WeekView tasks={tasks} tags={tags} today={today} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="month"&&<MonthView tasks={tasks} tags={tags} today={today} onUpdateTask={handleUpdateTask} onAddTask={handleAddTask} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="templates"&&<TemplatesView templates={templates} setTemplates={updTp} onUse={handleUseTemplate} tags={tags}/>}
             {view==="tagmgr"&&<TagsView tags={tags} setTags={updTg}/>}
           </div>
           {showLaterPanel&&<LaterPanel tasks={tasks} tags={tags} dragTask={dragTask} setDragTask={setDragTask}/>}
