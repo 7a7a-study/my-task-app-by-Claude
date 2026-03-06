@@ -536,3 +536,4 @@ export default function App(){
       {showForm&&<TaskForm task={editTask} tags={tags} isChild={!!addChildTo} onSave={handleSave} defaultDate={defaultDate} defaultTime={defaultTime} onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefaultDate(null);setDefaultTime(null);}}/>}
     </>
   );
+}
