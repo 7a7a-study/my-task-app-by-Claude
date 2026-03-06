@@ -22,12 +22,41 @@ const minToTime=m=>`${String(Math.floor(m/60)%24).padStart(2,"0")}:${String(m%60
 const calcDuration=(st,et)=>{if(!st||!et)return null;const d=timeToMin(et)-timeToMin(st);return d>0?d:null;};
 const applyDuration=(st,dur)=>{if(!st||!dur)return"";return minToTime(timeToMin(st)+dur);};
 
-// メモのチェックボックス記法パーサー
+// タグ連動：子タスク・孫タスクに親タグを伝播
+const propagateTagsToChildren=(task,allTags)=>{
+  if(!task.children?.length)return task;
+  const updatedChildren=task.children.map(child=>{
+    // 親タスクのタグを子に引き継ぐ（既存タグは保持しつつ追加）
+    const inherited=task.tags||[];
+    const childTags=[...new Set([...(child.tags||[]),...inherited])];
+    // さらに子タグがあれば親タグも連動
+    const withParents=childTags.reduce((acc,tid)=>{
+      const tag=allTags.find(t=>t.id===tid);
+      if(tag?.parentId&&!acc.includes(tag.parentId))return[...acc,tag.parentId];
+      return acc;
+    },[...childTags]);
+    return propagateTagsToChildren({...child,tags:withParents},allTags);
+  });
+  return{...task,children:updatedChildren};
+};
+
+// メモのチェックボックス記法パーサー（ポップアップを閉じない）
 const parseMemo=(memo,onToggle)=>{
   if(!memo)return null;
   return memo.split("\n").map((line,i)=>{
     const m=line.match(/^- \[(x| )\] (.*)$/);
-    if(m){const checked=m[1]==="x";return(<div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}><div onClick={e=>{e.stopPropagation();onToggle&&onToggle(i);}} style={{width:14,height:14,borderRadius:3,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}>{checked&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}</div><span style={{fontSize:12,color:checked?COLORS.textMuted:COLORS.textSoft,textDecoration:checked?"line-through":"none"}}>{m[2]}</span></div>);}
+    if(m){
+      const checked=m[1]==="x";
+      return(
+        <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
+          <div
+            onClick={e=>{e.stopPropagation();e.preventDefault();onToggle&&onToggle(i);}}
+            style={{width:14,height:14,borderRadius:3,border:`2px solid ${checked?COLORS.accent:COLORS.border}`,background:checked?COLORS.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center",transition:"all .15s"}}
+          >{checked&&<span style={{color:"#fff",fontSize:9,fontWeight:700}}>✓</span>}</div>
+          <span style={{fontSize:12,color:checked?COLORS.textMuted:COLORS.textSoft,textDecoration:checked?"line-through":"none"}}>{m[2]}</span>
+        </div>
+      );
+    }
     return <div key={i} style={{fontSize:12,color:COLORS.textSoft,marginBottom:2}}>{line||<br/>}</div>;
   });
 };
@@ -56,10 +85,14 @@ const Sel=({label,value,onChange,options})=>(<div style={{marginBottom:14}}>{lab
 const LoginScreen=({onLogin,loading})=>(<div style={{minHeight:"100vh",background:COLORS.bg,display:"flex",alignItems:"center",justifyContent:"center"}}><div style={{textAlign:"center",padding:40}}><div style={{fontSize:56,marginBottom:16}}>✅</div><div style={{fontFamily:"'Space Grotesk',sans-serif",fontWeight:700,fontSize:28,marginBottom:8}}><span style={{color:COLORS.accent}}>◈</span> マイタスク</div><div style={{color:COLORS.textMuted,marginBottom:32,fontSize:14}}>あなただけのタスク管理アプリ</div><button onClick={onLogin} disabled={loading} style={{display:"flex",alignItems:"center",gap:12,background:"#fff",color:"#333",border:"none",borderRadius:12,padding:"14px 28px",fontSize:15,fontWeight:600,cursor:"pointer",margin:"0 auto",boxShadow:"0 4px 20px rgba(0,0,0,0.3)",opacity:loading?0.7:1}}><svg width="20" height="20" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>{loading?"ログイン中...":"Googleでログイン"}</button></div></div>);
 
 const TaskPopup=({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,anchor})=>{
-  const allTags=flattenTasks([task]);
-  const tTags=tags.filter(t=>task.tags?.includes(t.id));
+  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId);// 子タグのみ表示
   const today=new Date().toISOString().slice(0,10);
   const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<today;
+  // メモのチェックボックスはポップアップを閉じずに更新
+  const handleMemoToggle=(idx)=>{
+    onMemoToggle(task.id,idx);
+    // ポップアップは閉じない
+  };
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500}}>
       <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:anchor?.y||100,left:anchor?.x||100,background:COLORS.surface,borderRadius:14,padding:16,border:`1px solid ${COLORS.border}`,width:290,boxShadow:"0 8px 32px rgba(0,0,0,0.5)",zIndex:501}}>
@@ -78,7 +111,7 @@ const TaskPopup=({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,anchor
           {task.deadlineDate&&<div style={{color:isOverdue?COLORS.danger:COLORS.warning}}>⚠ 締切: {formatDateTime(task.deadlineDate,task.deadlineTime)}</div>}
           {task.repeat!=="なし"&&<div style={{color:COLORS.success}}>↻ {task.repeat}</div>}
         </div>
-        {task.memo&&<div style={{background:COLORS.bg,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{parseMemo(task.memo,idx=>onMemoToggle(task.id,idx))}</div>}
+        {task.memo&&<div onClick={e=>e.stopPropagation()} style={{background:COLORS.bg,borderRadius:8,padding:"8px 10px",marginBottom:10}}>{parseMemo(task.memo,handleMemoToggle)}</div>}
         <div style={{display:"flex",gap:8}}>
           <Btn variant="accent" onClick={()=>{onEdit(task);onClose();}} style={{flex:1,textAlign:"center"}}>編集</Btn>
           <Btn variant="danger" onClick={()=>{onDelete(task.id);onClose();}}>削除</Btn>
@@ -119,12 +152,17 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
   const [f,setF]=useState(task?{duration:"",...task}:empty);
   const upd=(k,v)=>setF(p=>({...p,[k]:v}));
 
-  // 小タグ選択時に親タグ自動連動
+  // 小タグ選択時に親タグ自動連動（子・孫タスクにも伝播）
   const tog=tid=>{
     const tag=tags.find(t=>t.id===tid);
     let newTags=[...f.tags];
     if(newTags.includes(tid)){
       newTags=newTags.filter(x=>x!==tid);
+      // 親タグを外した場合、その子タグも外す
+      if(!tag?.parentId){
+        const childIds=tags.filter(t=>t.parentId===tid).map(t=>t.id);
+        newTags=newTags.filter(x=>!childIds.includes(x));
+      }
     } else {
       newTags=[...newTags,tid];
       if(tag?.parentId&&!newTags.includes(tag.parentId))newTags=[...newTags,tag.parentId];
@@ -132,7 +170,6 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
     upd("tags",newTags);
   };
 
-  // 所要時間の自動計算・反映
   const handleStartTime=v=>{
     upd("startTime",v);
     if(f.duration&&v){upd("endTime",applyDuration(v,Number(f.duration)));}
@@ -184,7 +221,7 @@ const TaskForm=({task,tags,onSave,onClose,isChild,defaultDate,defaultTime})=>{
 
 const TaskRow=({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild})=>{
   const [exp,setExp]=useState(true);
-  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId); // 子タグのみ表示
+  const tTags=tags.filter(t=>task.tags?.includes(t.id)&&t.parentId);// 子タグのみ表示
   const today=new Date().toISOString().slice(0,10);
   const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<today;
   const isUrgent=task.deadlineDate&&!task.done&&task.deadlineDate===today;
@@ -230,7 +267,6 @@ const ListView=({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild})=>{
   return (<div><Sec title="習慣・繰り返し" items={habits} accent={COLORS.success}/><Sec title="タスク" items={regular} accent={COLORS.accent}/><Sec title="あとでやる" items={later} accent={COLORS.warning}/>{filtered.length===0&&<div style={{textAlign:"center",padding:"60px 0",color:COLORS.textMuted}}><div style={{fontSize:48,marginBottom:12}}>🎉</div><div>タスクがありません</div></div>}</div>);
 };
 
-// タスクチップ（ビュー上のタスク表示、ドラッグ対応）
 const TaskChip=({task,tags,color,onPopup,onToggle,onUpdateTask,compact,allTasks})=>{
   const isOverdue=task.deadlineDate&&!task.done&&task.deadlineDate<new Date().toISOString().slice(0,10);
   const parentTitle=task._parentTitle;
@@ -273,6 +309,12 @@ const DayView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete
     onUpdateTask({...t,startDate:today,startTime:st,endTime:et||t.endTime,isLater:false});
     setDragTask(null);
   };
+  const handleMemoToggle=(id,idx)=>{
+    const t=allFlat.find(x=>x.id===id);
+    if(t){onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});}
+    // popupを更新するためにstateを更新
+    setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemoCheck(p.task.memo,idx)}}:null);
+  };
   return (
     <div style={{display:"grid",gridTemplateColumns:"1fr",gap:16}}>
       <div>
@@ -293,7 +335,7 @@ const DayView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelete
         })}
         {untimed.length>0&&<div style={{marginTop:12}}><div style={{fontSize:11,fontWeight:700,color:COLORS.textMuted,marginBottom:6}}>時間未定</div>{untimed.map(t=>{const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||COLORS.accent;return <TaskChip key={t.id} task={t} tags={tags} color={c} onPopup={handlePopup} onToggle={onToggle} onUpdateTask={onUpdateTask} allTasks={allFlat}/>;})}</div>}
       </div>
-      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={(id,idx)=>{const t=allFlat.find(x=>x.id===id);if(t)onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});setPopup(null);}}/>}
+      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={handleMemoToggle}/>}
     </div>
   );
 };
@@ -321,6 +363,11 @@ const WeekView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelet
     onUpdateTask({...t,startDate:d,startTime:st,endTime:et||t.endTime,isLater:false});
     setDragTask(null);
   };
+  const handleMemoToggle=(id,idx)=>{
+    const t=allFlat.find(x=>x.id===id);
+    if(t){onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});}
+    setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemoCheck(p.task.memo,idx)}}:null);
+  };
   return (
     <div style={{overflowX:"auto"}}>
       <div style={{display:"grid",gridTemplateColumns:"46px repeat(7,1fr)",minWidth:640}}>
@@ -342,7 +389,7 @@ const WeekView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDelet
           ];
         })}
       </div>
-      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={(id,idx)=>{const t=allFlat.find(x=>x.id===id);if(t)onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});setPopup(null);}}/>}
+      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={handleMemoToggle}/>}
     </div>
   );
 };
@@ -367,6 +414,11 @@ const MonthView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDele
     onUpdateTask({...t,startDate:dateStr(d),isLater:false});
     setDragTask(null);
   };
+  const handleMemoToggle=(id,idx)=>{
+    const t=allFlat.find(x=>x.id===id);
+    if(t){onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});}
+    setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemoCheck(p.task.memo,idx)}}:null);
+  };
   return (
     <div>
       <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12}}><Btn onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1);}}>‹</Btn><span style={{fontWeight:700,fontSize:15}}>{vy}年 {MN[vm]}</span><Btn onClick={()=>{if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1);}}>›</Btn></div>
@@ -387,7 +439,7 @@ const MonthView=({tasks,tags,today,onUpdateTask,onAddTask,onToggle,onEdit,onDele
           })}
         </div>
       </div>
-      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={(id,idx)=>{const t=allFlat.find(x=>x.id===id);if(t)onUpdateTask({...t,memo:toggleMemoCheck(t.memo,idx)});setPopup(null);}}/>}
+      {popup&&<TaskPopup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onMemoToggle={handleMemoToggle}/>}
     </div>
   );
 };
@@ -412,7 +464,6 @@ const TagsView=({tags,setTags})=>{
   const parentTags=tags.filter(t=>!t.parentId&&!t.archived);
   const childTags=pid=>tags.filter(t=>t.parentId===pid&&!t.archived);
   const archivedTags=tags.filter(t=>t.archived);
-  // 親タグ選択時に色を親タグと同じにする
   const handleParentChange=pid=>{
     const parent=tags.find(t=>t.id===pid);
     setForm(f=>({...f,parentId:pid||null,color:parent?parent.color:f.color}));
@@ -464,7 +515,18 @@ export default function App(){
   const updTree=(ts,id,fn)=>ts.map(t=>t.id===id?fn(t):{...t,children:updTree(t.children||[],id,fn)});
   const delTree=(ts,id)=>ts.filter(t=>t.id!==id).map(t=>({...t,children:delTree(t.children||[],id)}));
   const addChild=(ts,pid,c)=>ts.map(t=>t.id===pid?{...t,children:[...(t.children||[]),c]}:{...t,children:addChild(t.children||[],pid,c)});
-  const handleSave=f=>{const fw={...f,isLater:isAutoLater(f)};let nt;if(editTask)nt=updTree(tasks,f.id,()=>fw);else if(addChildTo)nt=addChild(tasks,addChildTo,fw);else nt=[...tasks,fw];updT(nt);setEditTask(null);setAddChildTo(null);};
+
+  // タスク保存時に子・孫タスクへタグを伝播
+  const handleSave=f=>{
+    const fw={...f,isLater:isAutoLater(f)};
+    const fwWithPropagated=propagateTagsToChildren(fw,tags);
+    let nt;
+    if(editTask)nt=updTree(tasks,f.id,()=>fwWithPropagated);
+    else if(addChildTo)nt=addChild(tasks,addChildTo,fwWithPropagated);
+    else nt=[...tasks,fwWithPropagated];
+    updT(nt);setEditTask(null);setAddChildTo(null);
+  };
+
   const handleUpdateTask=updated=>{const clean={...updated};delete clean._parentTitle;updT(updTree(tasks,clean.id,()=>clean));setDragTask(null);};
   const handleAddTask=(date,hour)=>{setDefaultDate(date);setDefaultTime(hour!=null?`${String(hour).padStart(2,"0")}:00`:null);setEditTask(null);setAddChildTo(null);setShowForm(true);};
   const handleToggle=id=>updT(updTree(tasks,id,t=>({...t,done:!t.done})));
@@ -486,7 +548,6 @@ export default function App(){
     <>
       <style>{G}</style>
       <div style={{minHeight:"100vh",background:COLORS.bg,display:"flex"}}>
-        {/* 折りたたみサイドバー */}
         <div style={{width:sideOpen?210:44,flexShrink:0,background:COLORS.surface,borderRight:`1px solid ${COLORS.border}`,display:"flex",flexDirection:"column",padding:"16px 0",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10,transition:"width .2s"}}>
           <div style={{padding:`0 ${sideOpen?16:6}px 14px`,borderBottom:`1px solid ${COLORS.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:6}}>
             {sideOpen&&<div style={{minWidth:0}}>
