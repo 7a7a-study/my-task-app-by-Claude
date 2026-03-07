@@ -38,7 +38,8 @@ const TAG_PRESETS = [
   {id:"t4",name:"学習",  color:"#ffd077",parentId:null},
   {id:"t5",name:"健康",  color:"#77d8ff",parentId:null},
 ];
-const REPEATS = ["なし","毎日","毎週","毎月","平日のみ"];
+// 繰り返しタイプ（repeat フィールドはオブジェクト or 旧文字列に後方互換）
+const REPEAT_TYPES = ["なし","毎日","平日のみ","毎週","毎月","毎年","カスタム"];
 const DAYS_JP = ["月","火","水","木","金","土","日"];
 const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
@@ -61,6 +62,73 @@ const weekDates = base => {
   return Array.from({length:7},(_,i)=>{const x=new Date(m);x.setDate(m.getDate()+i);return x.toISOString().slice(0,10);});
 };
 const isLaterTask = t => !t.startDate && !t.startTime;
+
+// ── 繰り返しユーティリティ ────────────────────────────────────────
+// repeat フィールドは文字列（旧） or { type, weekDays, monthDays, customDates } (新)
+const parseRepeat = r => {
+  if (!r || r === "なし") return { type: "なし" };
+  if (typeof r === "string") {
+    if (r === "毎日")   return { type: "毎日" };
+    if (r === "平日のみ") return { type: "平日のみ" };
+    if (r === "毎週")   return { type: "毎週", weekDays: [] }; // 旧毎週→startDateの曜日で判定
+    if (r === "毎月")   return { type: "毎月", monthDays: [] };
+    return { type: "なし" };
+  }
+  return r; // 新オブジェクト形式
+};
+
+// date: "YYYY-MM-DD", task.startDate: "YYYY-MM-DD"
+const matchesRepeat = (task, date) => {
+  const r = parseRepeat(task.repeat);
+  if (r.type === "なし") return false;
+  if (r.type === "毎日") return true;
+  if (r.type === "平日のみ") { const d = new Date(date).getDay(); return d >= 1 && d <= 5; }
+  if (r.type === "毎週") {
+    const days = r.weekDays && r.weekDays.length > 0
+      ? r.weekDays
+      : (task.startDate ? [new Date(task.startDate).getDay()] : []); // 旧互換
+    // getDay(): 0=日,1=月,...,6=土
+    return days.includes(new Date(date).getDay());
+  }
+  if (r.type === "毎月") {
+    const days = r.monthDays && r.monthDays.length > 0
+      ? r.monthDays
+      : (task.startDate ? [new Date(task.startDate).getDate()] : []);
+    return days.includes(new Date(date).getDate());
+  }
+  if (r.type === "毎年") {
+    const ref = r.yearDate || task.startDate;
+    if (!ref) return false;
+    return date.slice(5) === ref.slice(5); // MM-DD 一致
+  }
+  if (r.type === "カスタム") {
+    return (r.customDates || []).includes(date);
+  }
+  return false;
+};
+
+// 繰り返しラベル表示用
+const repeatLabel = r => {
+  const p = parseRepeat(r);
+  const JP_DAYS = ["日","月","火","水","木","金","土"];
+  if (p.type === "なし")   return "なし";
+  if (p.type === "毎日")   return "毎日";
+  if (p.type === "平日のみ") return "平日のみ";
+  if (p.type === "毎週") {
+    if (!p.weekDays || p.weekDays.length === 0) return "毎週";
+    return "毎週" + p.weekDays.map(d => JP_DAYS[d]).join("・");
+  }
+  if (p.type === "毎月") {
+    if (!p.monthDays || p.monthDays.length === 0) return "毎月";
+    return "毎月" + p.monthDays.join("・") + "日";
+  }
+  if (p.type === "毎年") {
+    const ref = p.yearDate;
+    return ref ? "毎年" + ref.slice(5).replace("-","/") : "毎年";
+  }
+  if (p.type === "カスタム") return "カスタム(" + (p.customDates||[]).length + "日)";
+  return "なし";
+};
 const t2m  = t => { if(!t) return null; const[h,m]=t.split(":").map(Number); return h*60+m; };
 const m2t  = m => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,"0")}:${String(Math.max(0,m)%60).padStart(2,"0")}`;
 const durFrom = (a,b) => { if(!a||!b) return null; const d=t2m(b)-t2m(a); return d>0?d:null; };
@@ -265,7 +333,7 @@ const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplic
             {task.startDate && <div style={{color:C.textSub,display:"flex",gap:4}}><span style={{color:C.accent}}>▶</span>{fdt(task.startDate,task.startTime)}{task.endDate&&<><span style={{color:C.textMuted}}>→</span>{fdt(task.endDate,task.endTime)}</>}</div>}
             {task.duration && <div style={{color:C.accent}}>⏱ {task.duration}分</div>}
             {task.deadlineDate && <div style={{color:over?C.danger:C.warn}}>⚠ {fdt(task.deadlineDate,task.deadlineTime)}</div>}
-            {task.repeat!=="なし" && <div style={{color:C.success}}>↻ {task.repeat}</div>}
+            {task.repeat && parseRepeat(task.repeat).type !== "なし" && <div style={{color:C.success}}>↻ {repeatLabel(task.repeat)}</div>}
           </div>
         )}
         {task.memo && <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:7,padding:"6px 8px",marginBottom:8,maxHeight:110,overflowY:"auto"}}>{renderMemo(task.memo, idx=>onMemoToggle(task.id,idx))}</div>}
@@ -314,6 +382,129 @@ const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
           );
         })}
       </div>
+    </div>
+  );
+};
+
+// ── 繰り返しエディター ─────────────────────────────────────────────
+const JP_DAYS   = ["日","月","火","水","木","金","土"];
+const WDAY_OPTS = [1,2,3,4,5,6,0]; // 月〜日の順
+const MDAY_OPTS = Array.from({length:31},(_,i)=>i+1);
+
+const RepeatEditor = ({value, onChange}) => {
+  const r = parseRepeat(value);
+
+  const setType = type => {
+    if (type === "なし")   onChange("なし");
+    else if (type === "毎日")   onChange("毎日");
+    else if (type === "平日のみ") onChange("平日のみ");
+    else if (type === "毎週")   onChange({type:"毎週",  weekDays:[]});
+    else if (type === "毎月")   onChange({type:"毎月",  monthDays:[]});
+    else if (type === "毎年")   onChange({type:"毎年",  yearDate:""});
+    else if (type === "カスタム") onChange({type:"カスタム", customDates:[]});
+  };
+
+  const toggleWeekDay = d => {
+    const cur = r.weekDays||[];
+    const next = cur.includes(d) ? cur.filter(x=>x!==d) : [...cur,d];
+    onChange({...r, weekDays:next});
+  };
+  const toggleMonthDay = d => {
+    const cur = r.monthDays||[];
+    const next = cur.includes(d) ? cur.filter(x=>x!==d) : [...cur,d].sort((a,b)=>a-b);
+    onChange({...r, monthDays:next});
+  };
+  const toggleCustomDate = d => {
+    const cur = r.customDates||[];
+    const next = cur.includes(d) ? cur.filter(x=>x!==d) : [...cur,d].sort();
+    onChange({...r, customDates:next});
+  };
+
+  const btnStyle = (active) => ({
+    padding:"3px 8px", borderRadius:12, fontSize:10, cursor:"pointer", border:`1px solid ${active?C.success:C.border}`,
+    background: active ? C.successS : "transparent",
+    color: active ? C.success : C.textMuted,
+    fontWeight: active ? 700 : 400,
+    transition:"all .12s",
+  });
+
+  return (
+    <div style={{marginBottom:9}}>
+      <div style={{fontSize:9,color:C.textMuted,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>繰り返し</div>
+      {/* タイプ選択 */}
+      <div style={{display:"flex",flexWrap:"wrap",gap:4,marginBottom:6}}>
+        {REPEAT_TYPES.map(t=>(
+          <button key={t} onClick={()=>setType(t)} style={btnStyle(r.type===t)}>{t}</button>
+        ))}
+      </div>
+
+      {/* 毎週：曜日選択 */}
+      {r.type==="毎週" && (
+        <div style={{background:C.bg,borderRadius:7,padding:"7px 9px",border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>曜日を選択（複数可）</div>
+          <div style={{display:"flex",gap:4}}>
+            {WDAY_OPTS.map(d=>(
+              <button key={d} onClick={()=>toggleWeekDay(d)}
+                style={{...btnStyle((r.weekDays||[]).includes(d)), width:28, padding:"3px 0", textAlign:"center"}}>
+                {JP_DAYS[d]}
+              </button>
+            ))}
+          </div>
+          {(r.weekDays||[]).length===0 && <div style={{fontSize:9,color:C.warn,marginTop:4}}>⚠ 曜日を1つ以上選んでください</div>}
+        </div>
+      )}
+
+      {/* 毎月：日付選択 */}
+      {r.type==="毎月" && (
+        <div style={{background:C.bg,borderRadius:7,padding:"7px 9px",border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>日付を選択（複数可）</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:3}}>
+            {MDAY_OPTS.map(d=>(
+              <button key={d} onClick={()=>toggleMonthDay(d)}
+                style={{...btnStyle((r.monthDays||[]).includes(d)), width:26, padding:"2px 0", textAlign:"center", fontSize:9}}>
+                {d}
+              </button>
+            ))}
+          </div>
+          {(r.monthDays||[]).length===0 && <div style={{fontSize:9,color:C.warn,marginTop:4}}>⚠ 日付を1つ以上選んでください</div>}
+        </div>
+      )}
+
+      {/* 毎年：月日指定 */}
+      {r.type==="毎年" && (
+        <div style={{background:C.bg,borderRadius:7,padding:"7px 9px",border:`1px solid ${C.border}`,display:"flex",alignItems:"center",gap:8}}>
+          <div style={{fontSize:9,color:C.textMuted}}>毎年</div>
+          <input type="date" value={r.yearDate||""} onChange={e=>onChange({...r,yearDate:e.target.value})}
+            style={{background:C.bgSub,color:C.text,padding:"4px 7px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+          <div style={{fontSize:9,color:C.textMuted}}>の月日</div>
+        </div>
+      )}
+
+      {/* カスタム：特定日付を複数指定 */}
+      {r.type==="カスタム" && (
+        <div style={{background:C.bg,borderRadius:7,padding:"7px 9px",border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>日付を追加（複数可）</div>
+          <div style={{display:"flex",gap:6,marginBottom:6,alignItems:"center"}}>
+            <input type="date" id="customDateInput"
+              style={{background:C.bgSub,color:C.text,padding:"4px 7px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+            <Btn v="accent" style={{padding:"3px 10px",fontSize:10}} onClick={()=>{
+              const el=document.getElementById("customDateInput");
+              if (el?.value) { toggleCustomDate(el.value); el.value=""; }
+            }}>追加</Btn>
+          </div>
+          {(r.customDates||[]).length>0 && (
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {(r.customDates||[]).map(d=>(
+                <span key={d} style={{display:"inline-flex",alignItems:"center",gap:3,padding:"2px 7px",borderRadius:10,background:C.successS,color:C.success,fontSize:9,border:`1px solid ${C.success}44`}}>
+                  {d.slice(5).replace("-","/")}
+                  <button onClick={()=>toggleCustomDate(d)} style={{background:"none",border:"none",color:C.success,cursor:"pointer",fontSize:10,lineHeight:1,padding:0}}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          {(r.customDates||[]).length===0 && <div style={{fontSize:9,color:C.warn}}>⚠ 日付を1つ以上追加してください</div>}
+        </div>
+      )}
     </div>
   );
 };
@@ -398,7 +589,8 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
       <div style={{fontSize:9,color:C.textMuted,marginBottom:8,padding:"4px 8px",background:C.accentS,borderRadius:5,border:`1px solid ${C.accent}33`}}>
         💡 開始日未設定→「あとでやる」リストへ
       </div>
-      <Sel label="繰り返し" value={f.repeat} onChange={v=>u("repeat",v)} options={REPEATS}/>
+      {/* ── 繰り返しUI ── */}
+      <RepeatEditor value={f.repeat} onChange={v=>u("repeat",v)}/>
       <div style={{marginBottom:9}}>
         <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>メモ <span style={{fontWeight:400,textTransform:"none"}}>(- [ ] でチェック)</span></div>
         <textarea value={f.memo} onChange={e=>u("memo",e.target.value)} placeholder={"メモ...\n- [ ] チェック項目"} rows={3}
@@ -429,7 +621,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={()=>setExp(!exp)} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
-            {task.repeat!=="なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{task.repeat}</span>}
+            {task.repeat && parseRepeat(task.repeat).type !== "なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{repeatLabel(task.repeat)}</span>}
             {later  && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>📌</span>}
             {over   && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.dangerS,color:C.danger,fontWeight:600}}>⚠超過</span>}
             {urgent && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>🔥今日</span>}
@@ -467,8 +659,8 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
     return list;
   }, [tasks, filters, sortOrder]);
   const later   = filtered.filter(t => t.isLater||isLaterTask(t));
-  const habits  = filtered.filter(t => !(t.isLater||isLaterTask(t)) && t.repeat!=="なし");
-  const regular = filtered.filter(t => !(t.isLater||isLaterTask(t)) && t.repeat==="なし");
+  const habits  = filtered.filter(t => !(t.isLater||isLaterTask(t)) && t.repeat && parseRepeat(t.repeat).type !== "なし");
+  const regular = filtered.filter(t => !(t.isLater||isLaterTask(t)) && (!t.repeat || parseRepeat(t.repeat).type === "なし"));
   const Sec = ({title,items,color,icon}) => items.length===0 ? null : (
     <div style={{marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
@@ -537,8 +729,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
   useEffect(() => { fetchHolidays(today.slice(0,4)).then(()=>setHolReady(true)); }, [today]);
 
   const todayT = all.filter(t => {
-    if (t.repeat==="毎日") return true;
-    if (t.repeat==="平日のみ") { const d=new Date(today).getDay(); return d>=1&&d<=5; }
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, today);
     return sameDay(t.startDate,today) || sameDay(t.deadlineDate,today);
   });
   const timed   = todayT.filter(t =>  t.startTime && !(t.isLater||isLaterTask(t)));
@@ -670,9 +861,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
   const all = flatten(tasks);
   const getDay = date => all.filter(t => {
-    if (t.repeat==="毎日") return true;
-    if (t.repeat==="平日のみ") { const d=new Date(date).getDay(); return d>=1&&d<=5; }
-    if (t.repeat==="毎週"&&t.startDate) return new Date(t.startDate).getDay()===new Date(date).getDay();
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, date);
     return sameDay(t.startDate,date)||sameDay(t.deadlineDate,date);
   }).filter(t => !(t.isLater||isLaterTask(t)));
 
