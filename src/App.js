@@ -319,37 +319,21 @@ const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
 };
 
 // ── タスクフォーム ──────────────────────────────────────────────────
-const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime}) => {
+const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags}) => {
   const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false};
-  const [f, setF] = useState(task ? {...task} : blank);
+  // ★ 子タスク作成時は親タスクのタグを初期値に設定
+  const initTags = isChild && parentTags ? parentTags : (task?.tags || []);
+  const [f, setF] = useState(task ? {...task, tags:initTags} : {...blank, tags:initTags});
   const u = (k,v) => setF(p => ({...p,[k]:v}));
 
-  // ★ タグ切り替えロジック
+  // ★ タグ：1タスク1つのみ。選択済みを再クリックで解除
   const togTag = tid => {
-    const tag = tags.find(t => t.id===tid);
-    let nt = [...f.tags];
-    if (nt.includes(tid)) {
-      // 外す
-      nt = nt.filter(x => x!==tid);
-      if (tag?.parentId) {
-        // 子タグを外した→同じ親の他の子タグがなければ親タグも外す
-        const siblingLeft = tags.filter(t=>t.parentId===tag.parentId && t.id!==tid).some(t=>nt.includes(t.id));
-        if (!siblingLeft) nt = nt.filter(x => x!==tag.parentId);
-      } else {
-        // 親タグを外した→配下の全子タグも外す
-        const childIds = tags.filter(t=>t.parentId===tid).map(t=>t.id);
-        nt = nt.filter(x => !childIds.includes(x));
-      }
+    if (isChild && parentTags?.length > 0) return; // 子タスクは固定
+    if (f.tags.includes(tid)) {
+      u("tags", []); // 解除
     } else {
-      // つける
-      nt = [...nt, tid];
-      if (tag?.parentId && !nt.includes(tag.parentId)) {
-        // 子タグをON→親タグも自動ON
-        nt = [...nt, tag.parentId];
-      }
-      // ※親タグ単体をONしても子タグは自動ONしない
+      u("tags", [tid]); // 1つだけ選択
     }
-    u("tags", nt);
   };
 
   const hSt  = v => { u("startTime",v); if(f.duration&&v) u("endTime",addDur(v,Number(f.duration))); else if(f.endTime&&v){const d=durFrom(v,f.endTime);if(d)u("duration",String(d));} };
@@ -358,27 +342,40 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime}) => {
 
   const pt = tags.filter(t => !t.parentId && !t.archived);
   const ct = pid => tags.filter(t => t.parentId===pid && !t.archived);
+  const tagLocked = isChild && parentTags && parentTags.length > 0;
 
   return (
     <Modal title={task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide>
       <Inp label="タスク名 *" value={f.title} onChange={v=>u("title",v)} placeholder="タスク名..."/>
-      {/* タグ */}
+      {/* タグ：1つのみ選択。子タスクは親タスクのタグで固定 */}
       <div style={{marginBottom:9}}>
-        <div style={{fontSize:9,color:C.textMuted,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>タグ（子タグ→親タグ自動ON / 子タグが全部外れると親タグも外れる）</div>
-        <div style={{display:"flex",flexDirection:"column",gap:4}}>
-          {pt.map(p => (
-            <div key={p.id}>
-              <div onClick={()=>togTag(p.id)} style={{display:"inline-flex",padding:"3px 10px",borderRadius:14,fontSize:11,fontWeight:700,cursor:"pointer",border:`1.5px solid ${p.color}55`,background:f.tags.includes(p.id)?p.color+"1e":"transparent",color:f.tags.includes(p.id)?p.color:C.textMuted,marginBottom:3,transition:"all .15s"}}>{p.name}</div>
-              {ct(p.id).length>0 && (
-                <div style={{display:"flex",flexWrap:"wrap",gap:4,paddingLeft:10}}>
-                  {ct(p.id).map(c => (
-                    <div key={c.id} onClick={()=>togTag(c.id)} style={{display:"inline-flex",padding:"2px 8px",borderRadius:14,fontSize:10,fontWeight:600,cursor:"pointer",border:`1.5px solid ${c.color}55`,background:f.tags.includes(c.id)?c.color+"1e":"transparent",color:f.tags.includes(c.id)?c.color:C.textMuted,transition:"all .15s"}}>└ {c.name}</div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+        <div style={{fontSize:9,color:C.textMuted,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>
+          タグ（1つのみ選択）{tagLocked && <span style={{color:C.warn,marginLeft:5,fontWeight:400,textTransform:"none"}}>※親タスクのタグで固定</span>}
         </div>
+        {tagLocked ? (
+          // 子タスクは固定表示
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {parentTags.map(tid => {
+              const tg = tags.find(t=>t.id===tid);
+              return tg ? <div key={tid} style={{display:"inline-flex",padding:"3px 10px",borderRadius:14,fontSize:11,fontWeight:700,border:`1.5px solid ${tg.color}`,background:tg.color+"1e",color:tg.color}}>{tg.name} 🔒</div> : null;
+            })}
+          </div>
+        ) : (
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            {pt.map(p => (
+              <div key={p.id}>
+                <div onClick={()=>togTag(p.id)} style={{display:"inline-flex",padding:"3px 10px",borderRadius:14,fontSize:11,fontWeight:700,cursor:"pointer",border:`1.5px solid ${p.color}55`,background:f.tags.includes(p.id)?p.color+"1e":"transparent",color:f.tags.includes(p.id)?p.color:C.textMuted,marginBottom:3,transition:"all .15s"}}>{p.name}</div>
+                {ct(p.id).length>0 && (
+                  <div style={{display:"flex",flexWrap:"wrap",gap:4,paddingLeft:10}}>
+                    {ct(p.id).map(c => (
+                      <div key={c.id} onClick={()=>togTag(c.id)} style={{display:"inline-flex",padding:"2px 8px",borderRadius:14,fontSize:10,fontWeight:600,cursor:"pointer",border:`1.5px solid ${c.color}55`,background:f.tags.includes(c.id)?c.color+"1e":"transparent",color:f.tags.includes(c.id)?c.color:C.textMuted,transition:"all .15s"}}>└ {c.name}</div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       {/* 日時 */}
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
@@ -717,12 +714,16 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                   {ts.map(t => {
                     const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
                     return (
-                      <div key={t.id} draggable className="drag"
-                        onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);}}
-                        onDragEnd={()=>setDragTask(null)}
-                        onClick={e=>hp(e,t)}
-                        style={{fontSize:8,fontWeight:600,color:c,padding:"1px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",cursor:"grab"}}>
-                        {t.title}
+                      <div key={t.id}
+                        style={{display:"flex",alignItems:"center",gap:3,padding:"2px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0",overflow:"hidden"}}>
+                        <div draggable className="drag"
+                          onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);e.stopPropagation();}}
+                          onDragEnd={()=>setDragTask(null)}
+                          onClick={e=>hp(e,t)}
+                          style={{display:"flex",alignItems:"center",gap:3,flex:1,minWidth:0,cursor:"grab"}}>
+                          <div onClick={e=>{e.stopPropagation();onToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                          <span style={{fontSize:8,fontWeight:600,color:t.done?C.textMuted:c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
+                        </div>
                       </div>
                     );
                   })}
@@ -883,7 +884,8 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
   }, [onUpdate]);
 
   // ★ ガント行レンダリング
-  const renderTaskRow = (task, ri, gc) => {
+  // indent: 0=通常, 1=サブグループ内トップレベル, 2=サブグループ内子タスク
+  const renderTaskRow = (task, ri, gc, indent=0) => {
     const bar = getBar(task);
     const dlDay = getDL(task);
     const c = tags.find(t=>task.tags?.includes(t.id))?.color||C.accent;
@@ -892,12 +894,13 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
     const isDLDrag  = dragDL?.id===task.id;
     const todStr = new Date().toISOString().slice(0,10);
     const isOver = task.deadlineDate && !task.done && task.deadlineDate < todStr;
+    const leftPad = 10 + indent * 14; // インデント
     return (
       <div key={task.id} style={{display:"flex",borderBottom:`1px solid ${C.border}18`,height:RH,background:ri%2===0?"transparent":"rgba(255,255,255,.01)"}}
         onMouseEnter={e=>e.currentTarget.style.background=C.surfHov+"44"}
         onMouseLeave={e=>e.currentTarget.style.background=ri%2===0?"transparent":"rgba(255,255,255,.01)"}>
-        <div style={{width:218,flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:"0 7px 0 10px",borderRight:`1px solid ${C.border}`,overflow:"hidden"}}>
-          {task._pid && <span style={{color:C.textMuted,fontSize:9,flexShrink:0,marginLeft:6}}>└</span>}
+        <div style={{width:218,flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:`0 7px 0 ${leftPad}px`,borderRight:`1px solid ${C.border}`,overflow:"hidden"}}>
+          {task._pid && <span style={{color:C.textMuted,fontSize:9,flexShrink:0}}>└</span>}
           <CB checked={task.done} onChange={()=>onToggle(task.id)} size={12} color={c}/>
           <span style={{fontSize:10,fontWeight:isParent?600:400,color:task.done?C.textMuted:C.text,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none",flex:1}}>{task.title}</span>
           {isOver && <span style={{fontSize:8,color:C.danger,flexShrink:0}}>⚠</span>}
@@ -981,7 +984,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
                     <div style={{flex:1}}/>
                   </div>
                 )}
-                {ctTasks.map((task,ri) => renderTaskRow(task,ri,gc))}
+                {ctTasks.map((task,ri) => renderTaskRow(task,ri,gc, task._pid ? 2 : 1))}
               </div>
             );
           })
@@ -1197,9 +1200,11 @@ export default function App() {
   const handleSave = f => {
     const fw = {...f, isLater:isLaterTask(f)};
     let nt;
-    if (editTask)    nt = updTree(tasks, f.id, ()=>fw);
+    // ★ 複製フォームからの保存：editTaskはあるが既存タスクに同じIDがない→新規追加
+    const isExisting = editTask && flatten(tasks).some(t => t.id === editTask.id);
+    if (isExisting)      nt = updTree(tasks, f.id, ()=>fw);
     else if (addChildTo) nt = addChild(tasks, addChildTo, fw);
-    else             nt = [...tasks, fw];
+    else                 nt = [...tasks, fw];
     // ★ タグ同期（編集タスクのみ完全上書き、他タスクは親タグ補完のみ）
     const synced = syncTags(nt, fw.id, fw.tags, tags);
     setTasks(syncDone(synced));
@@ -1342,7 +1347,10 @@ export default function App() {
           {showLater && <LaterPanel tasks={tasks} tags={tags} dragTask={dragTask} setDragTask={setDragTask} onEdit={handleEdit}/>}
         </div>
       </div>
-      {showForm && <TaskForm task={editTask} tags={tags} isChild={!!addChildTo} onSave={handleSave} defDate={defDate} defTime={defTime} onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefDate(null);setDefTime(null);}}/>}
+      {showForm && <TaskForm task={editTask} tags={tags} isChild={!!addChildTo}
+        parentTags={addChildTo ? (flatten(tasks).find(t=>t.id===addChildTo)?.tags||[]) : null}
+        onSave={handleSave} defDate={defDate} defTime={defTime}
+        onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefDate(null);setDefTime(null);}}/>}
     </>
   );
 }
