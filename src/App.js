@@ -339,7 +339,7 @@ const NotificationModal = ({settings, onSave, onClose}) => {
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,padding:"9px 12px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`}}>
         <div>
           <div style={{fontSize:12,fontWeight:700,color:C.text}}>締切・開始の通知</div>
-          <div style={{fontSize:9,color:C.textMuted,marginTop:1}}>タスクの締切日・開始時刻の前に通知</div>
+          <div style={{fontSize:9,color:C.textMuted,marginTop:1}}>開始時刻・締切時刻の前 / 締切日のみは朝9:00</div>
         </div>
         <button onClick={handleEnable} disabled={requesting}
           style={{width:42,height:24,borderRadius:12,border:"none",cursor:"pointer",transition:"all .2s",background:enabled?C.accent:C.border,position:"relative",opacity:requesting?.6:1}}>
@@ -348,7 +348,8 @@ const NotificationModal = ({settings, onSave, onClose}) => {
       </div>
       {enabled && (
         <div style={{marginBottom:12}}>
-          <div style={{fontSize:9,color:C.textMuted,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>通知タイミング</div>
+          <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>開始・締切時刻ありの場合の通知タイミング</div>
+          <div style={{fontSize:9,color:C.textMuted,marginBottom:6}}>※締切日のみ（時刻なし）は朝9:00に固定通知</div>
           <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
             {NOTIFY_OPTIONS.map(o=>(
               <button key={o.value} onClick={()=>setMinutes(o.value)}
