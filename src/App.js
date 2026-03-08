@@ -291,12 +291,15 @@ const Btn = ({children,onClick,v="ghost",style={},disabled,title}) => {
   );
 };
 
-const Modal = ({title,children,onClose,wide}) => (
-  <div className="mo" onClick={onClose} style={{position:"fixed",inset:0,background:"rgba(5,7,18,.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10,backdropFilter:"blur(5px)"}}>
+const Modal = ({title,children,onClose,wide,noBackdropClose}) => (
+  <div className="mo" onClick={noBackdropClose ? undefined : onClose} style={{position:"fixed",inset:0,background:"rgba(5,7,18,.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10,backdropFilter:"blur(5px)"}}>
     <div className="mc" onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:13,width:"100%",maxWidth:wide?700:490,border:`1px solid ${C.border}`,maxHeight:"92vh",overflow:"auto",boxShadow:"0 24px 64px rgba(0,0,0,.7)"}}>
       <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:C.surface,zIndex:1,borderRadius:"13px 13px 0 0"}}>
         <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14}}>{title}</span>
-        <button onClick={onClose} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:24,height:24,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        <div style={{display:"flex",alignItems:"center",gap:6}}>
+          {noBackdropClose && <span style={{fontSize:8,color:C.textMuted}}>Esc でキャンセル / Ctrl+Enter で保存</span>}
+          <button onClick={onClose} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:24,height:24,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        </div>
       </div>
       <div style={{padding:"13px 16px"}}>{children}</div>
     </div>
@@ -794,6 +797,18 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
     }
   };
 
+  // Esc でキャンセル、Ctrl+Enter で保存
+  useEffect(() => {
+    const handler = e => {
+      if (e.key === "Escape") { onClose(); }
+      if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
+        if (f.title.trim()) { onSave({...f, isLater:isLaterTask(f)}); onClose(); }
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [f, onSave, onClose]);
+
   const hSt  = v => { u("startTime",v); if(f.duration&&v) u("endTime",addDur(v,Number(f.duration))); else if(f.endTime&&v){const d=durFrom(v,f.endTime);if(d)u("duration",String(d));} };
   const hEt  = v => { u("endTime",v);   if(f.startTime&&v){const d=durFrom(f.startTime,v);if(d)u("duration",String(d));} };
   const hDur = v => { u("duration",v);  if(f.startTime&&v) u("endTime",addDur(f.startTime,Number(v))); };
@@ -803,7 +818,7 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
   const tagLocked = isChild && parentTags && parentTags.length > 0;
 
   return (
-    <Modal title={task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide>
+    <Modal title={task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide noBackdropClose>
       <Inp label="タスク名 *" value={f.title} onChange={v=>u("title",v)} placeholder="タスク名..."/>
       {/* タグ：1つのみ選択。子タスクは親タスクのタグで固定 */}
       <div style={{marginBottom:9}}>
@@ -868,26 +883,29 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
 };
 
 // ── タスク行 ────────────────────────────────────────────────────────
-const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate}) => {
-  const [exp, setExp] = useState(true);
+const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
+  const [exp, setExp]         = useState(true);
+  const [memoOpen, setMemoOpen] = useState(false);
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = new Date().toISOString().slice(0,10);
   const over   = task.deadlineDate && !task.done && task.deadlineDate < today;
   const urgent = task.deadlineDate && !task.done && task.deadlineDate === today;
   const later  = task.isLater || isLaterTask(task);
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
+  const hasMemo = !!task.memo;
   return (
     <div style={{marginLeft:depth*16}}>
-      <div className="hov tr" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",borderRadius:7,marginBottom:2,background:depth===0?C.surface:C.bgSub,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined,opacity:task.done?.45:1,transition:"opacity .15s"}}>
+      <div className="hov tr" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",borderRadius:memoOpen?`7px 7px 0 0`:7,marginBottom:memoOpen?0:2,background:depth===0?C.surface:C.bgSub,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined,opacity:task.done?.45:1,transition:"opacity .15s"}}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
-        <div style={{flex:1,minWidth:0}}>
+        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?()=>setMemoOpen(o=>!o):undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
-            {task.children?.length>0 && <span onClick={()=>setExp(!exp)} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
+            {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{repeatLabel(task.repeat)}</span>}
             {later  && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>📌</span>}
             {over   && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.dangerS,color:C.danger,fontWeight:600}}>⚠超過</span>}
             {urgent && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>🔥今日</span>}
+            {hasMemo && <span style={{fontSize:8,color:C.textMuted,opacity:.6}}>{memoOpen?"▲":"📝"}</span>}
           </div>
           <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tTags.map(t=><Pill key={t.id} tag={t}/>)}
@@ -903,13 +921,19 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           <button title="削除"          onClick={()=>onDelete(task.id)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
         </div>
       </div>
-      {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate}/>)}
+      {/* ── メモ展開パネル ── */}
+      {memoOpen && hasMemo && (
+        <div style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:`0 0 7px 7px`,padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
+          {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
+        </div>
+      )}
+      {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
     </div>
   );
 };
 
 // ── リストビュー ────────────────────────────────────────────────────
-const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDuplicate,sortOrder,setSortOrder}) => {
+const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,sortOrder,setSortOrder}) => {
   const filtered = useMemo(() => {
     let list = tasks;
     if (filters.tag)           list = list.filter(t => t.tags?.includes(filters.tag));
@@ -931,7 +955,7 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
         <span style={{fontSize:10,fontWeight:700,color,textTransform:"uppercase",letterSpacing:.6}}>{title}</span>
         <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>{items.length}</span>
       </div>
-      {items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate}/>)}
+      {items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
     </div>
   );
   return (
@@ -1710,6 +1734,10 @@ export default function App() {
     setTasks(syncDone(updTree(tasks, id, t => ({...t, done: !t.done}))));
   };
   const handleDelete = id => setTasks(delTree(tasks,id));
+  const handleMemoToggle = (id, idx) => {
+    const t = flatten(tasks).find(x => x.id === id);
+    if (t) setTasks(syncDone(updTree(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}))));
+  };
   const handleEdit   = t  => { setEditTask(t); setShowForm(true); };
 
   // ★ 複製→タイトルそのまま・(コピー)なし・フォームを開く
@@ -1818,7 +1846,7 @@ export default function App() {
               </div>
               {["list","day","week","gantt"].includes(view) && <Btn v="accent" onClick={()=>{setDefDate(null);setDefTime(null);setEditTask(null);setAddChildTo(null);setShowForm(true);}}>＋ 追加</Btn>}
             </div>
-            {view==="list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}} onDuplicate={handleDuplicate} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
+            {view==="list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
             {view==="day"       && <DayView  tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view==="week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view==="gantt"     && <GanttView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} dragTask={dragTask} setDragTask={setDragTask}/>}
