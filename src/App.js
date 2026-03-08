@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { requestNotificationPermission, registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
 
 // ★ 祝日API（holidays-jp.github.io）から動的取得・年別キャッシュ
 const HCACHE = {};
@@ -287,6 +288,85 @@ const Sel = ({label,value,onChange,options}) => (
 const Pill = ({tag}) => (
   <span style={{display:"inline-flex",alignItems:"center",padding:"1px 5px",borderRadius:8,fontSize:9,fontWeight:700,color:tag.color,background:tag.color+"1c",border:`1px solid ${tag.color}44`,whiteSpace:"nowrap"}}>{tag.name}</span>
 );
+
+// ── 通知設定モーダル ────────────────────────────────────────────────
+const NOTIFY_OPTIONS = [
+  { value: 15,   label: "15分前" },
+  { value: 30,   label: "30分前" },
+  { value: 60,   label: "1時間前" },
+  { value: 180,  label: "3時間前" },
+  { value: 360,  label: "6時間前" },
+  { value: 1440, label: "24時間前" },
+];
+
+const NotificationModal = ({settings, onSave, onClose}) => {
+  const [enabled, setEnabled]       = useState(settings?.enabled ?? false);
+  const [minutes, setMinutes]       = useState(settings?.minutesBefore ?? 60);
+  const [permission, setPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "default");
+  const [requesting, setRequesting] = useState(false);
+  const [msg, setMsg]               = useState("");
+
+  const handleEnable = async () => {
+    if (enabled) { setEnabled(false); return; }
+    setRequesting(true);
+    const res = await requestNotificationPermission();
+    setRequesting(false);
+    if (res.ok) {
+      setEnabled(true);
+      setPermission("granted");
+      setMsg("通知が有効になりました！");
+    } else {
+      setMsg(res.reason);
+    }
+  };
+
+  const permColor = permission === "granted" ? C.success : permission === "denied" ? C.danger : C.warn;
+  const permLabel = permission === "granted" ? "許可済み" : permission === "denied" ? "ブロック中" : "未設定";
+
+  return (
+    <Modal title="🔔 通知設定" onClose={onClose}>
+      <div style={{background:C.bg,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:C.text}}>ブラウザ通知</div>
+          <div style={{fontSize:9,color:C.textMuted,marginTop:2}}>OSの通知センターに届きます</div>
+        </div>
+        <span style={{fontSize:10,padding:"2px 9px",borderRadius:10,background:permColor+"22",color:permColor,fontWeight:700,border:`1px solid ${permColor}44`}}>{permLabel}</span>
+      </div>
+      <div style={{background:C.accentS,borderRadius:7,padding:"7px 10px",marginBottom:12,fontSize:10,color:C.textSub,border:`1px solid ${C.accent}33`}}>
+        📱 <strong style={{color:C.accent}}>iPhoneの方へ</strong>：Safariでこのページをホーム画面に追加すると通知が届きます<br/>
+        <span style={{fontSize:9,color:C.textMuted}}>共有ボタン → ホーム画面に追加 → iOS 16.4以降が必要</span>
+      </div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12,padding:"9px 12px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`}}>
+        <div>
+          <div style={{fontSize:12,fontWeight:700,color:C.text}}>締切・開始の通知</div>
+          <div style={{fontSize:9,color:C.textMuted,marginTop:1}}>タスクの締切日・開始時刻の前に通知</div>
+        </div>
+        <button onClick={handleEnable} disabled={requesting}
+          style={{width:42,height:24,borderRadius:12,border:"none",cursor:"pointer",transition:"all .2s",background:enabled?C.accent:C.border,position:"relative",opacity:requesting?.6:1}}>
+          <div style={{width:18,height:18,borderRadius:"50%",background:"#fff",position:"absolute",top:3,left:enabled?21:3,transition:"left .2s",boxShadow:"0 1px 4px rgba(0,0,0,.3)"}}/>
+        </button>
+      </div>
+      {enabled && (
+        <div style={{marginBottom:12}}>
+          <div style={{fontSize:9,color:C.textMuted,marginBottom:6,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>通知タイミング</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+            {NOTIFY_OPTIONS.map(o=>(
+              <button key={o.value} onClick={()=>setMinutes(o.value)}
+                style={{padding:"4px 10px",borderRadius:14,fontSize:10,border:`1px solid ${minutes===o.value?C.accent:C.border}`,background:minutes===o.value?C.accentS:"transparent",color:minutes===o.value?C.accent:C.textMuted,fontWeight:minutes===o.value?700:400,cursor:"pointer"}}>
+                {o.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {msg && <div style={{fontSize:10,color:enabled?C.success:C.danger,marginBottom:8,padding:"5px 9px",background:enabled?C.successS:C.dangerS,borderRadius:6}}>{msg}</div>}
+      <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
+        <Btn onClick={onClose}>キャンセル</Btn>
+        <Btn v="accent" onClick={()=>{onSave({enabled,minutesBefore:minutes});onClose();}}>保存</Btn>
+      </div>
+    </Modal>
+  );
+};
 
 // ── ログイン ────────────────────────────────────────────────────────
 const Login = ({onLogin,loading}) => (
@@ -1346,6 +1426,11 @@ export default function App() {
   const [dragTask,setDragTask]     = useState(null);
   const [defDate,setDefDate]       = useState(null);
   const [defTime,setDefTime]       = useState(null);
+  const [showNotifModal,setShowNotifModal] = useState(false);
+  const [notifSettings,setNotifSettingsRaw] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("notifSettings")||"null") || {enabled:false,minutesBefore:60}; } catch { return {enabled:false,minutesBefore:60}; }
+  });
+  const setNotifSettings = s => { setNotifSettingsRaw(s); try { localStorage.setItem("notifSettings", JSON.stringify(s)); } catch {} };
 
   // 認証
   useEffect(() => { const u=onAuthStateChanged(auth,u=>{setUser(u);setAuthLoading(false);}); return u; }, []);
@@ -1359,6 +1444,18 @@ export default function App() {
   }, [user]);
   // 今年・来年の祝日プリフェッチ
   useEffect(() => { const y=new Date().getFullYear(); fetchHolidays(y); fetchHolidays(y+1); }, []);
+  // Service Worker登録（PWA + バックグラウンド通知）
+  useEffect(() => { registerSW(); }, []);
+  // 通知スケジュール（タスク or 設定が変わるたびに再スケジュール）
+  useEffect(() => {
+    scheduleNotifications(tasks, notifSettings);
+  }, [tasks, notifSettings]);
+  // アプリ起動中のフォアグラウンド通知チェック（1分おき）
+  useEffect(() => {
+    if (!notifSettings?.enabled) return;
+    const stop = startForegroundCheck(() => tasks, () => notifSettings, null);
+    return stop;
+  }, [tasks, notifSettings]);
 
   const save2DB = async (t,tg,tp) => {
     if (!user) return;
@@ -1507,11 +1604,15 @@ export default function App() {
               <CB checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={12}/>
               <span style={{fontSize:9,color:C.textMuted}}>完了を隠す</span>
             </div>
+            <button onClick={()=>setShowNotifModal(true)} style={{width:"100%",background:notifSettings?.enabled?C.accentS:"transparent",color:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer",marginBottom:4,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+              {notifSettings?.enabled?"🔔":"🔕"} 通知設定
+            </button>
             <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer"}}
               onMouseEnter={e=>{e.currentTarget.style.background=C.dangerS;e.currentTarget.style.color=C.danger;}}
               onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.textMuted;}}>ログアウト</button>
           </div>}
           {!sideOpen && <div style={{padding:"5px 3px",borderTop:`1px solid ${C.border}`,flexShrink:0}}>
+            <button onClick={()=>setShowNotifModal(true)} title="通知設定" style={{background:notifSettings?.enabled?C.accentS:"transparent",color:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:12,cursor:"pointer",width:"100%",marginBottom:3}}>{notifSettings?.enabled?"🔔":"🔕"}</button>
             <button onClick={()=>signOut(auth)} title="ログアウト" style={{background:"transparent",color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",fontSize:10,cursor:"pointer",width:"100%"}}>↩</button>
           </div>}
         </div>
@@ -1540,6 +1641,7 @@ export default function App() {
         parentTags={addChildTo ? (flatten(tasks).find(t=>t.id===addChildTo)?.tags||[]) : null}
         onSave={handleSave} defDate={defDate} defTime={defTime}
         onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefDate(null);setDefTime(null);}}/>}
+      {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={()=>setShowNotifModal(false)}/>}
     </>
   );
 }
