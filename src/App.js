@@ -185,21 +185,57 @@ const syncDone = tasks => {
 // メモ
 const renderMemo = (memo, onToggle) => {
   if (!memo) return null;
-  return memo.split("\n").map((line,i) => {
-    const m = line.match(/^- \[(x| )\] (.*)$/);
-    if (m) {
-      const checked = m[1]==="x";
+
+  // インライン装飾（太字・コード）をパース
+  const renderInline = (text) => {
+    const parts = [];
+    // **bold** と `code` を処理
+    const re = /(\*\*(.+?)\*\*|`(.+?)`)/g;
+    let last = 0, m;
+    while ((m = re.exec(text)) !== null) {
+      if (m.index > last) parts.push(text.slice(last, m.index));
+      if (m[0].startsWith("**")) {
+        parts.push(<strong key={m.index} style={{color:C.text,fontWeight:700}}>{m[2]}</strong>);
+      } else {
+        parts.push(<code key={m.index} style={{background:C.bg,color:C.accent,padding:"0 4px",borderRadius:3,fontSize:10,fontFamily:"monospace"}}>{m[3]}</code>);
+      }
+      last = re.lastIndex;
+    }
+    if (last < text.length) parts.push(text.slice(last));
+    return parts.length ? parts : text;
+  };
+
+  return memo.split("\n").map((line, i) => {
+    // チェックリスト
+    const chk = line.match(/^- \[(x| )\] (.*)$/);
+    if (chk) {
+      const checked = chk[1]==="x";
       return (
         <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
           <div onClick={e=>{e.stopPropagation();e.preventDefault();onToggle&&onToggle(i);}}
             style={{width:13,height:13,borderRadius:3,border:`2px solid ${checked?C.accent:C.border}`,background:checked?C.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
             {checked && <span style={{color:"#fff",fontSize:8,fontWeight:800}}>✓</span>}
           </div>
-          <span style={{fontSize:11,color:checked?C.textMuted:C.textSub,textDecoration:checked?"line-through":"none"}}>{m[2]}</span>
+          <span style={{fontSize:11,color:checked?C.textMuted:C.textSub,textDecoration:checked?"line-through":"none"}}>{renderInline(chk[2])}</span>
         </div>
       );
     }
-    return <div key={i} style={{fontSize:11,color:C.textSub,marginBottom:1,lineHeight:1.4}}>{line||<br/>}</div>;
+    // 箇条書き "- " or "* "
+    const bullet = line.match(/^([-*]) (.*)$/);
+    if (bullet) {
+      return (
+        <div key={i} style={{display:"flex",alignItems:"baseline",gap:5,marginBottom:2}}>
+          <span style={{color:C.accent,fontSize:10,flexShrink:0}}>•</span>
+          <span style={{fontSize:11,color:C.textSub,lineHeight:1.4}}>{renderInline(bullet[2])}</span>
+        </div>
+      );
+    }
+    // 通常行（太字・コードインライン対応）
+    return (
+      <div key={i} style={{fontSize:11,color:C.textSub,marginBottom:1,lineHeight:1.4}}>
+        {line ? renderInline(line) : <br/>}
+      </div>
+    );
   });
 };
 const toggleMemo = (memo, idx) => {
@@ -471,6 +507,18 @@ const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
 const MemoEditor = ({value, onChange}) => {
   const [mode, setMode] = useState("write"); // "write" | "preview"
   const textareaRef = useRef(null);
+  const cursorRef = useRef(null); // カーソル復元用
+
+  // カーソル位置を復元（insertLine/insertAt後）
+  useEffect(() => {
+    if (cursorRef.current !== null && textareaRef.current) {
+      const el = textareaRef.current;
+      const {start, end} = cursorRef.current;
+      el.selectionStart = start;
+      el.selectionEnd = end;
+      cursorRef.current = null;
+    }
+  });
 
   // Enterキーで箇条書き・チェックリストを自動継続
   const handleKeyDown = e => {
@@ -523,31 +571,35 @@ const MemoEditor = ({value, onChange}) => {
   const insertAt = (before, after = "") => {
     const el = textareaRef.current;
     if (!el) return;
+    el.focus();
     const s = el.selectionStart, e2 = el.selectionEnd;
     const sel = el.value.slice(s, e2);
     const newVal = el.value.slice(0, s) + before + sel + after + el.value.slice(e2);
+    cursorRef.current = {start: s + before.length, end: s + before.length + sel.length};
     onChange(newVal);
-    setTimeout(() => { el.focus(); el.selectionStart = s + before.length; el.selectionEnd = s + before.length + sel.length; }, 0);
   };
 
   const insertLine = prefix => {
     const el = textareaRef.current;
     if (!el) return;
+    el.focus();
     const pos = el.selectionStart;
     const text = el.value;
     const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
     const lineEnd = text.indexOf("\n", pos);
     const end = lineEnd === -1 ? text.length : lineEnd;
     const line = text.slice(lineStart, end);
-    // 既に同じプレフィックスなら削除
+
+    let newVal, newCursor;
     if (line.startsWith(prefix)) {
-      const newVal = text.slice(0, lineStart) + line.slice(prefix.length) + text.slice(end);
-      onChange(newVal);
+      newVal = text.slice(0, lineStart) + line.slice(prefix.length) + text.slice(end);
+      newCursor = Math.max(lineStart, pos - prefix.length);
     } else {
-      const newVal = text.slice(0, lineStart) + prefix + line + text.slice(end);
-      onChange(newVal);
+      newVal = text.slice(0, lineStart) + prefix + line + text.slice(end);
+      newCursor = pos + prefix.length;
     }
-    setTimeout(() => { el.focus(); }, 0);
+    cursorRef.current = {start: newCursor, end: newCursor};
+    onChange(newVal);
   };
 
   const tbBtn = (label, title, onClick) => (
