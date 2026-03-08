@@ -461,6 +461,20 @@ const Login = ({onLogin,loading}) => (
   </div>
 );
 
+// ── 確認ダイアログ ─────────────────────────────────────────────────
+const ConfirmDialog = ({title, message, confirmLabel="削除", onConfirm, onCancel, danger=true}) => (
+  <div onClick={onCancel} style={{position:"fixed",inset:0,background:"rgba(5,7,18,.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:2000,padding:16,backdropFilter:"blur(5px)"}}>
+    <div onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:12,padding:20,width:"100%",maxWidth:320,border:`1px solid ${danger?C.danger+"55":C.border}`,boxShadow:"0 24px 64px rgba(0,0,0,.7)"}}>
+      <div style={{fontWeight:700,fontSize:14,marginBottom:8,color:danger?C.danger:C.text}}>{title}</div>
+      <div style={{fontSize:12,color:C.textSub,marginBottom:18,lineHeight:1.5}}>{message}</div>
+      <div style={{display:"flex",gap:8,justifyContent:"flex-end"}}>
+        <Btn onClick={onCancel} style={{padding:"6px 16px"}}>キャンセル</Btn>
+        <Btn v={danger?"danger":"accent"} onClick={onConfirm} style={{padding:"6px 16px"}}>{confirmLabel}</Btn>
+      </div>
+    </div>
+  </div>
+);
+
 // ── ポップアップ ────────────────────────────────────────────────────
 const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,anchor}) => {
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
@@ -472,6 +486,7 @@ const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplic
   const origDate = task._overrideKey || task.startDate || task.deadlineDate || "";
   // 今回だけ日程変更フォームの表示
   const [showOverride, setShowOverride] = useState(false);
+  const [confirmDel, setConfirmDel]   = useState(false);
   const [ov, setOv] = useState({
     startDate: task.startDate||"", startTime: task.startTime||"",
     endDate: task.endDate||"",     endTime: task.endTime||"",
@@ -557,8 +572,9 @@ const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplic
         <div style={{display:"flex",gap:5}}>
           <Btn v="accent" onClick={()=>{onEdit(task._overrideKey ? {...task,id:task._overrideId} : task);onClose();}} style={{flex:1,padding:"5px 7px",fontSize:10}}>✎ 編集</Btn>
           <Btn v="success" onClick={()=>{onDuplicate(task._overrideKey ? {...task,id:task._overrideId} : task);onClose();}} style={{padding:"5px 8px",fontSize:10}} title="複製して編集">⧉</Btn>
-          <Btn v="danger" onClick={()=>{onDelete(task._overrideId||task.id);onClose();}} style={{padding:"5px 8px",fontSize:10}} title="削除">✕</Btn>
+          <Btn v="danger" onClick={()=>setConfirmDel(true)} style={{padding:"5px 8px",fontSize:10}} title="削除">✕</Btn>
         </div>
+        {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task._overrideId||task.id);onClose();}} onCancel={()=>setConfirmDel(false)}/>}
       </div>
     </div>
   );
@@ -995,8 +1011,9 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
 
 // ── タスク行 ────────────────────────────────────────────────────────
 const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
-  const [exp, setExp]         = useState(true);
-  const [memoOpen, setMemoOpen] = useState(false);
+  const [exp, setExp]             = useState(true);
+  const [memoOpen, setMemoOpen]   = useState(false);
+  const [confirmDel, setConfirmDel] = useState(false);
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = new Date().toISOString().slice(0,10);
   const over   = task.deadlineDate && !task.done && task.deadlineDate < today;
@@ -1029,7 +1046,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:4,width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
           <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
           <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
-          <button title="削除"          onClick={()=>onDelete(task.id)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
+子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
         </div>
       </div>
       {/* ── メモ展開パネル ── */}
@@ -1678,23 +1697,77 @@ const TemplatesView = ({templates,setTemplates,onUse,tags}) => {
 
 // ── タグ管理 ────────────────────────────────────────────────────────
 const TagsView = ({tags,setTags}) => {
-  const [form,setForm]   = useState({name:"",color:"#99aaff",parentId:null});
+  const [form,setForm]     = useState({name:"",color:"#99aaff",parentId:null});
   const [editId,setEditId] = useState(null);
-  const [ef,setEf]       = useState(null);
-  const [showA,setShowA] = useState(false);
-  const add  = () => { if(!form.name.trim())return; setTags(t=>[...t,{id:"tag_"+Date.now(),name:form.name,color:form.color,parentId:form.parentId||null,archived:false}]); setForm({name:"",color:"#99aaff",parentId:null}); };
+  const [ef,setEf]         = useState(null);
+  const [showA,setShowA]   = useState(false);
+  const [confirmTag,setConfirmTag] = useState(null); // {id, name, isParent}
+
+  const add = () => {
+    if(!form.name.trim()) return;
+    setTags(t=>[...t,{id:"tag_"+Date.now(),name:form.name,color:form.color,parentId:form.parentId||null,archived:false}]);
+    setForm({name:"",color:"#99aaff",parentId:null});
+  };
+
   const arch = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:true}:t));
   const rest = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:false}:t));
+
+  // タグ削除（子タグも一緒に削除）
+  const deleteTag = id => {
+    setTags(ts=>ts.filter(t=>t.id!==id && t.parentId!==id));
+    setConfirmTag(null);
+  };
+
   const pt=tags.filter(t=>!t.parentId&&!t.archived), ct=pid=>tags.filter(t=>t.parentId===pid&&!t.archived), at=tags.filter(t=>t.archived);
+
+  // 親タグの編集保存：色が変わった場合は子タグも同期
+  const saveEdit = () => {
+    const isParent = !tags.find(t=>t.id===editId)?.parentId;
+    setTags(ts=>ts.map(t=>{
+      if (t.id===editId) return {...t,...ef};
+      // 親タグの色変更→子タグの色も自動更新
+      if (isParent && t.parentId===editId) return {...t,color:ef.color};
+      return t;
+    }));
+    setEditId(null);
+  };
+
   const ER = ({t}) => editId===t.id&&ef ? (
-    <div style={{background:C.bgSub,borderRadius:6,padding:8,marginTop:5,display:"flex",gap:6,alignItems:"flex-end"}}>
-      <div style={{flex:1}}><Inp label="タグ名" value={ef.name} onChange={v=>setEf(f=>({...f,name:v}))}/></div>
-      <div style={{marginBottom:7}}><div style={{fontSize:8,color:C.textMuted,marginBottom:2,fontWeight:700}}>色</div><input type="color" value={ef.color} onChange={e=>setEf(f=>({...f,color:e.target.value}))} style={{width:34,height:30,borderRadius:5,border:`1px solid ${C.border}`,background:"none",cursor:"pointer",padding:2}}/></div>
-      <div style={{marginBottom:7,display:"flex",gap:4}}><Btn v="accent" onClick={()=>{setTags(ts=>ts.map(t=>t.id===editId?{...t,...ef}:t));setEditId(null);}}>保存</Btn><Btn onClick={()=>setEditId(null)}>✕</Btn></div>
+    <div style={{background:C.bgSub,borderRadius:6,padding:8,marginTop:5,display:"flex",gap:6,alignItems:"flex-end",flexWrap:"wrap"}}>
+      <div style={{flex:1,minWidth:100}}><Inp label="タグ名" value={ef.name} onChange={v=>setEf(f=>({...f,name:v}))}/></div>
+      <div style={{marginBottom:7}}>
+        <div style={{fontSize:8,color:C.textMuted,marginBottom:2,fontWeight:700}}>色</div>
+        <input type="color" value={ef.color} onChange={e=>setEf(f=>({...f,color:e.target.value}))} style={{width:34,height:30,borderRadius:5,border:`1px solid ${C.border}`,background:"none",cursor:"pointer",padding:2}}/>
+      </div>
+      {!tags.find(x=>x.id===editId)?.parentId && (
+        <div style={{fontSize:8,color:C.textMuted,marginBottom:7,alignSelf:"flex-end",paddingBottom:8}}>
+          ※色変更時は子タグも連動
+        </div>
+      )}
+      <div style={{marginBottom:7,display:"flex",gap:4"}}>
+        <Btn v="accent" onClick={saveEdit}>保存</Btn>
+        <Btn onClick={()=>setEditId(null)}>✕</Btn>
+      </div>
     </div>
   ) : null;
+
   return (
     <div>
+      {/* 確認ダイアログ */}
+      {confirmTag && (
+        <ConfirmDialog
+          title="タグを削除"
+          message={confirmTag.isParent
+            ? `「${confirmTag.name}」と、その子タグをすべて削除しますか？
+タスクのタグ設定も外れます。`
+            : `「${confirmTag.name}」を削除しますか？
+タスクのタグ設定も外れます。`}
+          onConfirm={()=>deleteTag(confirmTag.id)}
+          onCancel={()=>setConfirmTag(null)}
+        />
+      )}
+
+      {/* 新規作成フォーム */}
       <div style={{background:C.surface,borderRadius:11,padding:11,border:`1px solid ${C.border}`,marginBottom:9}}>
         <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,marginBottom:8,fontSize:13}}>新しいタグを作成</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 50px",gap:6,marginBottom:6}}>
@@ -1710,22 +1783,72 @@ const TagsView = ({tags,setTags}) => {
         </div>
         <Btn v="accent" onClick={add}>追加</Btn>
       </div>
+
+      {/* タグ一覧 */}
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
-        {pt.map(p=><div key={p.id} style={{background:C.surface,borderRadius:10,padding:10,border:`1px solid ${p.color}33`}}>
-          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-            <div style={{display:"flex",alignItems:"center",gap:6}}><div style={{width:10,height:10,borderRadius:"50%",background:p.color}}/><span style={{fontWeight:700,color:p.color,fontSize:13}}>{p.name}</span><span style={{fontSize:8,color:C.textMuted,background:C.surfHov,padding:"0 4px",borderRadius:5}}>親</span></div>
-            <div style={{display:"flex",gap:3}}><Btn onClick={()=>{setEditId(p.id);setEf({name:p.name,color:p.color});}} style={{padding:"2px 7px",fontSize:9}}>編集</Btn><Btn v="danger" onClick={()=>arch(p.id)} style={{padding:"2px 7px",fontSize:9}}>アーカイブ</Btn></div>
+        {pt.map(p=>(
+          <div key={p.id} style={{background:C.surface,borderRadius:10,padding:10,border:`1px solid ${p.color}33`}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <div style={{width:10,height:10,borderRadius:"50%",background:p.color}}/>
+                <span style={{fontWeight:700,color:p.color,fontSize:13}}>{p.name}</span>
+                <span style={{fontSize:8,color:C.textMuted,background:C.surfHov,padding:"0 4px",borderRadius:5}}>親</span>
+              </div>
+              <div style={{display:"flex",gap:3}}>
+                <Btn onClick={()=>{setEditId(p.id);setEf({name:p.name,color:p.color});}} style={{padding:"2px 7px",fontSize:9}}>編集</Btn>
+                <Btn v="danger" onClick={()=>arch(p.id)} style={{padding:"2px 7px",fontSize:9}}>アーカイブ</Btn>
+                <Btn v="danger" onClick={()=>setConfirmTag({id:p.id,name:p.name,isParent:true})} style={{padding:"2px 7px",fontSize:9}}>削除</Btn>
+              </div>
+            </div>
+            <ER t={p}/>
+            {ct(p.id).length>0&&(
+              <div style={{paddingLeft:14,marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
+                {ct(p.id).map(c=>(
+                  <div key={c.id} style={{background:C.bgSub,borderRadius:7,border:`1px solid ${c.color}33`,padding:"5px 8px"}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <div style={{display:"flex",alignItems:"center",gap:5}}>
+                        <div style={{width:7,height:7,borderRadius:"50%",background:c.color}}/>
+                        <span style={{fontSize:11,color:c.color,fontWeight:600}}>{c.name}</span>
+                      </div>
+                      <div style={{display:"flex",gap:3}}>
+                        <Btn onClick={()=>{setEditId(c.id);setEf({name:c.name,color:c.color});}} style={{padding:"2px 6px",fontSize:9}}>編集</Btn>
+                        <Btn v="danger" onClick={()=>arch(c.id)} style={{padding:"2px 6px",fontSize:9}}>アーカイブ</Btn>
+                        <Btn v="danger" onClick={()=>setConfirmTag({id:c.id,name:c.name,isParent:false})} style={{padding:"2px 6px",fontSize:9}}>削除</Btn>
+                      </div>
+                    </div>
+                    <ER t={c}/>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
-          <ER t={p}/>
-          {ct(p.id).length>0&&<div style={{paddingLeft:14,marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
-            {ct(p.id).map(c=><div key={c.id} style={{background:C.bgSub,borderRadius:7,border:`1px solid ${c.color}33`,padding:"5px 8px"}}>
-              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}><div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:"50%",background:c.color}}/><span style={{fontSize:11,color:c.color,fontWeight:600}}>{c.name}</span></div><div style={{display:"flex",gap:3}}><Btn onClick={()=>{setEditId(c.id);setEf({name:c.name,color:c.color});}} style={{padding:"2px 6px",fontSize:9}}>編集</Btn><Btn v="danger" onClick={()=>arch(c.id)} style={{padding:"2px 6px",fontSize:9}}>アーカイブ</Btn></div></div>
-              <ER t={c}/>
-            </div>)}
-          </div>}
-        </div>)}
+        ))}
       </div>
-      {at.length>0&&<div style={{marginTop:12}}><button onClick={()=>setShowA(!showA)} style={{background:"none",border:"none",color:C.textMuted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4,marginBottom:5}}>{showA?"▼":"▶"} アーカイブ済み ({at.length})</button>{showA&&<div style={{display:"flex",flexDirection:"column",gap:4}}>{at.map(t=><div key={t.id} style={{background:C.surface,borderRadius:7,padding:"6px 10px",border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.55}}><div style={{display:"flex",alignItems:"center",gap:5}}><div style={{width:7,height:7,borderRadius:"50%",background:t.color}}/><span style={{fontSize:11,color:C.textSub}}>{t.name}</span></div><div style={{display:"flex",gap:3}}><Btn onClick={()=>rest(t.id)} style={{padding:"2px 6px",fontSize:9}}>復元</Btn><Btn v="danger" onClick={()=>setTags(ts=>ts.filter(x=>x.id!==t.id))} style={{padding:"2px 6px",fontSize:9}}>完全削除</Btn></div></div>)}</div>}</div>}
+
+      {/* アーカイブ済み */}
+      {at.length>0&&(
+        <div style={{marginTop:12}}>
+          <button onClick={()=>setShowA(!showA)} style={{background:"none",border:"none",color:C.textMuted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4,marginBottom:5}}>
+            {showA?"▼":"▶"} アーカイブ済み ({at.length})
+          </button>
+          {showA&&(
+            <div style={{display:"flex",flexDirection:"column",gap:4}}>
+              {at.map(t=>(
+                <div key={t.id} style={{background:C.surface,borderRadius:7,padding:"6px 10px",border:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",opacity:.55}}>
+                  <div style={{display:"flex",alignItems:"center",gap:5}}>
+                    <div style={{width:7,height:7,borderRadius:"50%",background:t.color}}/>
+                    <span style={{fontSize:11,color:C.textSub}}>{t.name}</span>
+                  </div>
+                  <div style={{display:"flex",gap:3}}>
+                    <Btn onClick={()=>rest(t.id)} style={{padding:"2px 6px",fontSize:9}}>復元</Btn>
+                    <Btn v="danger" onClick={()=>setConfirmTag({id:t.id,name:t.name,isParent:!t.parentId})} style={{padding:"2px 6px",fontSize:9}}>完全削除</Btn>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 };
