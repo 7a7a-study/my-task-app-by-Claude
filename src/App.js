@@ -467,6 +467,140 @@ const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
   );
 };
 
+// ── メモエディター ─────────────────────────────────────────────────
+const MemoEditor = ({value, onChange}) => {
+  const [mode, setMode] = useState("write"); // "write" | "preview"
+  const textareaRef = useRef(null);
+
+  // Enterキーで箇条書き・チェックリストを自動継続
+  const handleKeyDown = e => {
+    if (e.key !== "Enter") return;
+    const el = e.target;
+    const pos = el.selectionStart;
+    const text = el.value;
+    const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+    const line = text.slice(lineStart, pos);
+
+    // チェックリスト継続: "- [ ] " or "- [x] "
+    const checkMatch = line.match(/^(\s*)(- \[[ x]\] )/);
+    if (checkMatch) {
+      e.preventDefault();
+      // 中身が空なら箇条書きを終了
+      const content = line.slice(checkMatch[0].length).trim();
+      if (!content) {
+        const newVal = text.slice(0, lineStart) + text.slice(pos);
+        onChange(newVal);
+        setTimeout(() => { el.selectionStart = el.selectionEnd = lineStart; }, 0);
+        return;
+      }
+      const insert = "\n" + checkMatch[1] + "- [ ] ";
+      const newVal = text.slice(0, pos) + insert + text.slice(pos);
+      onChange(newVal);
+      setTimeout(() => { el.selectionStart = el.selectionEnd = pos + insert.length; }, 0);
+      return;
+    }
+
+    // 箇条書き継続: "- " or "* "
+    const listMatch = line.match(/^(\s*)([-*] )/);
+    if (listMatch) {
+      e.preventDefault();
+      const content = line.slice(listMatch[0].length).trim();
+      if (!content) {
+        const newVal = text.slice(0, lineStart) + text.slice(pos);
+        onChange(newVal);
+        setTimeout(() => { el.selectionStart = el.selectionEnd = lineStart; }, 0);
+        return;
+      }
+      const insert = "\n" + listMatch[1] + listMatch[2];
+      const newVal = text.slice(0, pos) + insert + text.slice(pos);
+      onChange(newVal);
+      setTimeout(() => { el.selectionStart = el.selectionEnd = pos + insert.length; }, 0);
+      return;
+    }
+  };
+
+  // ツールバーボタン: テキストを挿入・変換
+  const insertAt = (before, after = "") => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const s = el.selectionStart, e2 = el.selectionEnd;
+    const sel = el.value.slice(s, e2);
+    const newVal = el.value.slice(0, s) + before + sel + after + el.value.slice(e2);
+    onChange(newVal);
+    setTimeout(() => { el.focus(); el.selectionStart = s + before.length; el.selectionEnd = s + before.length + sel.length; }, 0);
+  };
+
+  const insertLine = prefix => {
+    const el = textareaRef.current;
+    if (!el) return;
+    const pos = el.selectionStart;
+    const text = el.value;
+    const lineStart = text.lastIndexOf("\n", pos - 1) + 1;
+    const lineEnd = text.indexOf("\n", pos);
+    const end = lineEnd === -1 ? text.length : lineEnd;
+    const line = text.slice(lineStart, end);
+    // 既に同じプレフィックスなら削除
+    if (line.startsWith(prefix)) {
+      const newVal = text.slice(0, lineStart) + line.slice(prefix.length) + text.slice(end);
+      onChange(newVal);
+    } else {
+      const newVal = text.slice(0, lineStart) + prefix + line + text.slice(end);
+      onChange(newVal);
+    }
+    setTimeout(() => { el.focus(); }, 0);
+  };
+
+  const tbBtn = (label, title, onClick) => (
+    <button type="button" title={title} onClick={onClick}
+      style={{padding:"2px 7px",borderRadius:5,fontSize:10,border:`1px solid ${C.border}`,background:"transparent",color:C.textSub,cursor:"pointer",fontWeight:600,lineHeight:1.4}}
+      onMouseEnter={e=>e.currentTarget.style.background=C.surfHov}
+      onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
+      {label}
+    </button>
+  );
+
+  return (
+    <div style={{marginBottom:9}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:4}}>
+        <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>メモ</div>
+        <div style={{display:"flex",gap:3}}>
+          <button onClick={()=>setMode(mode==="write"?"preview":"write")}
+            style={{padding:"1px 8px",borderRadius:5,fontSize:9,border:`1px solid ${mode==="preview"?C.accent:C.border}`,background:mode==="preview"?C.accentS:"transparent",color:mode==="preview"?C.accent:C.textMuted,cursor:"pointer"}}>
+            {mode==="write"?"👁 プレビュー":"✎ 編集"}
+          </button>
+        </div>
+      </div>
+      {mode==="write" && (
+        <>
+          {/* ツールバー */}
+          <div style={{display:"flex",gap:3,marginBottom:4,flexWrap:"wrap"}}>
+            {tbBtn("−","箇条書き",()=>insertLine("- "))}
+            {tbBtn("☐","チェックリスト",()=>insertLine("- [ ] "))}
+            {tbBtn("**B**","太字",()=>insertAt("**","**"))}
+            {tbBtn("` `","コード",()=>insertAt("`","`"))}
+          </div>
+          <textarea
+            ref={textareaRef}
+            value={value} onChange={e=>onChange(e.target.value)}
+            onKeyDown={handleKeyDown}
+            placeholder={"メモ...\n- 箇条書き\n- [ ] チェック項目"}
+            rows={4}
+            style={{width:"100%",background:C.bgSub,color:C.text,padding:"7px 9px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11,resize:"vertical",lineHeight:1.6}}
+          />
+          <div style={{fontSize:8,color:C.textMuted,marginTop:2}}>
+            Enterで箇条書き・チェックを自動継続 / 空行Enterで終了
+          </div>
+        </>
+      )}
+      {mode==="preview" && (
+        <div style={{background:C.bgSub,borderRadius:6,border:`1px solid ${C.border}`,padding:"7px 9px",minHeight:80,fontSize:11,lineHeight:1.6}}>
+          {value ? renderMemo(value, null) : <span style={{color:C.textMuted}}>メモなし</span>}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // ── 繰り返しエディター ─────────────────────────────────────────────
 const JP_DAYS   = ["日","月","火","水","木","金","土"];
 const WDAY_OPTS = [1,2,3,4,5,6,0]; // 月〜日の順
@@ -672,11 +806,7 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
       </div>
       {/* ── 繰り返しUI ── */}
       <RepeatEditor value={f.repeat} onChange={v=>u("repeat",v)}/>
-      <div style={{marginBottom:9}}>
-        <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>メモ <span style={{fontWeight:400,textTransform:"none"}}>(- [ ] でチェック)</span></div>
-        <textarea value={f.memo} onChange={e=>u("memo",e.target.value)} placeholder={"メモ...\n- [ ] チェック項目"} rows={3}
-          style={{width:"100%",background:C.bgSub,color:C.text,padding:"7px 9px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11,resize:"vertical",lineHeight:1.5}}/>
-      </div>
+      <MemoEditor value={f.memo} onChange={v=>u("memo",v)}/>
       <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
         <Btn onClick={onClose}>キャンセル</Btn>
         <Btn v="accent" onClick={()=>{if(f.title.trim()){onSave({...f,isLater:isLaterTask(f)});onClose();}}}>保存</Btn>
@@ -1439,6 +1569,8 @@ export default function App() {
   useEffect(() => {
     if (!user) return;
     const u=onSnapshot(doc(db,"users",user.uid),snap=>{
+      // 自分の書き込み直後のonSnapshotは無視（競合防止）
+      if (isSavingRef.current) return;
       if (snap.exists()) { const d=snap.data(); if(d.tasks)setTasksRaw(d.tasks); if(d.tags)setTagsRaw(d.tags); if(d.templates)setTemplatesRaw(d.templates); }
     });
     return u;
@@ -1458,11 +1590,17 @@ export default function App() {
     return stop;
   }, [tasks, notifSettings]);
 
+  // ★ 自分の書き込みによるonSnapshot反応を無視するためのフラグ
+  const isSavingRef = useRef(false);
+
   const save2DB = async (t,tg,tp) => {
     if (!user) return;
     setSaving(true);
+    isSavingRef.current = true;
     try { await setDoc(doc(db,"users",user.uid),{tasks:t,tags:tg,templates:tp,updatedAt:new Date().toISOString()}); }
     catch(e){ console.error(e); }
+    // 少し待ってからフラグを解除（onSnapshotの遅延を考慮）
+    setTimeout(() => { isSavingRef.current = false; }, 1500);
     setSaving(false);
   };
   const setTasks     = t  => { setTasksRaw(t);     save2DB(t,tags,templates); };
