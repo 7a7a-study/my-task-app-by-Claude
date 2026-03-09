@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
-import { requestNotificationPermission, registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
+import { requestNotificationPermission, registerSW, scheduleNotifications, startForegroundCheck, sendTestNotification } from "./notifications";
 
 // ★ 祝日API（holidays-jp.github.io）から動的取得・年別キャッシュ
 const HCACHE = {};
@@ -441,13 +441,10 @@ const NotificationModal = ({settings, onSave, onClose}) => {
       {/* テスト通知ボタン */}
       {permission==="granted" && (
         <div style={{marginBottom:12}}>
-          <Btn v="success" onClick={()=>{
-            try {
-              new Notification("🔔 テスト通知", {body:"通知は正常に動作しています！",icon:"/icon-192.png"});
-              setMsg("✅ テスト通知送信成功！通知が届きましたか？");
-            } catch(e) {
-              setMsg("❌ 通知送信に失敗："+e.message);
-            }
+          <Btn v="success" onClick={async ()=>{
+            setMsg("送信中...");
+            const ok = await sendTestNotification();
+            setMsg(ok ? "✅ テスト通知を送信しました！通知が届きましたか？" : "❌ 送信失敗。ブラウザのSWが起動していない可能性があります");
           }} style={{width:"100%",padding:"8px"}}>🔔 今すぐテスト通知を送る</Btn>
           <div style={{fontSize:9,color:C.textMuted,marginTop:4,textAlign:"center"}}>
             ※これが届かない場合はOS・ブラウザの通知設定を確認してください
