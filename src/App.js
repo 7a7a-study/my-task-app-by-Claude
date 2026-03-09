@@ -1331,7 +1331,15 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
   const DAY_END   = 23;
   const PPM       = 0.85;
   const HH        = 60 * PPM;
-  const wd = weekDates(today);
+  const [weekOffset, setWeekOffset] = useState(0); // 0=今週, -1=先週, +1=来週
+  // オフセットに応じたベース日付を計算
+  const baseDate = (() => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + weekOffset * 7);
+    return localDate(d);
+  })();
+  const wd = weekDates(baseDate);
+  const isCurrentWeek = weekOffset === 0;
   const [popup, setPopup]     = useState(null);
   const [holReady,setHolReady]= useState(false);
 
@@ -1372,8 +1380,32 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
   const dayStartMin = DAY_START * 60;
   const totalH      = (DAY_END - DAY_START) * HH;
 
+  // 週ラベル（例：3/3〜3/9）
+  const weekLabel = `${wd[0].slice(5).replace("-","/")} 〜 ${wd[6].slice(5).replace("-","/")}`;
+
   return (
     <div style={{overflowX:"auto"}}>
+      {/* 週ナビゲーション */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
+        <button onClick={()=>setWeekOffset(o=>o-1)}
+          style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ‹
+        </button>
+        <div style={{minWidth:140,textAlign:"center"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif"}}>{weekLabel}</div>
+          {!isCurrentWeek && (
+            <button onClick={()=>setWeekOffset(0)}
+              style={{fontSize:9,color:C.accent,background:C.accentS,border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 8px",cursor:"pointer",marginTop:2}}>
+              今週に戻る
+            </button>
+          )}
+          {isCurrentWeek && <div style={{fontSize:9,color:C.accent,marginTop:1}}>今週</div>}
+        </div>
+        <button onClick={()=>setWeekOffset(o=>o+1)}
+          style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ›
+        </button>
+      </div>
       {/* ★ 週ビュー時間未定タスク（最上部） */}
       {(() => {
         const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
