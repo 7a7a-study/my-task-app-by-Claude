@@ -1747,7 +1747,7 @@ const TagsView = ({tags,setTags}) => {
           ※色変更時は子タグも連動
         </div>
       )}
-      <div style={{marginBottom:7,display:"flex",gap:4"}}>
+      <div style={{marginBottom:7,display:"flex",gap:4}}>
         <Btn v="accent" onClick={saveEdit}>保存</Btn>
         <Btn onClick={()=>setEditId(null)}>✕</Btn>
       </div>
