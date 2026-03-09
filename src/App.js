@@ -929,7 +929,7 @@ const RepeatEditor = ({value, onChange}) => {
 
 // ── タスクフォーム ──────────────────────────────────────────────────
 const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags}) => {
-  const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false};
+  const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false,notifyStart:0,notifyDeadline:null};
   // ★ 子タスク作成時は親タスクのタグを初期値に設定
   const initTags = isChild && parentTags ? parentTags : (task?.tags || []);
   const [f, setF] = useState(task ? {...task, tags:initTags} : {...blank, tags:initTags});
@@ -1018,6 +1018,52 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
       </div>
       <div style={{fontSize:9,color:C.textMuted,marginBottom:8,padding:"4px 8px",background:C.accentS,borderRadius:5,border:`1px solid ${C.accent}33`}}>
         💡 開始日未設定→「あとでやる」リストへ
+      </div>
+      {/* ── 通知設定 ── */}
+      <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:7,textTransform:"uppercase",letterSpacing:.4}}>🔔 通知タイミング</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+          {/* 開始時刻の通知 */}
+          <div>
+            <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:600}}>開始時刻{f.startTime?"":" (時刻なしは非通知)"}</div>
+            <select value={f.notifyStart??0} onChange={e=>u("notifyStart",Number(e.target.value))}
+              disabled={!f.startTime}
+              style={{width:"100%",background:f.startTime?C.surface:C.bg,color:f.startTime?C.text:C.textMuted,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11,opacity:f.startTime?1:0.5}}>
+              <option value={0}>定刻に通知</option>
+              <option value={5}>5分前</option>
+              <option value={10}>10分前</option>
+              <option value={15}>15分前</option>
+              <option value={30}>30分前</option>
+              <option value={60}>1時間前</option>
+              <option value={180}>3時間前</option>
+              <option value={-1}>通知しない</option>
+            </select>
+          </div>
+          {/* 締切の通知 */}
+          <div>
+            <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:600}}>締切{f.deadlineDate?"":" (日付なしは非通知)"}</div>
+            <select value={f.notifyDeadline??( f.deadlineTime ? 180 : null )} onChange={e=>u("notifyDeadline",e.target.value==="null"?null:Number(e.target.value))}
+              disabled={!f.deadlineDate}
+              style={{width:"100%",background:f.deadlineDate?C.surface:C.bg,color:f.deadlineDate?C.text:C.textMuted,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11,opacity:f.deadlineDate?1:0.5}}>
+              {f.deadlineTime ? (
+                <>
+                  <option value={15}>15分前</option>
+                  <option value={30}>30分前</option>
+                  <option value={60}>1時間前</option>
+                  <option value={180}>3時間前</option>
+                  <option value={360}>6時間前</option>
+                  <option value={1440}>24時間前</option>
+                  <option value={-1}>通知しない</option>
+                </>
+              ) : (
+                <>
+                  <option value="null">当日朝9:00</option>
+                  <option value={-1}>通知しない</option>
+                </>
+              )}
+            </select>
+          </div>
+        </div>
       </div>
       {/* ── 繰り返しUI ── */}
       <RepeatEditor value={f.repeat} onChange={v=>u("repeat",v)}/>
