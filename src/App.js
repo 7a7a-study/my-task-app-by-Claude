@@ -30,14 +30,14 @@ const localDate = (d = new Date()) => {
 };
 
 const C = {
-  bg:"#28304e", bgSub:"#303860", surface:"#38426e", surfHov:"#424e80",
-  border:"#4e5888",
-  accent:"#99aaff", accentS:"rgba(153,170,255,.15)", accentG:"rgba(153,170,255,.3)",
-  success:"#5ceeaa", successS:"rgba(92,238,170,.15)",
+  bg:"#1e2540", bgSub:"#252d4a", surface:"#2d3760", surfHov:"#364270",
+  border:"#424e78",
+  accent:"#7eb8ff", accentS:"rgba(126,184,255,.15)", accentG:"rgba(126,184,255,.3)",
+  success:"#4de8a8", successS:"rgba(77,232,168,.15)",
   warn:"#ffd077",   warnS:"rgba(255,208,119,.15)",
-  danger:"#ff8899", dangerS:"rgba(255,136,153,.15)",
-  info:"#77d8ff",   infoS:"rgba(119,216,255,.15)",
-  text:"#eef2ff", textSub:"#c0c8e8", textMuted:"#9aa8cc",
+  danger:"#ff7a8a", dangerS:"rgba(255,122,138,.15)",
+  info:"#60d4f8",   infoS:"rgba(96,212,248,.15)",
+  text:"#f0f4ff", textSub:"#c8d4f0", textMuted:"#a0b0d0",
 };
 
 const TAG_PRESETS = [
@@ -1118,13 +1118,13 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
         {sortBar}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
           <div>
+            <Sec title="タスク" items={regular} color={C.accent} icon="📋"/>
+            {regular.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
+          </div>
+          <div>
             <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
             <Sec title="あとでやる"     items={later}  color={C.warn}   icon="📌"/>
             {habits.length===0 && later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>習慣・あとでやるなし</div>}
-          </div>
-          <div>
-            <Sec title="タスク" items={regular} color={C.accent} icon="📋"/>
-            {regular.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
           </div>
         </div>
         {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
@@ -2127,7 +2127,7 @@ export default function App() {
                 <div style={{background:C.bg,borderRadius:8,height:3,overflow:"hidden"}}>
                   <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${C.accent},${C.success})`,borderRadius:8,transition:"width .5s"}}/>
                 </div>
-                <div style={{fontSize:8,color:C.textMuted,marginTop:2}}>{doneCnt}件完了 / 残り{activeCnt}件</div>
+                <div style={{fontSize:10,color:C.textSub,marginTop:3,fontWeight:600}}>{doneCnt}件完了 <span style={{color:C.textMuted,fontWeight:400}}>／</span> 残り<span style={{color:C.accent}}>{activeCnt}</span>件</div>
               </div>
             </div>}
             <button onClick={()=>setSideOpen(!sideOpen)} style={{background:C.accentS,color:C.accent,border:`1px solid ${C.accent}33`,borderRadius:6,width:24,height:24,fontSize:11,flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>{sideOpen?"◀":"▶"}</button>
