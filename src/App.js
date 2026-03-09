@@ -437,7 +437,23 @@ const NotificationModal = ({settings, onSave, onClose}) => {
           </div>
         </div>
       )}
-      {msg && <div style={{fontSize:10,color:enabled?C.success:C.danger,marginBottom:8,padding:"5px 9px",background:enabled?C.successS:C.dangerS,borderRadius:6}}>{msg}</div>}
+      {msg && <div style={{fontSize:10,color:msg.includes("成功")||msg.includes("有効")?C.success:C.danger,marginBottom:8,padding:"5px 9px",background:msg.includes("成功")||msg.includes("有効")?C.successS:C.dangerS,borderRadius:6}}>{msg}</div>}
+      {/* テスト通知ボタン */}
+      {permission==="granted" && (
+        <div style={{marginBottom:12}}>
+          <Btn v="success" onClick={()=>{
+            try {
+              new Notification("🔔 テスト通知", {body:"通知は正常に動作しています！",icon:"/icon-192.png"});
+              setMsg("✅ テスト通知送信成功！通知が届きましたか？");
+            } catch(e) {
+              setMsg("❌ 通知送信に失敗："+e.message);
+            }
+          }} style={{width:"100%",padding:"8px"}}>🔔 今すぐテスト通知を送る</Btn>
+          <div style={{fontSize:9,color:C.textMuted,marginTop:4,textAlign:"center"}}>
+            ※これが届かない場合はOS・ブラウザの通知設定を確認してください
+          </div>
+        </div>
+      )}
       <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
         <Btn onClick={onClose}>キャンセル</Btn>
         <Btn v="accent" onClick={()=>{onSave({enabled,minutesBefore:minutes});onClose();}}>保存</Btn>
@@ -1221,11 +1237,16 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
 
   const hDrop = (e, relY) => {
     e.preventDefault(); setDropH(null);
-    const h = Math.max(DAY_START, Math.min(DAY_END-1, Math.floor(relY/HH)+DAY_START));
+    // 15分スナップ
+    const totalMin = Math.floor(relY / PPM) + DAY_START * 60;
+    const snapped  = Math.round(totalMin / 15) * 15;
+    const clampMin = Math.max(DAY_START * 60, Math.min((DAY_END - 1) * 60, snapped));
+    const hh = Math.floor(clampMin / 60);
+    const mm = clampMin % 60;
+    const st = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
     const tid = e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
     const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
     if (!t) return;
-    const st = `${String(h).padStart(2,"0")}:00`;
     onUpdate({...t, startDate:today, startTime:st, endTime:t.duration?addDur(st,Number(t.duration)):"", isLater:false});
     setDragTask(null);
   };
@@ -1288,8 +1309,8 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           )}
           {/* ドロップハイライト */}
           {dropH!==null && (
-            <div style={{position:"absolute",top:(dropH-DAY_START)*HH,left:0,right:0,height:HH,background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:C.accent,pointerEvents:"none",zIndex:1}}>
-              {dropH}:00{dragTask?` ← ${dragTask.title}`:""}
+            <div style={{position:"absolute",top:(dropH-DAY_START*60)*PPM,left:0,right:0,height:HH,background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:C.accent,pointerEvents:"none",zIndex:1}}>
+              {dropH!=null?`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`:""}{dragTask?` ← ${dragTask.title}`:""}
             </div>
           )}
           {/* ★ タスクチップ（開始〜終了にまたがる） */}
@@ -1422,8 +1443,12 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                 const task=tid?all.find(x=>x.id===tid)||dragTask:dragTask;
                 if (!task) return;
                 const rect=e.currentTarget.getBoundingClientRect();
-                const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));
-                const st=`${String(h).padStart(2,"0")}:00`;
+                const relY=e.clientY-rect.top;
+                const totalMin=Math.floor(relY/PPM)+DAY_START*60;
+                const snapped=Math.round(totalMin/15)*15;
+                const clampMin=Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped));
+                const hh=Math.floor(clampMin/60), mm=clampMin%60;
+                const st=`${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
                 onUpdate({...task,startDate:d,startTime:st,endTime:task.duration?addDur(st,Number(task.duration)):"",isLater:false});
                 setDragTask(null);
               }}
