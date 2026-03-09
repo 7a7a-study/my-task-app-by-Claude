@@ -21,6 +21,14 @@ const holName = d => (d && HCACHE[d.slice(0,4)]?.[d]) || null;
 const isRed = d => !!(d && (new Date(d).getDay() === 0 || isHol(d)));
 
 // カラーテーマ
+// ── JST日付ヘルパー（toISOString()はUTCなのでローカル時刻を使う）──
+const localDate = (d = new Date()) => {
+  const y = d.getFullYear();
+  const m = String(d.getMonth()+1).padStart(2,"0");
+  const day = String(d.getDate()).padStart(2,"0");
+  return `${y}-${m}-${day}`;
+};
+
 const C = {
   bg:"#28304e", bgSub:"#303860", surface:"#38426e", surfHov:"#424e80",
   border:"#4e5888",
@@ -29,7 +37,7 @@ const C = {
   warn:"#ffd077",   warnS:"rgba(255,208,119,.15)",
   danger:"#ff8899", dangerS:"rgba(255,136,153,.15)",
   info:"#77d8ff",   infoS:"rgba(119,216,255,.15)",
-  text:"#eef2ff", textSub:"#aab4d8", textMuted:"#7080a8",
+  text:"#eef2ff", textSub:"#c0c8e8", textMuted:"#9aa8cc",
 };
 
 const TAG_PRESETS = [
@@ -60,7 +68,7 @@ const sameDay = (a,b) => !!a && !!b && a.slice(0,10)===b.slice(0,10);
 const weekDates = base => {
   const d=new Date(base), w=d.getDay(), m=new Date(d);
   m.setDate(d.getDate()-w+1);
-  return Array.from({length:7},(_,i)=>{const x=new Date(m);x.setDate(m.getDate()+i);return x.toISOString().slice(0,10);});
+  return Array.from({length:7},(_,i)=>{const x=new Date(m);x.setDate(m.getDate()+i);return localDate(x);});
 };
 const isLaterTask = t => !t.startDate && !t.startTime;
 
@@ -479,7 +487,7 @@ const ConfirmDialog = ({title, message, confirmLabel="削除", onConfirm, onCanc
 const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,anchor}) => {
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
-  const over = task.deadlineDate && !task.done && task.deadlineDate < new Date().toISOString().slice(0,10);
+  const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
   // 繰り返しタスクかどうか（仮想オーバーライドタスクも含む）
   const isRepeat = (task.repeat && parseRepeat(task.repeat).type !== "なし") || !!task._overrideKey;
   // 今回の「本来の日付」（スキップ/移動のキー）
@@ -1015,7 +1023,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [memoOpen, setMemoOpen]   = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDate();
   const over   = task.deadlineDate && !task.done && task.deadlineDate < today;
   const urgent = task.deadlineDate && !task.done && task.deadlineDate === today;
   const later  = task.isLater || isLaterTask(task);
@@ -1042,11 +1050,11 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        <div className="ta" style={{display:"flex",gap:2,flexShrink:0}}>
-          <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:4,width:20,height:20,fontSize:11,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-          <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
-          <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
-          <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:4,width:20,height:20,fontSize:10,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+        <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
+          <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+          <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
+          <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+          <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
 子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
         </div>
@@ -1088,12 +1096,45 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
       {items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
     </div>
   );
+  // PCか判定（768px以上）
+  const [isPC, setIsPC] = useState(window.innerWidth >= 768);
+  useEffect(() => {
+    const fn = () => setIsPC(window.innerWidth >= 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+
+  const sortBar = (
+    <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:11,flexWrap:"wrap"}}>
+      <span style={{fontSize:9,color:C.textMuted,fontWeight:600}}>並び替え</span>
+      {SORTS.map(s=><button key={s} onClick={()=>setSortOrder(s)} style={{fontSize:9,padding:"2px 7px",borderRadius:14,border:`1px solid ${sortOrder===s?C.accent:C.border}`,background:sortOrder===s?C.accentS:"transparent",color:sortOrder===s?C.accent:C.textMuted,cursor:"pointer",fontWeight:sortOrder===s?700:400}}>{s}</button>)}
+    </div>
+  );
+
+  if (isPC) {
+    // PC: 2カラムレイアウト（左=習慣+あとでやる、右=通常タスク）
+    return (
+      <div>
+        {sortBar}
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
+          <div>
+            <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
+            <Sec title="あとでやる"     items={later}  color={C.warn}   icon="📌"/>
+            {habits.length===0 && later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>習慣・あとでやるなし</div>}
+          </div>
+          <div>
+            <Sec title="タスク" items={regular} color={C.accent} icon="📋"/>
+            {regular.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
+          </div>
+        </div>
+        {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
+      </div>
+    );
+  }
+
   return (
     <div>
-      <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:11,flexWrap:"wrap"}}>
-        <span style={{fontSize:9,color:C.textMuted,fontWeight:600}}>並び替え</span>
-        {SORTS.map(s=><button key={s} onClick={()=>setSortOrder(s)} style={{fontSize:9,padding:"2px 7px",borderRadius:14,border:`1px solid ${sortOrder===s?C.accent:C.border}`,background:sortOrder===s?C.accentS:"transparent",color:sortOrder===s?C.accent:C.textMuted,cursor:"pointer",fontWeight:sortOrder===s?700:400}}>{s}</button>)}
-      </div>
+      {sortBar}
       <Sec title="習慣・繰り返し" items={habits}  color={C.success} icon="🔄"/>
       <Sec title="タスク"         items={regular} color={C.accent}  icon="📋"/>
       <Sec title="あとでやる"     items={later}   color={C.warn}    icon="📌"/>
@@ -1106,7 +1147,7 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
 const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,onToggle,onUpdate,onRSStart}) => {
   const top  = (startMin - dayStartMin) * ppm;
   const h    = Math.max(22, (endMin - startMin) * ppm);
-  const over = task.deadlineDate && !task.done && task.deadlineDate < new Date().toISOString().slice(0,10);
+  const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
   return (
     <div className="drag" draggable
       onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
@@ -1190,7 +1231,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
   };
 
   const now     = new Date();
-  const isToday = today === now.toISOString().slice(0,10);
+  const isToday = today === localDate(now);
   const dayStartMin = DAY_START * 60;
   const totalH  = (DAY_END - DAY_START) * HH;
 
@@ -1292,7 +1333,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
   const hp = (e,task) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
-  const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||new Date().toISOString().slice(0,10)):undefined); };
+  const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||localDate()):undefined); };
 
   const rsRef=useRef(false),rsTask=useRef(null),rsY=useRef(0),rsDur=useRef(0);
   const onRSStart = useCallback((e,task) => {
@@ -1472,7 +1513,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
     if (dragDL) { onUpdate({...dragDL,deadlineDate:ds(n)}); setDragDL(null); return; }
     if (dragBar) {
       const diff=n-dragBar.startDay, t=dragBar.task;
-      const sh = x => { if(!x)return x; const dt=new Date(x); dt.setDate(dt.getDate()+diff); return dt.toISOString().slice(0,10); };
+      const sh = x => { if(!x)return x; const dt=new Date(x); dt.setDate(dt.getDate()+diff); return localDate(dt); };
       onUpdate({...t,startDate:sh(t.startDate),endDate:sh(t.endDate),isLater:false});
       setDragBar(null); return;
     }
@@ -1491,7 +1532,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
       const nw=Math.max(1,brsW.current+Math.round((x-brsX.current)/DW));
       const t=brsTask.current, sd=t.startDate||t.endDate; if(!sd)return;
       const ne=new Date(sd); ne.setDate(ne.getDate()+nw-1);
-      onUpdate({...t, endDate:ne.toISOString().slice(0,10)});
+      onUpdate({...t, endDate:localDate(ne)});
     };
     const up = () => { brsRef.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); document.removeEventListener("touchmove",mv); document.removeEventListener("touchend",up); };
     document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
@@ -1507,7 +1548,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
     const isParent = !task._pid;
     const isBarDrag = dragBar?.task?.id===task.id;
     const isDLDrag  = dragDL?.id===task.id;
-    const todStr = new Date().toISOString().slice(0,10);
+    const todStr = localDate();
     const isOver = task.deadlineDate && !task.done && task.deadlineDate < todStr;
     const leftPad = 10 + indent * 14; // インデント
     return (
@@ -1860,7 +1901,7 @@ const TagsView = ({tags,setTags}) => {
 export default function App() {
   const [sideOpen,setSideOpen]     = useState(true);
   const [sortOrder,setSortOrder]   = useState("デフォルト");
-  const today = new Date().toISOString().slice(0,10);
+  const today = localDate();
   const [user,setUser]             = useState(null);
   const [authLoading,setAuthLoading] = useState(true);
   const [loginLoading,setLoginLoading] = useState(false);
@@ -1902,12 +1943,17 @@ export default function App() {
   useEffect(() => {
     scheduleNotifications(tasks, notifSettings);
   }, [tasks, notifSettings]);
-  // アプリ起動中のフォアグラウンド通知チェック（1分おき）
+  // tasksとnotifSettingsをrefで追跡（stale closure防止）
+  const tasksRef = useRef(tasks);
+  const notifRef = useRef(notifSettings);
+  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
+  useEffect(() => { notifRef.current = notifSettings; }, [notifSettings]);
+
+  // アプリ起動中のフォアグラウンド通知チェック（1分おき・初回マウント時のみ登録）
   useEffect(() => {
-    if (!notifSettings?.enabled) return;
-    const stop = startForegroundCheck(() => tasks, () => notifSettings, null);
+    const stop = startForegroundCheck(() => tasksRef.current, () => notifRef.current, null);
     return stop;
-  }, [tasks, notifSettings]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ★ 自分の書き込みによるonSnapshot反応を無視するためのフラグ
   const isSavingRef = useRef(false);
@@ -1972,7 +2018,7 @@ export default function App() {
 
     if (isRepeat) {
       // 繰り返しタスク：その日付をskipDates（完了済み日）に追加/削除
-      const date = forDate || new Date().toISOString().slice(0,10);
+      const date = forDate || localDate();
       const skipDates = [...(target.skipDates || [])];
       const doneDates = [...(target.doneDates || [])];
       const alreadyDone = doneDates.includes(date);
