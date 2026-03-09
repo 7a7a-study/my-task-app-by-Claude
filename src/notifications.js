@@ -5,9 +5,11 @@
 //   締切時刻あり  → 締切時刻の X分前（設定値）
 //   締切日のみ    → その日の朝 9:00 固定
 //
-// 【送信条件】
-//   通知時刻が「過去60分以内 〜 未来30秒以内」なら送る
-//   同じ通知はlocalStorageで記録して重複防止（25時間以内は再送しない）
+// 【重要】
+//   new Notification() はiPhoneのPWAでのみ動作する。
+//   AndroidのChromeやPC Chromeでは Service Worker 経由
+//   (registration.showNotification) を使わないと動かない。
+//   → 全通知をSW経由に統一する。
 
 // ── 通知許可を取得 ──────────────────────────────────────────
 export async function requestNotificationPermission() {
@@ -36,6 +38,29 @@ export async function registerSW() {
   }
 }
 
+// ── SW経由で通知を1件送る ───────────────────────────────────
+// new Notification() はAndroid Chrome / PC Chromeで使えないため
+// 常にSW経由（registration.showNotification）を使う
+async function showNotificationViaSW(title, body, tag) {
+  try {
+    if (!('serviceWorker' in navigator)) return false;
+    const reg = await navigator.serviceWorker.ready;
+    if (!reg) return false;
+    await reg.showNotification(title, {
+      body,
+      icon: '/icon-192.png',
+      badge: '/icon-192.png',
+      tag,
+      renotify: false,
+      vibrate: [200, 100, 200],
+    });
+    return true;
+  } catch(e) {
+    console.error('SW通知失敗:', e);
+    return false;
+  }
+}
+
 // ── SWへスケジュール送信（バックグラウンド用） ──────────────
 export async function scheduleNotifications(tasks, settings) {
   if (!('serviceWorker' in navigator)) return;
@@ -46,6 +71,16 @@ export async function scheduleNotifications(tasks, settings) {
   } catch(e) {
     console.error('SW通知スケジュール失敗:', e);
   }
+}
+
+// ── テスト通知（SW経由） ────────────────────────────────────
+export async function sendTestNotification() {
+  const ok = await showNotificationViaSW(
+    '🔔 テスト通知',
+    '通知は正常に動作しています！',
+    'test_' + Date.now()
+  );
+  return ok;
 }
 
 // ── 送信済みキーをlocalStorageで管理 ───────────────────────
@@ -117,18 +152,10 @@ function getNotifyEvents(tasks, minutesBefore) {
   return events;
 }
 
-function fireNotification(ev) {
-  if (alreadySent(ev.key)) return;
-  markSent(ev.key);
-  try {
-    new Notification(ev.title, { body: ev.body, icon: '/icon-192.png', tag: ev.key });
-  } catch(e) { console.error('通知送信失敗:', e); }
-}
-
 // ── アプリ起動中のポーリングチェック（30秒おき） ────────────
-// 過去60分以内 〜 30秒先 の通知を全部送る（見逃し救済含む）
+// 過去60分以内 〜 30秒先 の通知をSW経由で送る
 export function startForegroundCheck(getTasks, getSettings, onNotify) {
-  const check = () => {
+  const check = async () => {
     const tasks = getTasks();
     const settings = getSettings();
     if (!settings?.enabled || Notification.permission !== 'granted') return;
@@ -137,15 +164,20 @@ export function startForegroundCheck(getTasks, getSettings, onNotify) {
     const PAST  = 60 * 60 * 1000; // 過去60分まで遡る
     const GRACE =      30 * 1000; // 30秒先まで先打ちOK
 
-    getNotifyEvents(tasks, settings.minutesBefore || 60).forEach(ev => {
+    const events = getNotifyEvents(tasks, settings.minutesBefore || 60);
+
+    for (const ev of events) {
       if (ev.notifyAt >= now - PAST && ev.notifyAt <= now + GRACE) {
-        fireNotification(ev);
-        onNotify?.(ev);
+        if (!alreadySent(ev.key)) {
+          markSent(ev.key);
+          await showNotificationViaSW(ev.title, ev.body, ev.key);
+          onNotify?.(ev);
+        }
       }
-    });
+    }
   };
 
-  check(); // 起動直後に即チェック
+  check();
   const id = setInterval(check, 30 * 1000);
   return () => clearInterval(id);
 }
