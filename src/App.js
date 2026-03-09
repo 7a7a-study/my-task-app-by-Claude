@@ -1953,7 +1953,7 @@ export default function App() {
   useEffect(() => {
     const stop = startForegroundCheck(() => tasksRef.current, () => notifRef.current, null);
     return stop;
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ★ 自分の書き込みによるonSnapshot反応を無視するためのフラグ
   const isSavingRef = useRef(false);
