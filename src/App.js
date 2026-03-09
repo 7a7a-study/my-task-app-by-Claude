@@ -1969,7 +1969,14 @@ export default function App() {
     setSaving(false);
   };
   const setTasks     = t  => { setTasksRaw(t);     save2DB(t,tags,templates); };
-  const setTags      = tg => { setTagsRaw(tg);     save2DB(tasks,tg,templates); };
+  const setTags      = tg => {
+    // 関数型更新（tg が関数の場合）と値更新の両方に対応
+    setTagsRaw(prev => {
+      const next = typeof tg === "function" ? tg(prev) : tg;
+      save2DB(tasks, next, templates);
+      return next;
+    });
+  };
   const setTemplates = tp => { setTemplatesRaw(tp); save2DB(tasks,tags,tp); };
 
   const handleLogin = async () => {
