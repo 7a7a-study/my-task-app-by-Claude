@@ -1195,16 +1195,22 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
   const [popup, setPopup]   = useState(null);
   const [dropH, setDropH]   = useState(null);
   const [holReady, setHolReady] = useState(false);
+  const [dayOffset, setDayOffset] = useState(0); // 0=今日, -1=昨日, +1=明日
+
+  // オフセットに応じた表示日
+  const viewDate = (() => { const d=new Date(today); d.setDate(d.getDate()+dayOffset); return localDate(d); })();
+  const isToday  = dayOffset === 0;
+
   const all = flatten(tasks);
 
-  useEffect(() => { fetchHolidays(today.slice(0,4)).then(()=>setHolReady(true)); }, [today]);
+  useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
   const todayT = [
     ...all.filter(t => {
-      if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, today);
-      return sameDay(t.startDate,today) || sameDay(t.deadlineDate,today);
+      if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, viewDate);
+      return sameDay(t.startDate,viewDate) || sameDay(t.deadlineDate,viewDate);
     }),
-    ...expandOverrides(tasks).filter(t => sameDay(t.startDate,today) || sameDay(t.deadlineDate,today)),
+    ...expandOverrides(tasks).filter(t => sameDay(t.startDate,viewDate) || sameDay(t.deadlineDate,viewDate)),
   ];
   const timed   = todayT.filter(t =>  t.startTime && !(t.isLater||isLaterTask(t)));
   const untimed = todayT.filter(t => !t.startTime && !(t.isLater||isLaterTask(t)));
@@ -1212,7 +1218,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
   const hp = (e,task) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
   // 繰り返しタスクのトグルには日付を渡す
-  const hToggle = (id) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?today:undefined); };
+  const hToggle = (id) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?viewDate:undefined); };
 
   // リサイズ：下端ドラッグで所要時間変更
   const rsRef=useRef(false), rsTask=useRef(null), rsY=useRef(0), rsDur=useRef(0);
@@ -1244,17 +1250,47 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
     const tid = e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
     const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
     if (!t) return;
-    onUpdate({...t, startDate:today, startTime:st, endTime:t.duration?addDur(st,Number(t.duration)):"", isLater:false});
+    onUpdate({...t, startDate:viewDate, startTime:st, endTime:t.duration?addDur(st,Number(t.duration)):"", isLater:false});
     setDragTask(null);
   };
 
   const now     = new Date();
-  const isToday = today === localDate(now);
   const dayStartMin = DAY_START * 60;
   const totalH  = (DAY_END - DAY_START) * HH;
 
+  // 表示日の曜日・祝日
+  const viewDt = new Date(viewDate);
+  const DAYS_JP2 = ["日","月","火","水","木","金","土"];
+  const viewDow = DAYS_JP2[viewDt.getDay()];
+  const isSat2 = viewDt.getDay()===6;
+  const isRed2 = isRed(viewDate);
+  const hName2 = holName(viewDate);
+  const viewLabel = `${viewDate.slice(5).replace("-","/")}（${viewDow}）${hName2?" 🎌"+hName2:""}`;
+  const dowColor = isSat2?C.info:isRed2||hName2?C.danger:C.text;
+
   return (
     <div>
+      {/* 日付ナビゲーション */}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
+        <button onClick={()=>setDayOffset(o=>o-1)}
+          style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ‹
+        </button>
+        <div style={{minWidth:160,textAlign:"center"}}>
+          <div style={{fontSize:13,fontWeight:700,color:dowColor,fontFamily:"'DM Sans',sans-serif"}}>{viewLabel}</div>
+          {!isToday && (
+            <button onClick={()=>setDayOffset(0)}
+              style={{fontSize:9,color:C.accent,background:C.accentS,border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 8px",cursor:"pointer",marginTop:2}}>
+              今日に戻る
+            </button>
+          )}
+          {isToday && <div style={{fontSize:9,color:C.accent,marginTop:1}}>今日</div>}
+        </div>
+        <button onClick={()=>setDayOffset(o=>o+1)}
+          style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ›
+        </button>
+      </div>
       {/* ★ 時間未定タスクを最上部に表示 */}
       {untimed.length>0 && (
         <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:8}}>
@@ -1291,7 +1327,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           onDragOver={e=>{e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();setDropH(Math.floor((e.clientY-rect.top)/HH)+DAY_START);}}
           onDragLeave={()=>setDropH(null)}
           onDrop={e=>{const rect=e.currentTarget.getBoundingClientRect();hDrop(e,e.clientY-rect.top);}}
-          onClick={e=>{const rect=e.currentTarget.getBoundingClientRect();const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));onAdd(today,h);}}>
+          onClick={e=>{const rect=e.currentTarget.getBoundingClientRect();const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));onAdd(viewDate,h);}}>
           {/* グリッド */}
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
             <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`}}>
