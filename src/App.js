@@ -82,7 +82,7 @@ const parseRepeat = r => {
 const matchesRepeat = (task, date) => {
   const r = parseRepeat(task.repeat);
   if (r.type === "なし") return false;
-  // スキップされた日は非表示
+  // スキップ or 完了済みの日は非表示
   if ((task.skipDates || []).includes(date)) return false;
   // 別日に移動した元日は非表示（overrideDatesのキーが元の日付）
   if (task.overrideDates && task.overrideDates[date]) return false;
@@ -1157,6 +1157,8 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
 
   const hp = (e,task) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
+  // 繰り返しタスクのトグルには日付を渡す
+  const hToggle = (id) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?today:undefined); };
 
   // リサイズ：下端ドラッグで所要時間変更
   const rsRef=useRef(false), rsTask=useRef(null), rsY=useRef(0), rsDur=useRef(0);
@@ -1206,7 +1208,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
                 onDragEnd={()=>setDragTask(null)}
                 onClick={e=>hp(e,t)}
                 style={{display:"flex",alignItems:"center",gap:6,padding:"3px 6px",borderLeft:`3px solid ${c}`,borderRadius:"0 5px 5px 0",marginBottom:2,background:c+"18",cursor:"grab"}}>
-                <div onClick={e=>{e.stopPropagation();onToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                <div onClick={e=>{e.stopPropagation();hToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
                 <span style={{fontSize:10,fontWeight:600,color:t.done?C.textMuted:c,textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
                 {t.deadlineDate && <span style={{fontSize:8,color:C.warn,marginLeft:"auto"}}>⚠{fd(t.deadlineDate)}</span>}
               </div>
@@ -1290,6 +1292,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
   const hp = (e,task) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
+  const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||new Date().toISOString().slice(0,10)):undefined); };
 
   const rsRef=useRef(false),rsTask=useRef(null),rsY=useRef(0),rsDur=useRef(0);
   const onRSStart = useCallback((e,task) => {
@@ -1333,7 +1336,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                           onDragEnd={()=>setDragTask(null)}
                           onClick={e=>hp(e,t)}
                           style={{display:"flex",alignItems:"center",gap:3,flex:1,minWidth:0,cursor:"grab"}}>
-                          <div onClick={e=>{e.stopPropagation();onToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                          <div onClick={e=>{e.stopPropagation();hToggle(t.id,date);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
                           <span style={{fontSize:8,fontWeight:600,color:t.done?C.textMuted:c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
                         </div>
                       </div>
@@ -1960,11 +1963,35 @@ export default function App() {
   };
 
   const handleAdd    = (date,hour) => { setDefDate(date); setDefTime(hour!=null?`${String(hour).padStart(2,"0")}:00`:null); setEditTask(null); setAddChildTo(null); setShowForm(true); };
-  const handleToggle = id => {
-    // 子タスクが1つでも未完了なら親タスクを完了にできない
+  const handleToggle = (id, forDate) => {
     const allFlat2 = flatten(tasks);
     const target = allFlat2.find(t => t.id === id);
-    if (target && !target.done && (target.children||[]).length > 0) {
+    if (!target) return;
+
+    const isRepeat = target.repeat && parseRepeat(target.repeat).type !== "なし";
+
+    if (isRepeat) {
+      // 繰り返しタスク：その日付をskipDates（完了済み日）に追加/削除
+      const date = forDate || new Date().toISOString().slice(0,10);
+      const skipDates = [...(target.skipDates || [])];
+      const doneDates = [...(target.doneDates || [])];
+      const alreadyDone = doneDates.includes(date);
+      let newSkip, newDone;
+      if (alreadyDone) {
+        // 完了解除
+        newSkip = skipDates.filter(d => d !== date);
+        newDone = doneDates.filter(d => d !== date);
+      } else {
+        // 完了
+        newSkip = skipDates.includes(date) ? skipDates : [...skipDates, date];
+        newDone = [...doneDates, date];
+      }
+      setTasks(syncDone(updTree(tasks, id, t => ({...t, skipDates: newSkip, doneDates: newDone}))));
+      return;
+    }
+
+    // 通常タスク：子タスクが1つでも未完了なら完了にできない
+    if (!target.done && (target.children||[]).length > 0) {
       const hasPendingChild = flatten(target.children||[]).some(c => !c.done);
       if (hasPendingChild) {
         alert("子タスクをすべて完了してから親タスクを完了にしてください");
@@ -2013,9 +2040,11 @@ export default function App() {
   };
 
   const allFlat  = flatten(tasks);
-  const doneCnt  = allFlat.filter(t=>t.done).length;
-  const totalCnt = allFlat.length;
-  const activeCnt= allFlat.filter(t=>!t.done).length;
+  // 繰り返しタスクはカウントから除外（通常タスクのみ集計）
+  const nonRepeat = allFlat.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし");
+  const doneCnt  = nonRepeat.filter(t=>t.done).length;
+  const totalCnt = nonRepeat.length;
+  const activeCnt= nonRepeat.filter(t=>!t.done).length;
   const pct      = totalCnt>0 ? Math.round((doneCnt/totalCnt)*100) : 0;
 
   const NAV = [
