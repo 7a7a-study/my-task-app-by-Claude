@@ -1598,7 +1598,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
   return (
     <div style={{overflowX:"auto"}}>
-      {/* 週ナビゲーション（固定） */}
+      {/* 週ナビ＋日付ヘッダー（stickyにまとめる） */}
       <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setWeekOffset(o=>o-1)}
@@ -1620,21 +1620,20 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           ›
         </button>
       </div>
-      {/* 日付ヘッダー（sticky内に統合） */}
-      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
-        <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
-          <div/>
-          {wd.map((d,i) => {
-            const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
-            const hName = holName(d);
-            return (
-              <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
-                <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
-                <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
-              </div>
-            );
-          })}
-        </div>
+      {/* 日付ヘッダー */}
+      <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
+        <div/>
+        {wd.map((d,i) => {
+          const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
+          const hName = holName(d);
+          return (
+            <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
+              <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
+              <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
+            </div>
+          );
+        })}
+      </div>
       </div>{/* /sticky nav */}
       {/* ★ 週ビュー時間未定タスク（日付ヘッダーの下） */}
       {(() => {
@@ -1671,8 +1670,6 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
       })()}
 
       <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
-        {/* ダミー（日付ヘッダーはstickyに移動済み） */}
-        <div/>{wd.map(d=><div key={d}/>)}
         {/* 時刻ラベル */}
         <div style={{position:"relative",height:totalH}}>
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
