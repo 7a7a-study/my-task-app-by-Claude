@@ -300,6 +300,8 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{opacity:0;transition:opacity .15s}.tr:hover .ta{opacity:1}
+@media(hover:none){.ta{display:none!important}}
+@media(hover:hover){.swipe-actions{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 `;
@@ -465,7 +467,7 @@ const Login = ({onLogin,loading}) => (
     <div style={{textAlign:"center",padding:36}}>
       <div style={{width:62,height:62,borderRadius:18,background:`linear-gradient(135deg,${C.accent},#bbccff)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:26}}>✅</div>
       <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,marginBottom:4}}>
-        <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>Focal</span>
+        <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>Slate</span>
       </div>
       <div style={{color:C.textMuted,marginBottom:26,fontSize:12}}>あなただけのタスク管理</div>
       <button onClick={onLogin} disabled={loading}
@@ -1081,6 +1083,11 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [exp, setExp]             = useState(true);
   const [memoOpen, setMemoOpen]   = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
+  const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
+  const [swiping, setSwiping]     = useState(false);
+  const touchStartX = useRef(null);
+  const SWIPE_OPEN = -108; // アクション表示時のオフセット
+
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
   const over   = task.deadlineDate && !task.done && task.deadlineDate < today;
@@ -1088,9 +1095,45 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const later  = task.isLater || isLaterTask(task);
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const hasMemo = !!task.memo;
+  const isOpen = swipeX <= SWIPE_OPEN / 2;
+
+  const onTouchStart = e => {
+    touchStartX.current = e.touches[0].clientX;
+    setSwiping(true);
+  };
+  const onTouchMove = e => {
+    if (touchStartX.current === null) return;
+    const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
+    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx)));
+  };
+  const onTouchEnd = () => {
+    setSwiping(false);
+    setSwipeX(swipeX < SWIPE_OPEN/2 ? SWIPE_OPEN : 0);
+    touchStartX.current = null;
+  };
+  const closeSwipe = () => setSwipeX(0);
+
   return (
-    <div style={{marginLeft:depth*16}}>
-      <div className="hov tr" style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",borderRadius:memoOpen?`7px 7px 0 0`:7,marginBottom:memoOpen?0:2,background:depth===0?C.surface:C.bgSub,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined,opacity:task.done?.45:1,transition:"opacity .15s"}}>
+    <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
+      {/* スワイプアクションボタン（背面・モバイルのみ） */}
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+        <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
+        <button title="複製"  onClick={()=>{onDuplicate(task);closeSwipe();}} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
+        <button title="編集"  onClick={()=>{onEdit(task);closeSwipe();}} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
+        <button title="削除"  onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+      </div>
+      {/* メインコンテンツ（スワイプで左にスライド） */}
+      <div className="hov tr"
+        onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
+        style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
+          background:depth===0?C.surface:C.bgSub,
+          border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,
+          borderLeft:depth>0?`3px solid ${tc}55`:undefined,
+          opacity:task.done?.45:1,
+          transform:`translateX(${swipeX}px)`,
+          transition:swiping?"none":"transform .2s ease",
+          position:"relative",zIndex:1,
+        }}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
         <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?()=>setMemoOpen(o=>!o):undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
@@ -1109,15 +1152,16 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
+        {/* PCのみ常時表示ボタン */}
         <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
           <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
           <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
           <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
           <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-          {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
-子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
         </div>
       </div>
+      {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
+子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
       {/* ── メモ展開パネル ── */}
       {memoOpen && hasMemo && (
         <div style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:`0 0 7px 7px`,padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
@@ -1297,7 +1341,7 @@ const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,o
 const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
   const DAY_START = 6;
   const DAY_END   = 23;
-  const PPM       = 1.2;   // pixel per minute（1時間=72px）
+  const PPM       = 0.85;  // pixel per minute（週ビューに統一）
   const HH        = 60 * PPM;
   const [popup, setPopup]   = useState(null);
   const [dropH, setDropH]   = useState(null);
@@ -1377,7 +1421,8 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
 
   return (
     <div>
-      {/* 日付ナビゲーション */}
+      {/* 日付ナビゲーション（固定） */}
+      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:4,marginBottom:0}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setDayOffset(o=>o-1)}
           style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1398,6 +1443,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           ›
         </button>
       </div>
+      </div>{/* /sticky nav */}
       {/* ★ 時間未定タスクを最上部に表示 */}
       {untimed.length>0 && (
         <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:8}}>
@@ -1528,7 +1574,8 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
   return (
     <div style={{overflowX:"auto"}}>
-      {/* 週ナビゲーション */}
+      {/* 週ナビゲーション（固定） */}
+      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setWeekOffset(o=>o-1)}
           style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1549,6 +1596,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           ›
         </button>
       </div>
+      </div>{/* /sticky nav */}
       {/* ★ 週ビュー時間未定タスク（最上部） */}
       {(() => {
         const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
@@ -1653,6 +1701,236 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
   );
 };
 
+
+// ── レポートビュー ────────────────────────────────────────────────────
+const ReportView = ({tasks, tags}) => {
+  const [period, setPeriod] = useState("week");   // week/month/3month/year/custom
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo]   = useState("");
+  const [chartType, setChartType] = useState("bar"); // bar/line
+
+  const today = localDate();
+  const all = flatten(tasks);
+
+  // 期間の開始・終了日を計算
+  const getRange = () => {
+    const now = new Date(today);
+    if (period === "custom") {
+      return { from: customFrom || today, to: customTo || today };
+    }
+    const from = new Date(now);
+    if (period === "week")   from.setDate(now.getDate() - 6);
+    if (period === "month")  from.setMonth(now.getMonth() - 1);
+    if (period === "3month") from.setMonth(now.getMonth() - 3);
+    if (period === "year")   from.setFullYear(now.getFullYear() - 1);
+    return { from: localDate(from), to: today };
+  };
+
+  const { from, to } = getRange();
+
+  // 期間内に完了したタスクを抽出
+  const doneTasks = all.filter(t => {
+    if (!t.done) return false;
+    // 繰り返しタスクはdoneDatesで判定
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") {
+      return (t.doneDates||[]).some(d => d >= from && d <= to);
+    }
+    // 通常タスクは締切・開始日で判定
+    const ref = t.deadlineDate || t.startDate || "";
+    return ref >= from && ref <= to;
+  });
+
+  // タグ別集計
+  const tagStats = tags.filter(t => t.parentId).map(tag => {
+    const cnt = doneTasks.filter(t => t.tags?.includes(tag.id)).length;
+    return { tag, cnt };
+  }).filter(s => s.cnt > 0).sort((a,b) => b.cnt - a.cnt);
+
+  // 日別完了数（折れ線・棒グラフ用）
+  const dayMap = {};
+  doneTasks.forEach(t => {
+    const d = t.deadlineDate || t.startDate || "";
+    if (d >= from && d <= to) dayMap[d] = (dayMap[d]||0) + 1;
+  });
+
+  // 期間内の全日付リスト
+  const days = [];
+  const cur = new Date(from);
+  const end = new Date(to);
+  while (cur <= end) {
+    days.push(localDate(new Date(cur)));
+    cur.setDate(cur.getDate() + 1);
+  }
+
+  const maxDay = Math.max(1, ...days.map(d => dayMap[d]||0));
+  const totalDone = doneTasks.length;
+  const totalAll  = all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし").length;
+  const doneRate  = totalAll > 0 ? Math.round(totalDone / totalAll * 100) : 0;
+
+  // 日付ラベル（多い場合は間引き）
+  const labelStep = days.length <= 14 ? 1 : days.length <= 31 ? 3 : days.length <= 90 ? 7 : 14;
+
+  const PERIODS = [
+    { id:"week",   label:"1週間" },
+    { id:"month",  label:"1ヶ月" },
+    { id:"3month", label:"3ヶ月" },
+    { id:"year",   label:"1年" },
+    { id:"custom", label:"カスタム" },
+  ];
+
+  const barW = Math.max(4, Math.min(28, Math.floor(560 / days.length) - 2));
+  const graphH = 120;
+
+  return (
+    <div style={{paddingBottom:24}}>
+      {/* 期間選択 */}
+      <div style={{display:"flex",gap:6,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+        {PERIODS.map(p => (
+          <button key={p.id} onClick={()=>setPeriod(p.id)}
+            style={{padding:"4px 12px",borderRadius:14,fontSize:10,fontWeight:period===p.id?700:400,
+              border:`1px solid ${period===p.id?C.accent:C.border}`,
+              background:period===p.id?C.accentS:"transparent",
+              color:period===p.id?C.accent:C.textMuted,cursor:"pointer"}}>
+            {p.label}
+          </button>
+        ))}
+        {period==="custom" && (
+          <div style={{display:"flex",gap:6,alignItems:"center"}}>
+            <input type="date" value={customFrom} onChange={e=>setCustomFrom(e.target.value)}
+              style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",fontSize:10}}/>
+            <span style={{color:C.textMuted,fontSize:10}}>〜</span>
+            <input type="date" value={customTo} onChange={e=>setCustomTo(e.target.value)}
+              style={{background:C.surface,color:C.text,border:`1px solid ${C.border}`,borderRadius:6,padding:"3px 7px",fontSize:10}}/>
+          </div>
+        )}
+      </div>
+
+      {/* サマリーカード */}
+      <div style={{display:"grid",gridTemplateColumns:"repeat(3,1fr)",gap:8,marginBottom:14}}>
+        {[
+          { label:"完了タスク数", value:totalDone, color:C.success, icon:"✓" },
+          { label:"完了率", value:`${doneRate}%`, color:C.accent, icon:"📊" },
+          { label:"集計期間", value:`${days.length}日`, color:C.warn, icon:"📅" },
+        ].map(s => (
+          <div key={s.label} style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,textAlign:"center"}}>
+            <div style={{fontSize:16,marginBottom:3}}>{s.icon}</div>
+            <div style={{fontSize:20,fontWeight:800,color:s.color,fontFamily:"'DM Sans',sans-serif"}}>{s.value}</div>
+            <div style={{fontSize:9,color:C.textMuted,marginTop:2}}>{s.label}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* 日別グラフ */}
+      <div style={{background:C.surface,borderRadius:10,padding:"14px 12px",marginBottom:14,border:`1px solid ${C.border}`}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+          <span style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5}}>
+            📈 日別完了数
+          </span>
+          <div style={{display:"flex",gap:4}}>
+            {["bar","line"].map(ct=>(
+              <button key={ct} onClick={()=>setChartType(ct)}
+                style={{padding:"2px 8px",borderRadius:10,fontSize:9,
+                  border:`1px solid ${chartType===ct?C.accent:C.border}`,
+                  background:chartType===ct?C.accentS:"transparent",
+                  color:chartType===ct?C.accent:C.textMuted,cursor:"pointer"}}>
+                {ct==="bar"?"棒":"折れ線"}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div style={{overflowX:"auto"}}>
+          <svg width={Math.max(560, days.length*(barW+2)+40)} height={graphH+40} style={{display:"block"}}>
+            {/* グリッド線 */}
+            {[0,0.25,0.5,0.75,1].map(r=>(
+              <line key={r} x1={30} y1={graphH*r+4} x2={days.length*(barW+2)+34} y2={graphH*r+4}
+                stroke={C.border} strokeWidth={0.5} strokeDasharray="3,3"/>
+            ))}
+            {/* Y軸ラベル */}
+            {[0,0.5,1].map(r=>(
+              <text key={r} x={26} y={graphH*r+8} textAnchor="end" fill={C.textMuted} fontSize={8}>
+                {Math.round(maxDay*(1-r))}
+              </text>
+            ))}
+            {chartType==="bar" ? (
+              /* 棒グラフ */
+              days.map((d,i)=>{
+                const v = dayMap[d]||0;
+                const bh = v/maxDay*graphH;
+                return (
+                  <g key={d}>
+                    <rect x={32+i*(barW+2)} y={graphH-bh+4} width={barW} height={bh}
+                      fill={C.accent} opacity={0.75} rx={2}/>
+                    {v>0 && <text x={32+i*(barW+2)+barW/2} y={graphH-bh+1} textAnchor="middle" fill={C.accent} fontSize={8}>{v}</text>}
+                  </g>
+                );
+              })
+            ) : (
+              /* 折れ線グラフ */
+              <g>
+                <polyline
+                  points={days.map((d,i)=>`${32+i*(barW+2)+barW/2},${graphH-(dayMap[d]||0)/maxDay*graphH+4}`).join(" ")}
+                  fill="none" stroke={C.accent} strokeWidth={2} strokeLinejoin="round"/>
+                {days.map((d,i)=>{
+                  const v=dayMap[d]||0;
+                  return v>0?(
+                    <circle key={d} cx={32+i*(barW+2)+barW/2} cy={graphH-v/maxDay*graphH+4} r={3} fill={C.accent}/>
+                  ):null;
+                })}
+              </g>
+            )}
+            {/* X軸ラベル */}
+            {days.map((d,i)=> i%labelStep===0 ? (
+              <text key={d} x={32+i*(barW+2)+barW/2} y={graphH+18} textAnchor="middle" fill={C.textMuted} fontSize={8}>
+                {d.slice(5).replace("-","/")}
+              </text>
+            ):null)}
+          </svg>
+        </div>
+      </div>
+
+      {/* タグ別集計 */}
+      {tagStats.length > 0 && (
+        <div style={{background:C.surface,borderRadius:10,padding:"14px 12px",marginBottom:14,border:`1px solid ${C.border}`}}>
+          <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
+            🏷 タグ別完了数
+          </div>
+          {tagStats.map(({tag,cnt})=>(
+            <div key={tag.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
+              <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
+              <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
+                <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
+              </div>
+              <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* テキストサマリー */}
+      <div style={{background:C.surface,borderRadius:10,padding:"14px 12px",border:`1px solid ${C.border}`}}>
+        <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:8}}>
+          📝 期間サマリー
+        </div>
+        <div style={{fontSize:11,color:C.textSub,lineHeight:1.8}}>
+          <div>📅 対象期間：<span style={{color:C.text,fontWeight:600}}>{from} 〜 {to}（{days.length}日間）</span></div>
+          <div>✓ 完了タスク：<span style={{color:C.success,fontWeight:700}}>{totalDone}件</span></div>
+          <div>📊 完了率：<span style={{color:C.accent,fontWeight:700}}>{doneRate}%</span>（全{totalAll}件中）</div>
+          {tagStats.length>0 && (
+            <div>🏆 最多タグ：<span style={{color:tagStats[0].tag.color,fontWeight:700}}>{tagStats[0].tag.name}</span>（{tagStats[0].cnt}件）</div>
+          )}
+          {days.length>0 && totalDone>0 && (
+            <div>⚡ 1日平均：<span style={{color:C.warn,fontWeight:700}}>{(totalDone/days.length).toFixed(1)}件/日</span></div>
+          )}
+          {totalDone===0 && (
+            <div style={{color:C.textMuted,marginTop:4}}>この期間に完了したタスクはありません。</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── ガントチャート ──────────────────────────────────────────────────
 const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
   const [vy,setVy] = useState(new Date(today).getFullYear());
@@ -1752,7 +2030,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
       <div key={task.id} style={{display:"flex",borderBottom:`1px solid ${C.border}18`,height:RH,background:ri%2===0?"transparent":"rgba(255,255,255,.01)"}}
         onMouseEnter={e=>e.currentTarget.style.background=C.surfHov+"44"}
         onMouseLeave={e=>e.currentTarget.style.background=ri%2===0?"transparent":"rgba(255,255,255,.01)"}>
-        <div style={{width:218,flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:`0 7px 0 ${leftPad}px`,borderRight:`1px solid ${C.border}`,overflow:"hidden"}}>
+        <div onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)});}} style={{width:280,flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:`0 7px 0 ${leftPad}px`,borderRight:`1px solid ${C.border}`,overflow:"hidden",cursor:"pointer"}}>
           {task._pid && <span style={{color:C.textMuted,fontSize:9,flexShrink:0}}>└</span>}
           <CB checked={task.done} onChange={()=>onToggle(task.id)} size={12} color={c}/>
           <span style={{fontSize:10,fontWeight:isParent?600:400,color:task.done?C.textMuted:C.text,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none",flex:1}}>{task.title}</span>
@@ -1811,7 +2089,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
         {/* 親タグヘッダー */}
         {tagId !== "__none__" && (
           <div style={{display:"flex",background:`${gc}0a`,borderTop:`2px solid ${gc}44`,borderBottom:`1px solid ${gc}30`}}>
-            <div style={{width:218,flexShrink:0,padding:"4px 10px",display:"flex",alignItems:"center",gap:5,borderRight:`1px solid ${C.border}`}}>
+            <div style={{width:280,flexShrink:0,padding:"4px 10px",display:"flex",alignItems:"center",gap:5,borderRight:`1px solid ${C.border}`}}>
               <div style={{width:8,height:8,borderRadius:"50%",background:gc,boxShadow:`0 0 6px ${gc}88`,flexShrink:0}}/>
               <span style={{fontSize:11,fontWeight:700,color:gc}}>{tag?.name}</span>
               <span style={{fontSize:8,color:C.textMuted,marginLeft:"auto"}}>{gTasks.length}</span>
@@ -1829,7 +2107,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
               <div key={ctid}>
                 {ctid !== "__none__" && ctag && (
                   <div style={{display:"flex",background:`${ctag.color}08`,borderTop:`1px solid ${ctag.color}33`,borderBottom:`1px solid ${ctag.color}22`}}>
-                    <div style={{width:218,flexShrink:0,padding:"3px 10px 3px 20px",display:"flex",alignItems:"center",gap:6,borderRight:`1px solid ${C.border}`}}>
+                    <div style={{width:280,flexShrink:0,padding:"3px 10px 3px 20px",display:"flex",alignItems:"center",gap:6,borderRight:`1px solid ${C.border}`}}>
                       <span style={{color:C.textMuted,fontSize:9}}>└</span>
                       <Pill tag={ctag}/>
                       <span style={{fontSize:8,color:C.textMuted,marginLeft:"auto"}}>{ctTasks.length}</span>
@@ -1857,10 +2135,10 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
         <span style={{fontSize:9,color:C.textMuted}}>バー=開始〜終了 / 🔴=締切 / ドラッグ移動・右端で期間変更</span>
       </div>
       <div style={{overflowX:"auto",borderRadius:10,border:`1px solid ${C.border}`,background:C.surface}}>
-        <div style={{minWidth:D*DW+218}}>
+        <div style={{minWidth:D*DW+280}}>
           {/* ヘッダー */}
           <div style={{display:"flex",borderBottom:`2px solid ${C.border}`,background:C.bgSub,position:"sticky",top:0,zIndex:10}}>
-            <div style={{width:218,flexShrink:0,padding:"6px 10px",fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",borderRight:`1px solid ${C.border}`,display:"flex",alignItems:"center"}}>タスク名</div>
+            <div style={{width:280,flexShrink:0,padding:"6px 10px",fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",borderRight:`1px solid ${C.border}`,display:"flex",alignItems:"center"}}>タスク名</div>
             <div style={{display:"flex"}}>
               {Array.from({length:D},(_,i) => {
                 const n=i+1, dStr=ds(n), dt=new Date(vy,vm,n);
@@ -2309,6 +2587,7 @@ export default function App() {
     {id:"gantt",    label:"ガント",       icon:"📊"},
     {id:"templates",label:"テンプレート", icon:"📋"},
     {id:"tagmgr",   label:"タグ管理",     icon:"🏷"},
+    {id:"report",    label:"レポート",     icon:"📈"},
   ];
   const ptags     = tags.filter(t=>!t.parentId&&!t.archived);
   const showLater = ["day","week","gantt"].includes(view);
@@ -2325,7 +2604,7 @@ export default function App() {
           <div style={{padding:`10px ${sideOpen?12:5}px 9px`,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4,flexShrink:0}}>
             {sideOpen && <div style={{minWidth:0,flex:1}}>
               <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,whiteSpace:"nowrap",letterSpacing:-.5}}>
-                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>◈ Focal</span>
+                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>◈ Slate</span>
               </div>
               <div style={{fontSize:8,color:C.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
               {saving && <div style={{fontSize:8,color:C.success,marginTop:1}}>💾 保存中...</div>}
@@ -2391,6 +2670,7 @@ export default function App() {
             {view==="day"       && <DayView  tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view==="week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view==="gantt"     && <GanttView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="report"    && <ReportView tasks={tasks} tags={tags}/>}
             {view==="templates" && <TemplatesView templates={templates} setTemplates={setTemplates} onUse={handleUseTemplate} tags={tags}/>}
             {view==="tagmgr"    && <TagsView tags={tags} setTags={setTags}/>}
           </div>
