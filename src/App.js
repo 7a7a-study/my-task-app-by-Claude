@@ -285,6 +285,7 @@ const toggleMemo = (memo, idx) => {
 
 // グローバルCSS
 const G = `
+html,body{margin:0;padding:0;}
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=DM+Sans:wght@500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#28304e;color:#eef2ff;font-family:'Noto Sans JP',sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
@@ -608,7 +609,7 @@ const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
   const later = flatten(tasks).filter(t => t.isLater || isLaterTask(t));
   const [open, setOpen] = useState(true);
   return (
-    <div style={{width:open?220:28,flexShrink:0,background:C.surface,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .2s"}}>
+    <div style={{width:open?300:28,flexShrink:0,background:C.surface,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .2s"}}>
       <div style={{padding:"8px 8px 4px",flexShrink:0,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",minWidth:0}}>
         {open ? (
           <>
@@ -1086,7 +1087,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
   const [swiping, setSwiping]     = useState(false);
   const touchStartX = useRef(null);
-  const SWIPE_OPEN = -132; // アクション表示時のオフセット（4btn×28 + 3gap×2 + padding）
+  const SWIPE_OPEN = -108; // アクション表示時のオフセット
 
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
@@ -1099,18 +1100,14 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
 
   const onTouchStart = e => {
     touchStartX.current = e.touches[0].clientX;
-    setSwiping(false); // moveが来てからswiping=trueにする
+    setSwiping(true);
   };
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
-    const dx = e.touches[0].clientX - touchStartX.current;
-    if (!swiping && Math.abs(dx) < 6) return; // タップ判定: 6px未満は無視
-    setSwiping(true);
-    const baseX = isOpen ? SWIPE_OPEN : 0;
-    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, baseX + dx)));
+    const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
+    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx)));
   };
   const onTouchEnd = () => {
-    if (!swiping) { touchStartX.current = null; return; } // タップはスワイプ処理しない
     setSwiping(false);
     setSwipeX(swipeX < SWIPE_OPEN/2 ? SWIPE_OPEN : 0);
     touchStartX.current = null;
@@ -1120,7 +1117,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
       {/* スワイプアクションボタン（背面・モバイルのみ） */}
-      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:8,paddingLeft:6,background:C.bgSub,zIndex:0}}>
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button title="複製"  onClick={()=>{onDuplicate(task);closeSwipe();}} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button title="編集"  onClick={()=>{onEdit(task);closeSwipe();}} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
@@ -1343,8 +1340,8 @@ const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,o
 
 // ── 日ビュー ────────────────────────────────────────────────────────
 const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
-  const DAY_START = 0;
-  const DAY_END   = 24;
+  const DAY_START = 6;
+  const DAY_END   = 23;
   const PPM       = 0.85;  // pixel per minute（週ビューに統一）
   const HH        = 60 * PPM;
   const [popup, setPopup]   = useState(null);
@@ -1425,8 +1422,8 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
 
   return (
     <div>
-      {/* 日付ナビゲーション */}
-      <div style={{background:C.bg,paddingBottom:4,marginBottom:0}}>
+      {/* 日付ナビゲーション（固定） */}
+      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:4,marginBottom:0}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setDayOffset(o=>o-1)}
           style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
@@ -1447,7 +1444,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           ›
         </button>
       </div>
-      </div>
+      </div>{/* /sticky nav */}
       {/* ★ 時間未定タスクを最上部に表示 */}
       {untimed.length>0 && (
         <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:8}}>
@@ -1474,7 +1471,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
         {/* 時刻ラベル */}
         <div style={{position:"relative",height:totalH}}>
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
-            <div key={i} style={{position:"absolute",top:i*HH-6,right:4,fontSize:9,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1,width:32,textAlign:"right"}}>
+            <div key={i} style={{position:"absolute",top:i===0?2:i*HH-6,right:4,fontSize:9,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1,width:32,textAlign:"right"}}>
               {DAY_START+i}
             </div>
           ))}
@@ -1600,7 +1597,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
             ›
           </button>
         </div>
-        {/* 日付ヘッダー行（横スクロールに合わせてautoで横伸び） */}
+        {/* 日付ヘッダー行 */}
         <div style={{overflowX:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
             <div/>
@@ -1656,13 +1653,11 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
         {/* タイムライングリッド */}
         <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
-          {/* 時刻ラベル */}
           <div style={{position:"relative",height:totalH}}>
             {Array.from({length:DAY_END-DAY_START},(_,i) => (
-              <div key={i} style={{position:"absolute",top:i*HH-6,right:3,fontSize:8,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1}}>{DAY_START+i}</div>
+              <div key={i} style={{position:"absolute",top:i===0?2:i*HH-6,right:3,fontSize:8,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1}}>{DAY_START+i}</div>
             ))}
           </div>
-          {/* 各日カラム */}
           {wd.map(d => {
             const dayTasks = getDay(d).filter(t => !!t.startTime);
             const isSat=new Date(d).getDay()===6, isR=isRed(d);
@@ -1690,13 +1685,11 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                   const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));
                   onAdd(d,h);
                 }}>
-                {/* グリッド */}
                 {Array.from({length:DAY_END-DAY_START},(_,i) => (
                   <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}18`}}>
                     <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:`${C.border}08`}}/>
                   </div>
                 ))}
-                {/* タスクチップ */}
                 {dayTasks.map(t => {
                   const c  = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
                   const sm = t2m(t.startTime)||0;
@@ -1712,13 +1705,11 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
       {popup && <Popup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
-};
 
 
 // ── レポートビュー ────────────────────────────────────────────────────
 const ReportView = ({tasks, tags}) => {
   const [period, setPeriod] = useState("week");   // week/month/3month/year/custom
-  const [tagExpanded, setTagExpanded] = useState({}); // タグ別タスク一覧の開閉状態
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo]   = useState("");
   const [chartType, setChartType] = useState("bar"); // bar/line
@@ -1908,37 +1899,16 @@ const ReportView = ({tasks, tags}) => {
           <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
             🏷 タグ別完了数
           </div>
-          {tagStats.map(({tag,cnt})=>{
-            const isOpen = tagExpanded[tag.id];
-            const tagTasks = doneTasks.filter(t => t.tags?.includes(tag.id));
-            return (
-              <div key={tag.id} style={{marginBottom:8}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}
-                  onClick={()=>setTagExpanded(p=>({...p,[tag.id]:!p[tag.id]}))}>
-                  <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
-                  <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
-                  <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
-                    <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
-                  </div>
-                  <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
-                  <span style={{fontSize:9,color:C.textMuted,marginLeft:2}}>{isOpen?"▲":"▼"}</span>
-                </div>
-                {isOpen && (
-                  <div style={{marginTop:5,marginLeft:15,borderLeft:`2px solid ${tag.color}44`,paddingLeft:8}}>
-                    {tagTasks.map(t => (
-                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",borderRadius:4,marginBottom:2,background:C.bgSub}}>
-                        <span style={{fontSize:10,color:C.success,flexShrink:0}}>✓</span>
-                        <span style={{fontSize:10,color:C.textSub,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
-                        {(t.deadlineDate||t.startDate) && (
-                          <span style={{fontSize:8,color:C.textMuted,flexShrink:0}}>{fd(t.deadlineDate||t.startDate)}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+          {tagStats.map(({tag,cnt})=>(
+            <div key={tag.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
+              <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
+              <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
+                <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
               </div>
-            );
-          })}
+              <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -2692,8 +2662,8 @@ export default function App() {
         </div>
 
         {/* メイン */}
-        <div style={{marginLeft:sideOpen?200:42,flex:1,display:"flex",minHeight:"100vh",transition:"margin .2s",overflow:"hidden"}}>
-          <div style={{flex:1,padding:"13px 17px",minWidth:0,overflowX:"hidden",overflowY:"auto",position:"relative"}}>
+        <div style={{marginLeft:sideOpen?200:42,flex:1,display:"flex",flexDirection:"column",transition:"margin .2s"}}>
+          <div style={{flex:1,padding:"13px 17px",minWidth:0,minHeight:"100vh"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
               <div>
                 <h1 style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:17,letterSpacing:-.4,lineHeight:1.2}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1>
@@ -2717,6 +2687,7 @@ export default function App() {
         onSave={handleSave} defDate={defDate} defTime={defTime}
         onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefDate(null);setDefTime(null);}}/>}
       {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={()=>setShowNotifModal(false)}/>}
+    </div>
     </>
   );
 }
