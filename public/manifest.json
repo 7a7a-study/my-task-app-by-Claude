@@ -1,6 +1,6 @@
 {
-  "name": "Focal",
-  "short_name": "Focal",
+  "name": "Slate",
+  "short_name": "Slate",
   "description": "集中するためのタスク管理",
   "start_url": "/",
   "display": "standalone",
