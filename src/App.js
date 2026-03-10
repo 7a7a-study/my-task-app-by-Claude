@@ -465,7 +465,7 @@ const Login = ({onLogin,loading}) => (
     <div style={{textAlign:"center",padding:36}}>
       <div style={{width:62,height:62,borderRadius:18,background:`linear-gradient(135deg,${C.accent},#bbccff)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:26}}>✅</div>
       <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,marginBottom:4}}>
-        <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>マイタスク</span>
+        <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>Focal</span>
       </div>
       <div style={{color:C.textMuted,marginBottom:26,fontSize:12}}>あなただけのタスク管理</div>
       <button onClick={onLogin} disabled={loading}
@@ -1145,6 +1145,64 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
   const later   = filtered.filter(t => t.isLater||isLaterTask(t));
   const habits  = filtered.filter(t => !(t.isLater||isLaterTask(t)) && t.repeat && parseRepeat(t.repeat).type !== "なし");
   const regular = filtered.filter(t => !(t.isLater||isLaterTask(t)) && (!t.repeat || parseRepeat(t.repeat).type === "なし"));
+
+  // タググループ順：親タグ→その子タグでグループ化
+  const TagGroupView = ({items}) => {
+    if (items.length === 0) return null;
+    const parentTags = tags.filter(t => !t.parentId && !t.archived);
+    const noTagItems = items.filter(t => !t.tags?.length);
+    return (
+      <div>
+        {parentTags.map(pt => {
+          const childTags = tags.filter(ct => ct.parentId === pt.id && !ct.archived);
+          // この親タグに直接紐付くタスク（子タグなし）
+          const directItems = items.filter(t => t.tags?.includes(pt.id) && !childTags.some(ct => t.tags?.includes(ct.id)));
+          // 子タグごとのタスク
+          const childGroups = childTags.map(ct => ({
+            tag: ct,
+            items: items.filter(t => t.tags?.includes(ct.id))
+          })).filter(g => g.items.length > 0);
+          if (directItems.length === 0 && childGroups.length === 0) return null;
+          return (
+            <div key={pt.id} style={{marginBottom:14}}>
+              {/* 親タグヘッダー */}
+              <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5,padding:"3px 0",borderBottom:`1px solid ${pt.color}33`}}>
+                <div style={{width:9,height:9,borderRadius:2,background:pt.color,flexShrink:0}}/>
+                <span style={{fontSize:11,fontWeight:700,color:pt.color}}>{pt.name}</span>
+                <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>
+                  {directItems.length + childGroups.reduce((s,g)=>s+g.items.length,0)}
+                </span>
+              </div>
+              {/* 直接タスク */}
+              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+              {/* 子タググループ */}
+              {childGroups.map(({tag:ct, items:ci}) => (
+                <div key={ct.id} style={{marginLeft:12,marginBottom:6}}>
+                  <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
+                    <div style={{width:6,height:6,borderRadius:1.5,background:ct.color,flexShrink:0}}/>
+                    <span style={{fontSize:9,fontWeight:700,color:ct.color}}>{ct.name}</span>
+                    <span style={{fontSize:8,color:C.textMuted}}>{ci.length}</span>
+                  </div>
+                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+        {noTagItems.length > 0 && (
+          <div style={{marginBottom:14}}>
+            <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
+              <span style={{fontSize:10,color:C.textMuted}}>🏷</span>
+              <span style={{fontSize:10,fontWeight:700,color:C.textMuted}}>タグなし</span>
+              <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>{noTagItems.length}</span>
+            </div>
+            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const Sec = ({title,items,color,icon}) => items.length===0 ? null : (
     <div style={{marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
@@ -1152,7 +1210,10 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
         <span style={{fontSize:10,fontWeight:700,color,textTransform:"uppercase",letterSpacing:.6}}>{title}</span>
         <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>{items.length}</span>
       </div>
-      {items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+      {sortOrder==="タググループ順"
+        ? <TagGroupView items={items}/>
+        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)
+      }
     </div>
   );
   // PCか判定（768px以上）
@@ -1181,8 +1242,8 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
             {regular.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
           </div>
           <div>
-            <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
             <Sec title="あとでやる"     items={later}  color={C.warn}   icon="📌"/>
+            <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
             {habits.length===0 && later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>習慣・あとでやるなし</div>}
           </div>
         </div>
@@ -1194,9 +1255,9 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
   return (
     <div>
       {sortBar}
-      <Sec title="習慣・繰り返し" items={habits}  color={C.success} icon="🔄"/>
       <Sec title="タスク"         items={regular} color={C.accent}  icon="📋"/>
       <Sec title="あとでやる"     items={later}   color={C.warn}    icon="📌"/>
+      <Sec title="習慣・繰り返し" items={habits}  color={C.success} icon="🔄"/>
       {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
     </div>
   );
@@ -2075,10 +2136,15 @@ export default function App() {
   useEffect(() => { const y=new Date().getFullYear(); fetchHolidays(y); fetchHolidays(y+1); }, []);
   // Service Worker登録（PWA + バックグラウンド通知）
   useEffect(() => { registerSW(); }, []);
-  // 通知スケジュール（タスク or 設定が変わるたびに再スケジュール）
+  // 通知スケジュール：日時・完了状態・通知設定変更時のみ再登録（メモ変更等は無視）
+  const notifHash = useMemo(() =>
+    flatten(tasks).map(t =>
+      `${t.id}:${t.done}:${t.startDate||""}:${t.startTime||""}:${t.deadlineDate||""}:${t.deadlineTime||""}:${t.notifyStart??0}:${t.notifyDeadline??""}`
+    ).join("|"),
+  [tasks]);
   useEffect(() => {
     scheduleNotifications(tasks, notifSettings);
-  }, [tasks, notifSettings]);
+  }, [notifHash, notifSettings]);
   // tasksとnotifSettingsをrefで追跡（stale closure防止）
   const tasksRef = useRef(tasks);
   const notifRef = useRef(notifSettings);
@@ -2259,7 +2325,7 @@ export default function App() {
           <div style={{padding:`10px ${sideOpen?12:5}px 9px`,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4,flexShrink:0}}>
             {sideOpen && <div style={{minWidth:0,flex:1}}>
               <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,whiteSpace:"nowrap",letterSpacing:-.5}}>
-                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>◈ マイタスク</span>
+                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>◈ Focal</span>
               </div>
               <div style={{fontSize:8,color:C.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
               {saving && <div style={{fontSize:8,color:C.success,marginTop:1}}>💾 保存中...</div>}
