@@ -1086,7 +1086,10 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
   const [swiping, setSwiping]     = useState(false);
   const touchStartX = useRef(null);
-  const SWIPE_OPEN = -108; // アクション表示時のオフセット
+  const SWIPE_OPEN = -120; // アクション表示時のオフセット（余白確保）
+
+  // 完了タスクのときはスワイプをリセット
+  useEffect(() => { if (task.done) setSwipeX(0); }, [task.done]);
 
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
@@ -1098,15 +1101,17 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const isOpen = swipeX <= SWIPE_OPEN / 2;
 
   const onTouchStart = e => {
+    if (task.done) return;
     touchStartX.current = e.touches[0].clientX;
     setSwiping(true);
   };
   const onTouchMove = e => {
-    if (touchStartX.current === null) return;
+    if (touchStartX.current === null || task.done) return;
     const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
     setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx)));
   };
   const onTouchEnd = () => {
+    if (task.done) return;
     setSwiping(false);
     setSwipeX(swipeX < SWIPE_OPEN/2 ? SWIPE_OPEN : 0);
     touchStartX.current = null;
@@ -1116,7 +1121,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
       {/* スワイプアクションボタン（背面・モバイルのみ） */}
-      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,paddingLeft:4,background:C.bgSub,zIndex:0,visibility:task.done?"hidden":"visible"}}>
         <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button title="複製"  onClick={()=>{onDuplicate(task);closeSwipe();}} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button title="編集"  onClick={()=>{onEdit(task);closeSwipe();}} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
@@ -1277,6 +1282,15 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
 
   if (isPC) {
     // PC: 2カラムレイアウト（左=習慣+あとでやる、右=通常タスク）
+    if (sortOrder === "タググループ順") {
+      return (
+        <div>
+          {sortBar}
+          <TagGroupView items={filtered}/>
+          {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
+        </div>
+      );
+    }
     return (
       <div>
         {sortBar}
@@ -1291,6 +1305,16 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
             {habits.length===0 && later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>習慣・あとでやるなし</div>}
           </div>
         </div>
+        {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
+      </div>
+    );
+  }
+
+  if (sortOrder === "タググループ順") {
+    return (
+      <div>
+        {sortBar}
+        <TagGroupView items={filtered}/>
         {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
       </div>
     );
@@ -1421,7 +1445,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
 
   return (
     <div>
-      {/* 日付ナビゲーション（固定） */}
+      {/* 日付ナビゲーション＋未定タスク（全体をstickyに） */}
       <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:4,marginBottom:0}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setDayOffset(o=>o-1)}
@@ -1443,10 +1467,9 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           ›
         </button>
       </div>
-      </div>{/* /sticky nav */}
-      {/* ★ 時間未定タスクを最上部に表示 */}
+      {/* ★ 時間未定タスク（sticky内に統合） */}
       {untimed.length>0 && (
-        <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:8}}>
+        <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:4}}>
           <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
           {untimed.map(t => {
             const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
@@ -1464,6 +1487,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           })}
         </div>
       )}
+      </div>{/* /sticky nav */}
 
       {/* ★ タイムライン本体：absoluteで高さをまたがる */}
       <div style={{display:"grid",gridTemplateColumns:"40px 1fr"}}>
@@ -1596,13 +1620,28 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           ›
         </button>
       </div>
+      {/* 日付ヘッダー（sticky内に統合） */}
+      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
+        <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
+          <div/>
+          {wd.map((d,i) => {
+            const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
+            const hName = holName(d);
+            return (
+              <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
+                <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
+                <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
+              </div>
+            );
+          })}
+        </div>
       </div>{/* /sticky nav */}
-      {/* ★ 週ビュー時間未定タスク（最上部） */}
+      {/* ★ 週ビュー時間未定タスク（日付ヘッダーの下） */}
       {(() => {
         const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
         if (!rows.some(r=>r.ts.length>0)) return null;
         return (
-          <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.surface,borderRadius:"8px 8px 0 0",border:`1px solid ${C.border}`}}>
+          <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.surface,border:`1px solid ${C.border}`}}>
             <div style={{fontSize:7,color:C.textMuted,padding:"6px 3px 4px",textAlign:"right",borderRight:`1px solid ${C.border}20`}}>未定</div>
             {rows.map(({d,ts}) => {
               const isSat=new Date(d).getDay()===6, isR=isRed(d);
@@ -1618,7 +1657,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                           onDragEnd={()=>setDragTask(null)}
                           onClick={e=>hp(e,t)}
                           style={{display:"flex",alignItems:"center",gap:3,flex:1,minWidth:0,cursor:"grab"}}>
-                          <div onClick={e=>{e.stopPropagation();hToggle(t.id,date);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                          <div onClick={e=>{e.stopPropagation();hToggle(t.id,d);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
                           <span style={{fontSize:8,fontWeight:600,color:t.done?C.textMuted:c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
                         </div>
                       </div>
@@ -1632,18 +1671,8 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
       })()}
 
       <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
-        {/* ヘッダー */}
-        <div/>
-        {wd.map((d,i) => {
-          const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
-          const hName = holName(d);
-          return (
-            <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
-              <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
-              <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
-            </div>
-          );
-        })}
+        {/* ダミー（日付ヘッダーはstickyに移動済み） */}
+        <div/>{wd.map(d=><div key={d}/>)}
         {/* 時刻ラベル */}
         <div style={{position:"relative",height:totalH}}>
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
