@@ -1903,7 +1903,8 @@ const ReportView = ({tasks, tags}) => {
       </div>
 
       {/* タグ別集計 */}
-      {tagStats.length > 0 && (\n        <div style={{background:C.surface,borderRadius:10,padding:"14px 12px",marginBottom:14,border:`1px solid ${C.border}`}}>
+      {tagStats.length > 0 && (
+        <div style={{background:C.surface,borderRadius:10,padding:"14px 12px",marginBottom:14,border:`1px solid ${C.border}`}}>
           <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
             🏷 タグ別完了数
           </div>
