@@ -1719,6 +1719,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
       {popup && <Popup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
+};
 
 
 // ── レポートビュー ────────────────────────────────────────────────────
