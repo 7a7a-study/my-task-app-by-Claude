@@ -285,7 +285,6 @@ const toggleMemo = (memo, idx) => {
 
 // グローバルCSS
 const G = `
-html,body{margin:0;padding:0;}
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=DM+Sans:wght@500;600;700&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 body{background:#28304e;color:#eef2ff;font-family:'Noto Sans JP',sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
@@ -379,7 +378,7 @@ const NOTIFY_OPTIONS = [
   { value: 1440, label: "24時間前" },
 ];
 
-const NotificationModal = ({settings, onSave, onClose, paused, pausedAt, resumeAt}) => {
+const NotificationModal = ({settings, onSave, onClose}) => {
   const [enabled, setEnabled]       = useState(settings?.enabled ?? false);
   const [minutes, setMinutes]       = useState(settings?.minutesBefore ?? 60);
   const [permission, setPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "default");
@@ -405,17 +404,6 @@ const NotificationModal = ({settings, onSave, onClose, paused, pausedAt, resumeA
 
   return (
     <Modal title="🔔 通知設定" onClose={onClose}>
-      {paused && (
-        <div style={{background:C.warnS,border:`1px solid ${C.warn}44`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.warn,marginBottom:4}}>⏸ 通知機能を一時停止中</div>
-          <div style={{fontSize:10,color:C.textSub,lineHeight:1.6}}>
-            月間の無料枠（150万回）に達したため、通知のバックグラウンド処理を自動停止しています。<br/>
-            {resumeAt ? `${resumeAt.toLocaleDateString("ja-JP",{month:"long",day:"numeric"})}（翌月初）に自動復旧します。` : "翌月初に自動復旧します。"}<br/>
-            タスクの追加・編集・完了には影響ありません。
-          </div>
-          {pausedAt && <div style={{fontSize:9,color:C.textMuted,marginTop:4}}>停止日時: {pausedAt.toLocaleString("ja-JP")}</div>}
-        </div>
-      )}
       <div style={{background:C.bg,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:C.text}}>ブラウザ通知</div>
@@ -477,7 +465,7 @@ const NotificationModal = ({settings, onSave, onClose, paused, pausedAt, resumeA
 const Login = ({onLogin,loading}) => (
   <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
     <div style={{textAlign:"center",padding:36}}>
-      <div style={{width:62,height:62,borderRadius:18,background:`linear-gradient(135deg,${C.accent},#bbccff)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:26}}>✅</div>
+      <div style={{width:72,height:72,borderRadius:18,overflow:"hidden",margin:"0 auto 14px",boxShadow:"0 4px 20px rgba(126,184,255,.25)"}}><img src="/logo192.png" alt="Slate" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
       <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,marginBottom:4}}>
         <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>Slate</span>
       </div>
@@ -620,7 +608,7 @@ const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
   const later = flatten(tasks).filter(t => t.isLater || isLaterTask(t));
   const [open, setOpen] = useState(true);
   return (
-    <div style={{width:open?300:28,flexShrink:0,background:C.surface,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .2s"}}>
+    <div style={{width:open?168:28,flexShrink:0,background:C.surface,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .2s"}}>
       <div style={{padding:"8px 8px 4px",flexShrink:0,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",minWidth:0}}>
         {open ? (
           <>
@@ -1098,7 +1086,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
   const [swiping, setSwiping]     = useState(false);
   const touchStartX = useRef(null);
-  const SWIPE_OPEN = -132; // アクション表示時のオフセット
+  const SWIPE_OPEN = -108; // アクション表示時のオフセット
 
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
@@ -1111,18 +1099,14 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
 
   const onTouchStart = e => {
     touchStartX.current = e.touches[0].clientX;
-    setSwiping(false);
+    setSwiping(true);
   };
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
-    const dx = e.touches[0].clientX - touchStartX.current;
-    if (!swiping && Math.abs(dx) < 6) return;
-    setSwiping(true);
-    const baseX = isOpen ? SWIPE_OPEN : 0;
-    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, baseX + dx)));
+    const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
+    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx)));
   };
   const onTouchEnd = () => {
-    if (!swiping) { touchStartX.current = null; return; }
     setSwiping(false);
     setSwipeX(swipeX < SWIPE_OPEN/2 ? SWIPE_OPEN : 0);
     touchStartX.current = null;
@@ -1355,8 +1339,8 @@ const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,o
 
 // ── 日ビュー ────────────────────────────────────────────────────────
 const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
-  const DAY_START = 0;
-  const DAY_END   = 24;
+  const DAY_START = 6;
+  const DAY_END   = 23;
   const PPM       = 0.85;  // pixel per minute（週ビューに統一）
   const HH        = 60 * PPM;
   const [popup, setPopup]   = useState(null);
@@ -1486,7 +1470,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
         {/* 時刻ラベル */}
         <div style={{position:"relative",height:totalH}}>
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
-            <div key={i} style={{position:"absolute",top:i===0?2:i*HH-6,right:4,fontSize:9,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1,width:32,textAlign:"right"}}>
+            <div key={i} style={{position:"absolute",top:i*HH-6,right:4,fontSize:9,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1,width:32,textAlign:"right"}}>
               {DAY_START+i}
             </div>
           ))}
@@ -1532,8 +1516,8 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
 
 // ── 週ビュー ────────────────────────────────────────────────────────
 const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
-  const DAY_START = 0;
-  const DAY_END   = 24;
+  const DAY_START = 6;
+  const DAY_END   = 23;
   const PPM       = 0.85;
   const HH        = 60 * PPM;
   const [weekOffset, setWeekOffset] = useState(0); // 0=今週, -1=先週, +1=来週
@@ -1589,132 +1573,128 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
   const weekLabel = `${wd[0].slice(5).replace("-","/")} 〜 ${wd[6].slice(5).replace("-","/")}`;
 
   return (
-    <div>
-      {/* 週ナビ＋日付ヘッダー（sticky） */}
-      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:0}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:6,padding:"5px 0"}}>
-          <button onClick={()=>setWeekOffset(o=>o-1)}
-            style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            ‹
-          </button>
-          <div style={{minWidth:140,textAlign:"center"}}>
-            <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif"}}>{weekLabel}</div>
-            {!isCurrentWeek && (
-              <button onClick={()=>setWeekOffset(0)}
-                style={{fontSize:9,color:C.accent,background:C.accentS,border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 8px",cursor:"pointer",marginTop:2}}>
-                今週に戻る
-              </button>
-            )}
-            {isCurrentWeek && <div style={{fontSize:9,color:C.accent,marginTop:1}}>今週</div>}
-          </div>
-          <button onClick={()=>setWeekOffset(o=>o+1)}
-            style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
-            ›
-          </button>
+    <div style={{overflowX:"auto"}}>
+      {/* 週ナビゲーション（固定） */}
+      <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
+        <button onClick={()=>setWeekOffset(o=>o-1)}
+          style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ‹
+        </button>
+        <div style={{minWidth:140,textAlign:"center"}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif"}}>{weekLabel}</div>
+          {!isCurrentWeek && (
+            <button onClick={()=>setWeekOffset(0)}
+              style={{fontSize:9,color:C.accent,background:C.accentS,border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 8px",cursor:"pointer",marginTop:2}}>
+              今週に戻る
+            </button>
+          )}
+          {isCurrentWeek && <div style={{fontSize:9,color:C.accent,marginTop:1}}>今週</div>}
         </div>
-        {/* 日付ヘッダー行（stickyに含める） */}
-        <div style={{overflowX:"hidden"}}>
-          <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
-            <div/>
-            {wd.map((d,i) => {
-              const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
-              const hName = holName(d);
+        <button onClick={()=>setWeekOffset(o=>o+1)}
+          style={{background:C.surfHov,color:C.text,border:`1px solid ${C.border}`,borderRadius:8,width:32,height:32,fontSize:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+          ›
+        </button>
+      </div>
+      </div>{/* /sticky nav */}
+      {/* ★ 週ビュー時間未定タスク（最上部） */}
+      {(() => {
+        const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
+        if (!rows.some(r=>r.ts.length>0)) return null;
+        return (
+          <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.surface,borderRadius:"8px 8px 0 0",border:`1px solid ${C.border}`}}>
+            <div style={{fontSize:7,color:C.textMuted,padding:"6px 3px 4px",textAlign:"right",borderRight:`1px solid ${C.border}20`}}>未定</div>
+            {rows.map(({d,ts}) => {
+              const isSat=new Date(d).getDay()===6, isR=isRed(d);
               return (
-                <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
-                  <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
-                  <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
+                <div key={d} style={{padding:"3px 2px",minHeight:22,borderLeft:`1px solid ${C.border}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}>
+                  {ts.map(t => {
+                    const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+                    return (
+                      <div key={t.id}
+                        style={{display:"flex",alignItems:"center",gap:3,padding:"2px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0",overflow:"hidden"}}>
+                        <div draggable className="drag"
+                          onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);e.stopPropagation();}}
+                          onDragEnd={()=>setDragTask(null)}
+                          onClick={e=>hp(e,t)}
+                          style={{display:"flex",alignItems:"center",gap:3,flex:1,minWidth:0,cursor:"grab"}}>
+                          <div onClick={e=>{e.stopPropagation();hToggle(t.id,date);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                          <span style={{fontSize:8,fontWeight:600,color:t.done?C.textMuted:c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               );
             })}
           </div>
-        </div>
-      </div>
+        );
+      })()}
 
-      {/* 横スクロールエリア（未定タスク＋タイムライン） */}
-      <div style={{overflowX:"auto"}}>
-        {/* 未定タスク */}
-        {(() => {
-          const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
-          if (!rows.some(r=>r.ts.length>0)) return null;
+      <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
+        {/* ヘッダー */}
+        <div/>
+        {wd.map((d,i) => {
+          const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
+          const hName = holName(d);
           return (
-            <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.surface,border:`1px solid ${C.border}`}}>
-              <div style={{fontSize:7,color:C.textMuted,padding:"6px 3px 4px",textAlign:"right",borderRight:`1px solid ${C.border}20`}}>未定</div>
-              {rows.map(({d,ts}) => {
-                const isSat=new Date(d).getDay()===6, isR=isRed(d);
-                return (
-                  <div key={d} style={{padding:"3px 2px",minHeight:22,borderLeft:`1px solid ${C.border}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}>
-                    {ts.map(t => {
-                      const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-                      return (
-                        <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:3,padding:"2px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0"}}>
-                          <div draggable className="drag"
-                            onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);e.stopPropagation();}}
-                            onDragEnd={()=>setDragTask(null)}
-                            onClick={e=>hp(e,t)}
-                            style={{display:"flex",alignItems:"flex-start",gap:3,flex:1,minWidth:0,cursor:"grab"}}>
-                            <div onClick={e=>{e.stopPropagation();hToggle(t.id,d);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer",marginTop:1}}/>
-                            <span style={{fontSize:8,fontWeight:600,color:t.done?C.textMuted:c,wordBreak:"break-word",textDecoration:t.done?"line-through":"none",lineHeight:1.3}}>{t.title}</span>
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                );
+            <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
+              <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
+              <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
+            </div>
+          );
+        })}
+        {/* 時刻ラベル */}
+        <div style={{position:"relative",height:totalH}}>
+          {Array.from({length:DAY_END-DAY_START},(_,i) => (
+            <div key={i} style={{position:"absolute",top:i*HH-6,right:3,fontSize:8,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1}}>{DAY_START+i}</div>
+          ))}
+        </div>
+        {/* 各日カラム */}
+        {wd.map(d => {
+          const dayTasks = getDay(d).filter(t => !!t.startTime);
+          const isSat=new Date(d).getDay()===6, isR=isRed(d);
+          return (
+            <div key={d} style={{position:"relative",height:totalH,borderLeft:`1px solid ${C.border}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}
+              onDragOver={e=>e.preventDefault()}
+              onDrop={e=>{
+                e.preventDefault();
+                const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
+                const task=tid?all.find(x=>x.id===tid)||dragTask:dragTask;
+                if (!task) return;
+                const rect=e.currentTarget.getBoundingClientRect();
+                const relY=e.clientY-rect.top;
+                const totalMin=Math.floor(relY/PPM)+DAY_START*60;
+                const snapped=Math.round(totalMin/15)*15;
+                const clampMin=Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped));
+                const hh=Math.floor(clampMin/60), mm=clampMin%60;
+                const st=`${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+                onUpdate({...task,startDate:d,startTime:st,endTime:task.duration?addDur(st,Number(task.duration)):"",isLater:false});
+                setDragTask(null);
+              }}
+              onClick={e=>{
+                if (dragTask) return;
+                const rect=e.currentTarget.getBoundingClientRect();
+                const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));
+                onAdd(d,h);
+              }}>
+              {/* グリッド */}
+              {Array.from({length:DAY_END-DAY_START},(_,i) => (
+                <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}18`}}>
+                  <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:`${C.border}08`}}/>
+                </div>
+              ))}
+              {/* タスクチップ */}
+              {dayTasks.map(t => {
+                const c  = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+                const sm = t2m(t.startTime)||0;
+                const dur = Number(t.duration)||60;
+                const em = t.endTime ? t2m(t.endTime) : sm+dur;
+                return <TimelineChip key={t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={onToggle} onUpdate={onUpdate} onRSStart={onRSStart}/>;
               })}
             </div>
           );
-        })()}
-
-        {/* タイムライングリッド */}
-        <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
-          <div style={{position:"relative",height:totalH}}>
-            {Array.from({length:DAY_END-DAY_START},(_,i) => (
-              <div key={i} style={{position:"absolute",top:i===0?2:i*HH-6,right:3,fontSize:8,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1}}>{DAY_START+i}</div>
-            ))}
-          </div>
-          {wd.map(d => {
-            const dayTasks = getDay(d).filter(t => !!t.startTime);
-            const isSat=new Date(d).getDay()===6, isR=isRed(d);
-            return (
-              <div key={d} style={{position:"relative",height:totalH,borderLeft:`1px solid ${C.border}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}
-                onDragOver={e=>e.preventDefault()}
-                onDrop={e=>{
-                  e.preventDefault();
-                  const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
-                  const task=tid?all.find(x=>x.id===tid)||dragTask:dragTask;
-                  if (!task) return;
-                  const rect=e.currentTarget.getBoundingClientRect();
-                  const relY=e.clientY-rect.top;
-                  const totalMin=Math.floor(relY/PPM)+DAY_START*60;
-                  const snapped=Math.round(totalMin/15)*15;
-                  const clampMin=Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped));
-                  const hh=Math.floor(clampMin/60), mm=clampMin%60;
-                  const st=`${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
-                  onUpdate({...task,startDate:d,startTime:st,endTime:task.duration?addDur(st,Number(task.duration)):"",isLater:false});
-                  setDragTask(null);
-                }}
-                onClick={e=>{
-                  if (dragTask) return;
-                  const rect=e.currentTarget.getBoundingClientRect();
-                  const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));
-                  onAdd(d,h);
-                }}>
-                {Array.from({length:DAY_END-DAY_START},(_,i) => (
-                  <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}18`}}>
-                    <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:`${C.border}08`}}/>
-                  </div>
-                ))}
-                {dayTasks.map(t => {
-                  const c  = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-                  const sm = t2m(t.startTime)||0;
-                  const dur = Number(t.duration)||60;
-                  const em = t.endTime ? t2m(t.endTime) : sm+dur;
-                  return <TimelineChip key={t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={onToggle} onUpdate={onUpdate} onRSStart={onRSStart}/>;
-                })}
-              </div>
-            );
-          })}
-        </div>
+        })}
       </div>
       {popup && <Popup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
@@ -1724,8 +1704,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
 // ── レポートビュー ────────────────────────────────────────────────────
 const ReportView = ({tasks, tags}) => {
-  const [period, setPeriod] = useState("week");
-  const [tagExpanded, setTagExpanded] = useState({});   // week/month/3month/year/custom
+  const [period, setPeriod] = useState("week");   // week/month/3month/year/custom
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo]   = useState("");
   const [chartType, setChartType] = useState("bar"); // bar/line
@@ -1915,37 +1894,16 @@ const ReportView = ({tasks, tags}) => {
           <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
             🏷 タグ別完了数
           </div>
-          {tagStats.map(({tag,cnt})=>{
-            const isOpen = tagExpanded[tag.id];
-            const tagTasks = doneTasks.filter(t => t.tags?.includes(tag.id));
-            return (
-              <div key={tag.id} style={{marginBottom:8}}>
-                <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}
-                  onClick={()=>setTagExpanded(p=>({...p,[tag.id]:!p[tag.id]}))}>
-                  <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
-                  <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
-                  <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
-                    <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
-                  </div>
-                  <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
-                  <span style={{fontSize:9,color:C.textMuted,marginLeft:2}}>{isOpen?"▲":"▼"}</span>
-                </div>
-                {isOpen && (
-                  <div style={{marginTop:5,marginLeft:15,borderLeft:`2px solid ${tag.color}44`,paddingLeft:8}}>
-                    {tagTasks.map(t => (
-                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",borderRadius:4,marginBottom:2,background:C.bgSub}}>
-                        <span style={{fontSize:10,color:C.success,flexShrink:0}}>✓</span>
-                        <span style={{fontSize:10,color:C.textSub,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
-                        {(t.deadlineDate||t.startDate) && (
-                          <span style={{fontSize:8,color:C.textMuted,flexShrink:0}}>{fd(t.deadlineDate||t.startDate)}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                )}
+          {tagStats.map(({tag,cnt})=>(
+            <div key={tag.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+              <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
+              <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
+              <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
+                <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
               </div>
-            );
-          })}
+              <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
+            </div>
+          ))}
         </div>
       )}
 
@@ -2439,23 +2397,19 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("notifSettings")||"null") || {enabled:false,minutesBefore:60}; } catch { return {enabled:false,minutesBefore:60}; }
   });
   const setNotifSettings = s => { setNotifSettingsRaw(s); try { localStorage.setItem("notifSettings", JSON.stringify(s)); } catch {} };
-  // 無料枠監視: Firestoreのsystem/usageを購読
-  const [notifPaused, setNotifPaused] = useState(false);
-  const [notifPausedAt, setNotifPausedAt] = useState(null);
-  const [notifResumeAt, setNotifResumeAt] = useState(null);
+
+  // 認証（ALLOWEDユーザーのみセット・ループ防止）
   useEffect(() => {
-    const unsub = onSnapshot(doc(db, "system", "usage"), (snap) => {
-      if (!snap.exists()) return;
-      const d = snap.data();
-      setNotifPaused(!!d.notifPaused);
-      setNotifPausedAt(d.pausedAt?.toDate?.() || null);
-      setNotifResumeAt(d.resumeAt?.toDate?.() || null);
-    }, () => {}); // エラーは無視
+    const unsub = onAuthStateChanged(auth, u => {
+      if (u && !ALLOWED.includes(u.uid)) {
+        signOut(auth); setUser(null); // 許可外アカウントは即サインアウト
+      } else {
+        setUser(u);
+      }
+      setAuthLoading(false);
+    });
     return unsub;
   }, []);
-
-  // 認証
-  useEffect(() => { const u=onAuthStateChanged(auth,u=>{setUser(u);setAuthLoading(false);}); return u; }, []);
   // Firestore同期
   useEffect(() => {
     if (!user) return;
@@ -2516,11 +2470,25 @@ export default function App() {
   const setTemplates = tp => { setTemplatesRaw(tp); save2DB(tasks,tags,tp); };
 
   const handleLogin = async () => {
+    if (loginLoading) return; // 二重クリック防止
     setLoginLoading(true);
     try {
-      const r = await signInWithPopup(auth,provider);
-      if (!ALLOWED.includes(r.user.uid)) { await signOut(auth); alert("アクセスできません。"); }
-    } catch(e){ console.error(e); }
+      const r = await signInWithPopup(auth, provider);
+      // ALLOWEDチェックはonAuthStateChangedで行うのでここでは不要
+      // （万一通り抜けた場合の保険として残す）
+      if (!ALLOWED.includes(r.user.uid)) {
+        await signOut(auth);
+        alert("このアカウントではアクセスできません。");
+      }
+    } catch(e) {
+      if (e.code === "auth/popup-blocked") {
+        alert("ポップアップがブロックされました。\nブラウザのポップアップ許可設定を確認してください。");
+      } else if (e.code === "auth/popup-closed-by-user") {
+        // ユーザーが閉じた場合は何もしない
+      } else {
+        console.error("ログインエラー:", e.code, e.message);
+      }
+    }
     setLoginLoading(false);
   };
 
@@ -2699,36 +2667,22 @@ export default function App() {
               <CB checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={12}/>
               <span style={{fontSize:9,color:C.textMuted}}>完了を隠す</span>
             </div>
-            <button onClick={()=>setShowNotifModal(true)} style={{width:"100%",background:notifPaused?C.warnS:notifSettings?.enabled?C.accentS:"transparent",color:notifPaused?C.warn:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifPaused?C.warn:notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer",marginBottom:4,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-              {notifPaused?"⏸":""}{ notifSettings?.enabled?"🔔":"🔕"} 通知設定{notifPaused?" 停止中":""}
+            <button onClick={()=>setShowNotifModal(true)} style={{width:"100%",background:notifSettings?.enabled?C.accentS:"transparent",color:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer",marginBottom:4,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+              {notifSettings?.enabled?"🔔":"🔕"} 通知設定
             </button>
             <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer"}}
               onMouseEnter={e=>{e.currentTarget.style.background=C.dangerS;e.currentTarget.style.color=C.danger;}}
               onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.textMuted;}}>ログアウト</button>
           </div>}
           {!sideOpen && <div style={{padding:"5px 3px",borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-            <button onClick={()=>setShowNotifModal(true)} title={notifPaused?"通知停止中（無料枠上限）":"通知設定"} style={{background:notifPaused?C.warnS:notifSettings?.enabled?C.accentS:"transparent",color:notifPaused?C.warn:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifPaused?C.warn:notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:12,cursor:"pointer",width:"100%",marginBottom:3}}>{notifPaused?"⏸":notifSettings?.enabled?"🔔":"🔕"}</button>
+            <button onClick={()=>setShowNotifModal(true)} title="通知設定" style={{background:notifSettings?.enabled?C.accentS:"transparent",color:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:12,cursor:"pointer",width:"100%",marginBottom:3}}>{notifSettings?.enabled?"🔔":"🔕"}</button>
             <button onClick={()=>signOut(auth)} title="ログアウト" style={{background:"transparent",color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",fontSize:10,cursor:"pointer",width:"100%"}}>↩</button>
           </div>}
         </div>
 
         {/* メイン */}
-        <div style={{marginLeft:sideOpen?200:42,flex:1,display:"flex",transition:"margin .2s"}}>
-          <div style={{flex:1,padding:"13px 17px",minWidth:0,minHeight:"100vh"}}>
-            {/* 通知停止中バナー（画面上部・常時表示） */}
-            {notifPaused && (
-              <div style={{background:C.warnS,border:`1px solid ${C.warn}55`,borderRadius:8,padding:"8px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
-                <span style={{fontSize:14}}>⏸</span>
-                <div style={{flex:1,minWidth:200}}>
-                  <span style={{fontSize:11,fontWeight:700,color:C.warn}}>通知機能を一時停止中</span>
-                  <span style={{fontSize:10,color:C.textSub,marginLeft:8}}>
-                    無料枠の上限に達しました。タスクの追加・編集・完了には影響ありません。
-                    {notifResumeAt && ` ${notifResumeAt.toLocaleDateString("ja-JP",{month:"long",day:"numeric"})}に自動復旧します。`}
-                  </span>
-                </div>
-                <button onClick={()=>setShowNotifModal(true)} style={{background:"transparent",color:C.warn,border:`1px solid ${C.warn}55`,borderRadius:5,padding:"2px 8px",fontSize:9,cursor:"pointer"}}>詳細</button>
-              </div>
-            )}
+        <div style={{marginLeft:sideOpen?200:42,flex:1,display:"flex",minHeight:"100vh",transition:"margin .2s",overflow:"hidden"}}>
+          <div style={{flex:1,padding:"13px 17px",minWidth:0,overflowX:"auto",overflowY:"auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
               <div>
                 <h1 style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:17,letterSpacing:-.4,lineHeight:1.2}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1>
@@ -2751,7 +2705,7 @@ export default function App() {
         parentTags={addChildTo ? (flatten(tasks).find(t=>t.id===addChildTo)?.tags||[]) : null}
         onSave={handleSave} defDate={defDate} defTime={defTime}
         onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefDate(null);setDefTime(null);}}/>}
-      {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={()=>setShowNotifModal(false)} paused={notifPaused} pausedAt={notifPausedAt} resumeAt={notifResumeAt}/>}
+      {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={()=>setShowNotifModal(false)}/>}
     </>
   );
 }
