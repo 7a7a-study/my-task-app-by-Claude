@@ -478,7 +478,7 @@ const Login = ({onLogin,loading}) => (
       <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:42,marginBottom:8}}>
         <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Playfair Display',serif",letterSpacing:1}}>Slate</span>
       </div>
-      <div style={{color:C.textMuted,marginBottom:28,fontSize:14,letterSpacing:.08em}}>あなただけのタスク管理</div>
+      <div style={{color:C.textMuted,marginBottom:28,fontSize:14,letterSpacing:"0.08em"}}>あなただけのタスク管理</div>
       <button onClick={onLogin} disabled={loading}
         style={{display:"flex",alignItems:"center",gap:9,background:"#fff",color:"#333",border:"none",borderRadius:10,padding:"10px 24px",fontSize:13,fontWeight:700,cursor:"pointer",margin:"0 auto",opacity:loading?.7:1}}>
         <svg width="16" height="16" viewBox="0 0 24 24">
