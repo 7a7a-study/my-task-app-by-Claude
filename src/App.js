@@ -379,7 +379,7 @@ const NOTIFY_OPTIONS = [
   { value: 1440, label: "24時間前" },
 ];
 
-const NotificationModal = ({settings, onSave, onClose}) => {
+const NotificationModal = ({settings, onSave, onClose, paused, pausedAt, resumeAt}) => {
   const [enabled, setEnabled]       = useState(settings?.enabled ?? false);
   const [minutes, setMinutes]       = useState(settings?.minutesBefore ?? 60);
   const [permission, setPermission] = useState(typeof Notification !== "undefined" ? Notification.permission : "default");
@@ -405,6 +405,17 @@ const NotificationModal = ({settings, onSave, onClose}) => {
 
   return (
     <Modal title="🔔 通知設定" onClose={onClose}>
+      {paused && (
+        <div style={{background:C.warnS,border:`1px solid ${C.warn}44`,borderRadius:8,padding:"10px 12px",marginBottom:12}}>
+          <div style={{fontSize:12,fontWeight:700,color:C.warn,marginBottom:4}}>⏸ 通知機能を一時停止中</div>
+          <div style={{fontSize:10,color:C.textSub,lineHeight:1.6}}>
+            月間の無料枠（150万回）に達したため、通知のバックグラウンド処理を自動停止しています。<br/>
+            {resumeAt ? `${resumeAt.toLocaleDateString("ja-JP",{month:"long",day:"numeric"})}（翌月初）に自動復旧します。` : "翌月初に自動復旧します。"}<br/>
+            タスクの追加・編集・完了には影響ありません。
+          </div>
+          {pausedAt && <div style={{fontSize:9,color:C.textMuted,marginTop:4}}>停止日時: {pausedAt.toLocaleString("ja-JP")}</div>}
+        </div>
+      )}
       <div style={{background:C.bg,borderRadius:8,padding:"9px 12px",marginBottom:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
         <div>
           <div style={{fontSize:11,fontWeight:700,color:C.text}}>ブラウザ通知</div>
@@ -1087,7 +1098,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
   const [swiping, setSwiping]     = useState(false);
   const touchStartX = useRef(null);
-  const SWIPE_OPEN = -108; // アクション表示時のオフセット
+  const SWIPE_OPEN = -132; // アクション表示時のオフセット
 
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
@@ -1100,14 +1111,18 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
 
   const onTouchStart = e => {
     touchStartX.current = e.touches[0].clientX;
-    setSwiping(true);
+    setSwiping(false);
   };
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
-    const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
-    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx)));
+    const dx = e.touches[0].clientX - touchStartX.current;
+    if (!swiping && Math.abs(dx) < 6) return;
+    setSwiping(true);
+    const baseX = isOpen ? SWIPE_OPEN : 0;
+    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, baseX + dx)));
   };
   const onTouchEnd = () => {
+    if (!swiping) { touchStartX.current = null; return; }
     setSwiping(false);
     setSwipeX(swipeX < SWIPE_OPEN/2 ? SWIPE_OPEN : 0);
     touchStartX.current = null;
@@ -1340,8 +1355,8 @@ const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,o
 
 // ── 日ビュー ────────────────────────────────────────────────────────
 const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
-  const DAY_START = 6;
-  const DAY_END   = 23;
+  const DAY_START = 0;
+  const DAY_END   = 24;
   const PPM       = 0.85;  // pixel per minute（週ビューに統一）
   const HH        = 60 * PPM;
   const [popup, setPopup]   = useState(null);
@@ -1597,7 +1612,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
             ›
           </button>
         </div>
-        {/* 日付ヘッダー行 */}
+        {/* 日付ヘッダー行（stickyに含める） */}
         <div style={{overflowX:"hidden"}}>
           <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540}}>
             <div/>
@@ -1617,7 +1632,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
       {/* 横スクロールエリア（未定タスク＋タイムライン） */}
       <div style={{overflowX:"auto"}}>
-        {/* ★ 週ビュー時間未定タスク */}
+        {/* 未定タスク */}
         {(() => {
           const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
           if (!rows.some(r=>r.ts.length>0)) return null;
@@ -1631,8 +1646,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                     {ts.map(t => {
                       const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
                       return (
-                        <div key={t.id}
-                          style={{display:"flex",alignItems:"flex-start",gap:3,padding:"2px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0"}}>
+                        <div key={t.id} style={{display:"flex",alignItems:"flex-start",gap:3,padding:"2px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0"}}>
                           <div draggable className="drag"
                             onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);e.stopPropagation();}}
                             onDragEnd={()=>setDragTask(null)}
@@ -1709,7 +1723,8 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
 
 // ── レポートビュー ────────────────────────────────────────────────────
 const ReportView = ({tasks, tags}) => {
-  const [period, setPeriod] = useState("week");   // week/month/3month/year/custom
+  const [period, setPeriod] = useState("week");
+  const [tagExpanded, setTagExpanded] = useState({});   // week/month/3month/year/custom
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo]   = useState("");
   const [chartType, setChartType] = useState("bar"); // bar/line
@@ -1899,16 +1914,37 @@ const ReportView = ({tasks, tags}) => {
           <div style={{fontSize:10,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.5,marginBottom:10}}>
             🏷 タグ別完了数
           </div>
-          {tagStats.map(({tag,cnt})=>(
-            <div key={tag.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
-              <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
-              <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
-              <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
-                <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
+          {tagStats.map(({tag,cnt})=>{
+            const isOpen = tagExpanded[tag.id];
+            const tagTasks = doneTasks.filter(t => t.tags?.includes(tag.id));
+            return (
+              <div key={tag.id} style={{marginBottom:8}}>
+                <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}}
+                  onClick={()=>setTagExpanded(p=>({...p,[tag.id]:!p[tag.id]}))}>
+                  <div style={{width:7,height:7,borderRadius:2,background:tag.color,flexShrink:0}}/>
+                  <span style={{fontSize:10,color:C.textSub,minWidth:80}}>{tag.name}</span>
+                  <div style={{flex:1,background:C.bgSub,borderRadius:4,height:8,overflow:"hidden"}}>
+                    <div style={{width:`${cnt/tagStats[0].cnt*100}%`,height:"100%",background:tag.color,borderRadius:4,transition:"width .3s"}}/>
+                  </div>
+                  <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
+                  <span style={{fontSize:9,color:C.textMuted,marginLeft:2}}>{isOpen?"▲":"▼"}</span>
+                </div>
+                {isOpen && (
+                  <div style={{marginTop:5,marginLeft:15,borderLeft:`2px solid ${tag.color}44`,paddingLeft:8}}>
+                    {tagTasks.map(t => (
+                      <div key={t.id} style={{display:"flex",alignItems:"center",gap:6,padding:"3px 4px",borderRadius:4,marginBottom:2,background:C.bgSub}}>
+                        <span style={{fontSize:10,color:C.success,flexShrink:0}}>✓</span>
+                        <span style={{fontSize:10,color:C.textSub,flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{t.title}</span>
+                        {(t.deadlineDate||t.startDate) && (
+                          <span style={{fontSize:8,color:C.textMuted,flexShrink:0}}>{fd(t.deadlineDate||t.startDate)}</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
-              <span style={{fontSize:10,fontWeight:700,color:tag.color,minWidth:24,textAlign:"right"}}>{cnt}</span>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -2402,6 +2438,20 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("notifSettings")||"null") || {enabled:false,minutesBefore:60}; } catch { return {enabled:false,minutesBefore:60}; }
   });
   const setNotifSettings = s => { setNotifSettingsRaw(s); try { localStorage.setItem("notifSettings", JSON.stringify(s)); } catch {} };
+  // 無料枠監視: Firestoreのsystem/usageを購読
+  const [notifPaused, setNotifPaused] = useState(false);
+  const [notifPausedAt, setNotifPausedAt] = useState(null);
+  const [notifResumeAt, setNotifResumeAt] = useState(null);
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, "system", "usage"), (snap) => {
+      if (!snap.exists()) return;
+      const d = snap.data();
+      setNotifPaused(!!d.notifPaused);
+      setNotifPausedAt(d.pausedAt?.toDate?.() || null);
+      setNotifResumeAt(d.resumeAt?.toDate?.() || null);
+    }, () => {}); // エラーは無視
+    return unsub;
+  }, []);
 
   // 認証
   useEffect(() => { const u=onAuthStateChanged(auth,u=>{setUser(u);setAuthLoading(false);}); return u; }, []);
@@ -2648,22 +2698,36 @@ export default function App() {
               <CB checked={filters.hideCompleted} onChange={()=>setFilters(f=>({...f,hideCompleted:!f.hideCompleted}))} size={12}/>
               <span style={{fontSize:9,color:C.textMuted}}>完了を隠す</span>
             </div>
-            <button onClick={()=>setShowNotifModal(true)} style={{width:"100%",background:notifSettings?.enabled?C.accentS:"transparent",color:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer",marginBottom:4,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
-              {notifSettings?.enabled?"🔔":"🔕"} 通知設定
+            <button onClick={()=>setShowNotifModal(true)} style={{width:"100%",background:notifPaused?C.warnS:notifSettings?.enabled?C.accentS:"transparent",color:notifPaused?C.warn:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifPaused?C.warn:notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer",marginBottom:4,display:"flex",alignItems:"center",justifyContent:"center",gap:4}}>
+              {notifPaused?"⏸":""}{ notifSettings?.enabled?"🔔":"🔕"} 通知設定{notifPaused?" 停止中":""}
             </button>
             <button onClick={()=>signOut(auth)} style={{width:"100%",background:"transparent",color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",fontSize:9,cursor:"pointer"}}
               onMouseEnter={e=>{e.currentTarget.style.background=C.dangerS;e.currentTarget.style.color=C.danger;}}
               onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.color=C.textMuted;}}>ログアウト</button>
           </div>}
           {!sideOpen && <div style={{padding:"5px 3px",borderTop:`1px solid ${C.border}`,flexShrink:0}}>
-            <button onClick={()=>setShowNotifModal(true)} title="通知設定" style={{background:notifSettings?.enabled?C.accentS:"transparent",color:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:12,cursor:"pointer",width:"100%",marginBottom:3}}>{notifSettings?.enabled?"🔔":"🔕"}</button>
+            <button onClick={()=>setShowNotifModal(true)} title={notifPaused?"通知停止中（無料枠上限）":"通知設定"} style={{background:notifPaused?C.warnS:notifSettings?.enabled?C.accentS:"transparent",color:notifPaused?C.warn:notifSettings?.enabled?C.accent:C.textMuted,border:`1px solid ${notifPaused?C.warn:notifSettings?.enabled?C.accent:C.border}`,borderRadius:6,padding:"4px",fontSize:12,cursor:"pointer",width:"100%",marginBottom:3}}>{notifPaused?"⏸":notifSettings?.enabled?"🔔":"🔕"}</button>
             <button onClick={()=>signOut(auth)} title="ログアウト" style={{background:"transparent",color:C.textMuted,border:`1px solid ${C.border}`,borderRadius:6,padding:"4px",fontSize:10,cursor:"pointer",width:"100%"}}>↩</button>
           </div>}
         </div>
 
         {/* メイン */}
-        <div style={{marginLeft:sideOpen?200:42,flex:1,display:"flex",flexDirection:"column",transition:"margin .2s"}}>
+        <div style={{marginLeft:sideOpen?200:42,flex:1,display:"flex",transition:"margin .2s"}}>
           <div style={{flex:1,padding:"13px 17px",minWidth:0,minHeight:"100vh"}}>
+            {/* 通知停止中バナー（画面上部・常時表示） */}
+            {notifPaused && (
+              <div style={{background:C.warnS,border:`1px solid ${C.warn}55`,borderRadius:8,padding:"8px 14px",marginBottom:10,display:"flex",alignItems:"center",gap:10,flexWrap:"wrap"}}>
+                <span style={{fontSize:14}}>⏸</span>
+                <div style={{flex:1,minWidth:200}}>
+                  <span style={{fontSize:11,fontWeight:700,color:C.warn}}>通知機能を一時停止中</span>
+                  <span style={{fontSize:10,color:C.textSub,marginLeft:8}}>
+                    無料枠の上限に達しました。タスクの追加・編集・完了には影響ありません。
+                    {notifResumeAt && ` ${notifResumeAt.toLocaleDateString("ja-JP",{month:"long",day:"numeric"})}に自動復旧します。`}
+                  </span>
+                </div>
+                <button onClick={()=>setShowNotifModal(true)} style={{background:"transparent",color:C.warn,border:`1px solid ${C.warn}55`,borderRadius:5,padding:"2px 8px",fontSize:9,cursor:"pointer"}}>詳細</button>
+              </div>
+            )}
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
               <div>
                 <h1 style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:17,letterSpacing:-.4,lineHeight:1.2}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1>
@@ -2686,8 +2750,7 @@ export default function App() {
         parentTags={addChildTo ? (flatten(tasks).find(t=>t.id===addChildTo)?.tags||[]) : null}
         onSave={handleSave} defDate={defDate} defTime={defTime}
         onClose={()=>{setShowForm(false);setEditTask(null);setAddChildTo(null);setDefDate(null);setDefTime(null);}}/>}
-      {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={()=>setShowNotifModal(false)}/>}
-    </div>
+      {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={()=>setShowNotifModal(false)} paused={notifPaused} pausedAt={notifPausedAt} resumeAt={notifResumeAt}/>}
     </>
   );
 }
