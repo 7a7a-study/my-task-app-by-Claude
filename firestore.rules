@@ -1,0 +1,16 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ユーザーデータ：本人のみ読み書き可
+    match /users/{uid} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // 使用量・レート制限：ログイン済みなら読み取りのみ（書き込みはFunctionsのみ）
+    match /system/{doc} {
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
+  }
+}
