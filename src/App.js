@@ -304,6 +304,11 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 @media(hover:hover){.swipe-actions{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+@media(min-width:768px){
+  body{font-size:14px}
+  .pc-text-sm{font-size:11px!important}
+  .pc-text-xs{font-size:10px!important}
+}
 `;
 
 // 基本UI
@@ -465,11 +470,13 @@ const NotificationModal = ({settings, onSave, onClose}) => {
 const Login = ({onLogin,loading}) => (
   <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
     <div style={{textAlign:"center",padding:36}}>
-      <div style={{width:72,height:72,borderRadius:18,overflow:"hidden",margin:"0 auto 14px",boxShadow:"0 4px 20px rgba(126,184,255,.25)"}}><img src="/logo192.png" alt="Slate" style={{width:"100%",height:"100%",objectFit:"cover"}}/></div>
-      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,marginBottom:4}}>
+      <div style={{width:140,height:140,borderRadius:32,overflow:"hidden",margin:"0 auto 22px",boxShadow:"0 8px 40px rgba(126,184,255,.35)"}}>
+        <img src="/logo512.png" alt="Slate" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+      </div>
+      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:800,fontSize:40,marginBottom:8}}>
         <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>Slate</span>
       </div>
-      <div style={{color:C.textMuted,marginBottom:26,fontSize:12}}>あなただけのタスク管理</div>
+      <div style={{color:C.textMuted,marginBottom:28,fontSize:14}}>あなただけのタスク管理</div>
       <button onClick={onLogin} disabled={loading}
         style={{display:"flex",alignItems:"center",gap:9,background:"#fff",color:"#333",border:"none",borderRadius:10,padding:"10px 24px",fontSize:13,fontWeight:700,cursor:"pointer",margin:"0 auto",opacity:loading?.7:1}}>
         <svg width="16" height="16" viewBox="0 0 24 24">
@@ -2398,18 +2405,8 @@ export default function App() {
   });
   const setNotifSettings = s => { setNotifSettingsRaw(s); try { localStorage.setItem("notifSettings", JSON.stringify(s)); } catch {} };
 
-  // 認証（ALLOWEDユーザーのみセット・ループ防止）
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => {
-      if (u && !ALLOWED.includes(u.uid)) {
-        signOut(auth); setUser(null); // 許可外アカウントは即サインアウト
-      } else {
-        setUser(u);
-      }
-      setAuthLoading(false);
-    });
-    return unsub;
-  }, []);
+  // 認証
+  useEffect(() => { const u=onAuthStateChanged(auth,u=>{setUser(u);setAuthLoading(false);}); return u; }, []);
   // Firestore同期
   useEffect(() => {
     if (!user) return;
@@ -2470,25 +2467,11 @@ export default function App() {
   const setTemplates = tp => { setTemplatesRaw(tp); save2DB(tasks,tags,tp); };
 
   const handleLogin = async () => {
-    if (loginLoading) return; // 二重クリック防止
     setLoginLoading(true);
     try {
-      const r = await signInWithPopup(auth, provider);
-      // ALLOWEDチェックはonAuthStateChangedで行うのでここでは不要
-      // （万一通り抜けた場合の保険として残す）
-      if (!ALLOWED.includes(r.user.uid)) {
-        await signOut(auth);
-        alert("このアカウントではアクセスできません。");
-      }
-    } catch(e) {
-      if (e.code === "auth/popup-blocked") {
-        alert("ポップアップがブロックされました。\nブラウザのポップアップ許可設定を確認してください。");
-      } else if (e.code === "auth/popup-closed-by-user") {
-        // ユーザーが閉じた場合は何もしない
-      } else {
-        console.error("ログインエラー:", e.code, e.message);
-      }
-    }
+      const r = await signInWithPopup(auth,provider);
+      if (!ALLOWED.includes(r.user.uid)) { await signOut(auth); alert("アクセスできません。"); }
+    } catch(e){ console.error(e); }
     setLoginLoading(false);
   };
 
@@ -2627,8 +2610,11 @@ export default function App() {
         <div style={{width:sideOpen?200:42,flexShrink:0,background:C.surface,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10,transition:"width .2s",boxShadow:"2px 0 16px rgba(0,0,0,.3)"}}>
           <div style={{padding:`10px ${sideOpen?12:5}px 9px`,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4,flexShrink:0}}>
             {sideOpen && <div style={{minWidth:0,flex:1}}>
-              <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,whiteSpace:"nowrap",letterSpacing:-.5}}>
-                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>◈ Slate</span>
+              <div style={{display:"flex",alignItems:"center",gap:7,whiteSpace:"nowrap"}}>
+                <div style={{width:28,height:28,borderRadius:8,overflow:"hidden",flexShrink:0,boxShadow:`0 2px 8px rgba(126,184,255,.25)`}}>
+                  <img src="/logo512.png" alt="Slate" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                </div>
+                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",fontWeight:800,fontSize:16,letterSpacing:-0.5}}>Slate</span>
               </div>
               <div style={{fontSize:8,color:C.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
               {saving && <div style={{fontSize:8,color:C.success,marginTop:1}}>💾 保存中...</div>}
