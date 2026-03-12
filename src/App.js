@@ -30,14 +30,14 @@ const localDate = (d = new Date()) => {
 };
 
 const C = {
-  bg:"#1e2540", bgSub:"#252d4a", surface:"#2d3760", surfHov:"#364270",
-  border:"#424e78",
-  accent:"#7eb8ff", accentS:"rgba(126,184,255,.15)", accentG:"rgba(126,184,255,.3)",
-  success:"#4de8a8", successS:"rgba(77,232,168,.15)",
-  warn:"#ffd077",   warnS:"rgba(255,208,119,.15)",
-  danger:"#ff7a8a", dangerS:"rgba(255,122,138,.15)",
-  info:"#60d4f8",   infoS:"rgba(96,212,248,.15)",
-  text:"#f0f4ff", textSub:"#c8d4f0", textMuted:"#a0b0d0",
+  bg:"#23272e", bgSub:"#2a2f38", surface:"#313843", surfHov:"#3a4250",
+  border:"#4a5260",
+  accent:"#8bb8d4", accentS:"rgba(139,184,212,.15)", accentG:"rgba(139,184,212,.3)",
+  success:"#7aaa82", successS:"rgba(122,170,130,.18)",
+  warn:"#c8a96e",   warnS:"rgba(200,169,110,.18)",
+  danger:"#c47878", dangerS:"rgba(196,120,120,.18)",
+  info:"#b8c4b0",   infoS:"rgba(184,196,176,.15)",
+  text:"#e8e0d0", textSub:"#c4b89a", textMuted:"#8a8070",
 };
 
 const TAG_PRESETS = [
@@ -285,16 +285,16 @@ const toggleMemo = (memo, idx) => {
 
 // グローバルCSS
 const G = `
-@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=DM+Sans:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#28304e;color:#eef2ff;font-family:'Noto Sans JP',sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
-::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#4e5888;border-radius:4px}
-input,textarea,select{font-family:'Noto Sans JP',sans-serif;outline:none;border:none;color:#eef2ff}
+body{background:#23272e;color:#e8e0d0;font-family:'Noto Sans JP',sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#5a6070;border-radius:4px}
+input,textarea,select{font-family:'Noto Sans JP',sans-serif;outline:none;border:none;color:#e8e0d0}
 input[type=date],input[type=time],input[type=number],input[type=color]{color-scheme:light dark}
 button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:none}
-.hov:hover{background:rgba(153,170,255,0.07)!important}
-.nb:hover{background:#424e80!important}
-.acc:hover{filter:brightness(1.1);box-shadow:0 4px 14px rgba(153,170,255,.35)}.acc:active{transform:scale(.97)}
+.hov:hover{background:rgba(139,184,212,0.08)!important}
+.nb:hover{background:#3a4250!important}
+.acc:hover{filter:brightness(1.1);box-shadow:0 4px 14px rgba(139,184,212,.3)}.acc:active{transform:scale(.97)}
 .mo{animation:fi .13s ease}.mc{animation:su .18s cubic-bezier(.34,1.56,.64,1)}
 .drag{cursor:grab!important}.drag:active{cursor:grabbing!important;opacity:.5!important}
 .rh{cursor:ns-resize!important}
@@ -304,6 +304,7 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 @media(hover:hover){.swipe-actions{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+@media(min-width:768px){body{font-size:14px}}
 `;
 
 // 基本UI
@@ -317,7 +318,7 @@ const CB = ({checked,onChange,size=14,color}) => (
 const Btn = ({children,onClick,v="ghost",style={},disabled,title}) => {
   const vs = {
     ghost:  {bg:"transparent",col:C.textSub,brd:`1px solid ${C.border}`,sh:"none"},
-    accent: {bg:`linear-gradient(135deg,${C.accent},#bbccff)`,col:"#1a1e38",brd:"none",sh:"0 2px 10px rgba(153,170,255,.3)"},
+    accent: {bg:`linear-gradient(135deg,${C.accent},${C.info})`,col:"#1a1e28",brd:"none",sh:"0 2px 10px rgba(139,184,212,.25)"},
     danger: {bg:C.dangerS,col:C.danger,brd:`1px solid ${C.danger}44`,sh:"none"},
     success:{bg:C.successS,col:C.success,brd:`1px solid ${C.success}44`,sh:"none"},
     subtle: {bg:C.surfHov,col:C.textSub,brd:`1px solid ${C.border}`,sh:"none"},
@@ -335,7 +336,7 @@ const Modal = ({title,children,onClose,wide,noBackdropClose}) => (
   <div className="mo" onClick={noBackdropClose ? undefined : onClose} style={{position:"fixed",inset:0,background:"rgba(5,7,18,.85)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:1000,padding:10,backdropFilter:"blur(5px)"}}>
     <div className="mc" onClick={e=>e.stopPropagation()} style={{background:C.surface,borderRadius:13,width:"100%",maxWidth:wide?700:490,border:`1px solid ${C.border}`,maxHeight:"92vh",overflow:"auto",boxShadow:"0 24px 64px rgba(0,0,0,.7)"}}>
       <div style={{padding:"11px 16px",borderBottom:`1px solid ${C.border}`,display:"flex",justifyContent:"space-between",alignItems:"center",position:"sticky",top:0,background:C.surface,zIndex:1,borderRadius:"13px 13px 0 0"}}>
-        <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14}}>{title}</span>
+        <span style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14}}>{title}</span>
         <div style={{display:"flex",alignItems:"center",gap:6}}>
           {noBackdropClose && <span style={{fontSize:8,color:C.textMuted}}>Esc でキャンセル / Ctrl+Enter で保存</span>}
           <button onClick={onClose} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:24,height:24,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
@@ -463,13 +464,15 @@ const NotificationModal = ({settings, onSave, onClose}) => {
 
 // ── ログイン ────────────────────────────────────────────────────────
 const Login = ({onLogin,loading}) => (
-  <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center"}}>
+  <div style={{minHeight:"100vh",background:C.bg,display:"flex",alignItems:"center",justifyContent:"center",backgroundImage:"radial-gradient(ellipse at 30% 20%, rgba(139,184,212,.07) 0%, transparent 60%), radial-gradient(ellipse at 70% 80%, rgba(122,170,130,.05) 0%, transparent 60%)"}}>
     <div style={{textAlign:"center",padding:36}}>
-      <div style={{width:62,height:62,borderRadius:18,background:`linear-gradient(135deg,${C.accent},#bbccff)`,display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:26}}>✅</div>
-      <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:24,marginBottom:4}}>
-        <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>Slate</span>
+      <div style={{width:140,height:140,borderRadius:28,overflow:"hidden",margin:"0 auto 22px",boxShadow:"0 8px 32px rgba(0,0,0,.5), 0 0 0 3px rgba(200,169,110,.25)"}}>
+        <img src="/logo512.png" alt="Slate" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
       </div>
-      <div style={{color:C.textMuted,marginBottom:26,fontSize:12}}>あなただけのタスク管理</div>
+      <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:42,marginBottom:8}}>
+        <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'Playfair Display',serif",letterSpacing:1}}>Slate</span>
+      </div>
+      <div style={{color:C.textMuted,marginBottom:28,fontSize:14,letterSpacing:"0.08em"}}>あなただけのタスク管理</div>
       <button onClick={onLogin} disabled={loading}
         style={{display:"flex",alignItems:"center",gap:9,background:"#fff",color:"#333",border:"none",borderRadius:10,padding:"10px 24px",fontSize:13,fontWeight:700,cursor:"pointer",margin:"0 auto",opacity:loading?.7:1}}>
         <svg width="16" height="16" viewBox="0 0 24 24">
@@ -1115,15 +1118,13 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
 
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
-      {/* スワイプアクションボタン（背面・モバイルのみ・完了タスクは非表示） */}
-      {!task.done && (
-      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+      {/* スワイプアクションボタン（背面・モバイルのみ・完了は非表示） */}
+      {!task.done && <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button title="複製"  onClick={()=>{onDuplicate(task);closeSwipe();}} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button title="編集"  onClick={()=>{onEdit(task);closeSwipe();}} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
         <button title="削除"  onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
-      </div>
-      )}
+      </div>}
       {/* メインコンテンツ（スワイプで左にスライド） */}
       <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
@@ -1433,7 +1434,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           ‹
         </button>
         <div style={{minWidth:160,textAlign:"center"}}>
-          <div style={{fontSize:13,fontWeight:700,color:dowColor,fontFamily:"'DM Sans',sans-serif"}}>{viewLabel}</div>
+          <div style={{fontSize:13,fontWeight:700,color:dowColor,fontFamily:"'Playfair Display',serif"}}>{viewLabel}</div>
           {!isToday && (
             <button onClick={()=>setDayOffset(0)}
               style={{fontSize:9,color:C.accent,background:C.accentS,border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 8px",cursor:"pointer",marginTop:2}}>
@@ -1474,7 +1475,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
         {/* 時刻ラベル */}
         <div style={{position:"relative",height:totalH}}>
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
-            <div key={i} style={{position:"absolute",top:i*HH-6,right:4,fontSize:9,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1,width:32,textAlign:"right"}}>
+            <div key={i} style={{position:"absolute",top:i*HH-6,right:4,fontSize:9,color:C.textMuted,fontFamily:"'Playfair Display',serif",lineHeight:1,width:32,textAlign:"right"}}>
               {DAY_START+i}
             </div>
           ))}
@@ -1586,7 +1587,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           ‹
         </button>
         <div style={{minWidth:140,textAlign:"center"}}>
-          <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:"'DM Sans',sans-serif"}}>{weekLabel}</div>
+          <div style={{fontSize:12,fontWeight:700,color:C.text,fontFamily:"'Playfair Display',serif"}}>{weekLabel}</div>
           {!isCurrentWeek && (
             <button onClick={()=>setWeekOffset(0)}
               style={{fontSize:9,color:C.accent,background:C.accentS,border:`1px solid ${C.accent}33`,borderRadius:10,padding:"1px 8px",cursor:"pointer",marginTop:2}}>
@@ -1644,14 +1645,14 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           return (
             <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
               <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
-              <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'DM Sans',sans-serif"}}>{dt.getDate()}</div>
+              <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'Playfair Display',serif"}}>{dt.getDate()}</div>
             </div>
           );
         })}
         {/* 時刻ラベル */}
         <div style={{position:"relative",height:totalH}}>
           {Array.from({length:DAY_END-DAY_START},(_,i) => (
-            <div key={i} style={{position:"absolute",top:i*HH-6,right:3,fontSize:8,color:C.textMuted,fontFamily:"'DM Sans',sans-serif",lineHeight:1}}>{DAY_START+i}</div>
+            <div key={i} style={{position:"absolute",top:i*HH-6,right:3,fontSize:8,color:C.textMuted,fontFamily:"'Playfair Display',serif",lineHeight:1}}>{DAY_START+i}</div>
           ))}
         </div>
         {/* 各日カラム */}
@@ -1818,7 +1819,7 @@ const ReportView = ({tasks, tags}) => {
         ].map(s => (
           <div key={s.label} style={{background:C.surface,borderRadius:10,padding:"10px 12px",border:`1px solid ${C.border}`,textAlign:"center"}}>
             <div style={{fontSize:16,marginBottom:3}}>{s.icon}</div>
-            <div style={{fontSize:20,fontWeight:800,color:s.color,fontFamily:"'DM Sans',sans-serif"}}>{s.value}</div>
+            <div style={{fontSize:20,fontWeight:800,color:s.color,fontFamily:"'Playfair Display',serif"}}>{s.value}</div>
             <div style={{fontSize:9,color:C.textMuted,marginTop:2}}>{s.label}</div>
           </div>
         ))}
@@ -2134,7 +2135,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
     <div>
       <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:7,flexWrap:"wrap"}}>
         <Btn onClick={()=>{if(vm===0){setVy(y=>y-1);setVm(11);}else setVm(m=>m-1);}}>‹</Btn>
-        <span style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14}}>{vy}年 {MN[vm]}</span>
+        <span style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:14}}>{vy}年 {MN[vm]}</span>
         <Btn onClick={()=>{if(vm===11){setVy(y=>y+1);setVm(0);}else setVm(m=>m+1);}}>›</Btn>
         <span style={{fontSize:9,color:C.textMuted}}>バー=開始〜終了 / 🔴=締切 / ドラッグ移動・右端で期間変更</span>
       </div>
@@ -2154,7 +2155,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
                     onDragLeave={()=>setDropDay(null)}
                     onDrop={e=>hDrop(e,n)}
                     onClick={()=>{if(!dragTask&&!dragBar&&!dragDL)onAdd(dStr,null);}}
-                    style={{width:DW,flexShrink:0,textAlign:"center",fontSize:9,fontWeight:isT?800:400,fontFamily:"'DM Sans',sans-serif",color:isT?C.accent:isSat?C.info:isR?C.danger:C.textMuted,background:isT?C.accentS:isSat?"rgba(119,216,255,.05)":isR?"rgba(255,136,153,.07)":"transparent",borderLeft:`1px solid ${C.border}20`,padding:"5px 0",cursor:"pointer",position:"relative"}} title={hName||undefined}>
+                    style={{width:DW,flexShrink:0,textAlign:"center",fontSize:9,fontWeight:isT?800:400,fontFamily:"'Playfair Display',serif",color:isT?C.accent:isSat?C.info:isR?C.danger:C.textMuted,background:isT?C.accentS:isSat?"rgba(119,216,255,.05)":isR?"rgba(255,136,153,.07)":"transparent",borderLeft:`1px solid ${C.border}20`,padding:"5px 0",cursor:"pointer",position:"relative"}} title={hName||undefined}>
                     {n}
                     {isHol(dStr) && <div style={{fontSize:6,color:C.danger,lineHeight:1}}>祝</div>}
                     {isT && <div style={{position:"absolute",bottom:1,left:"50%",transform:"translateX(-50%)",width:3,height:3,borderRadius:"50%",background:C.accent}}/>}
@@ -2189,7 +2190,7 @@ const TemplatesView = ({templates,setTemplates,onUse,tags}) => {
       {templates.length===0&&<div style={{textAlign:"center",padding:28,color:C.textMuted}}>テンプレートがまだありません</div>}
       <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:9}}>
         {templates.map(tpl=><div key={tpl.id} style={{background:C.surface,borderRadius:11,padding:11,border:`1px solid ${C.border}`,display:"flex",flexDirection:"column",gap:8}}>
-          <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:13}}>{tpl.name}</div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:13}}>{tpl.name}</div>
           <div style={{flex:1}}>{tpl.tasks.map((t,i)=><div key={i}><div style={{display:"flex",alignItems:"center",gap:4,padding:"3px 0",borderBottom:`1px solid ${C.border}20`,fontSize:11,color:C.textSub}}><div style={{width:4,height:4,borderRadius:"50%",background:C.accent,flexShrink:0}}/>{t.title}{(t.tags||[]).length>0&&<div style={{display:"flex",gap:2,marginLeft:"auto"}}>{(t.tags||[]).map(tid=>{const tg=tags.find(x=>x.id===tid&&x.parentId);return tg?<Pill key={tid} tag={tg}/>:null;})}</div>}</div>{(t.children||[]).map((c,j)=><div key={j} style={{display:"flex",alignItems:"center",gap:4,padding:"2px 0 2px 9px",fontSize:10,color:C.textMuted}}><div style={{width:3,height:3,borderRadius:"50%",background:C.textMuted,flexShrink:0}}/>{c.title}</div>)}</div>)}</div>
           <div style={{display:"flex",gap:5}}><Btn v="accent" onClick={()=>onUse(tpl)} style={{flex:1,padding:"5px",fontSize:10}}>使う</Btn><Btn v="danger" onClick={()=>setTemplates(t=>t.filter(x=>x.id!==tpl.id))} style={{padding:"5px 8px",fontSize:10}}>削除</Btn></div>
         </div>)}
@@ -2221,6 +2222,7 @@ const TemplatesView = ({templates,setTemplates,onUse,tags}) => {
 // ── タグ管理 ────────────────────────────────────────────────────────
 const TagsView = ({tags,setTags}) => {
   const [form,setForm]     = useState({name:"",color:"#8bb8d4",parentId:null});
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [editId,setEditId] = useState(null);
   const [ef,setEf]         = useState(null);
   const [showA,setShowA]   = useState(false);
@@ -2292,21 +2294,34 @@ const TagsView = ({tags,setTags}) => {
 
       {/* 新規作成フォーム */}
       <div style={{background:C.surface,borderRadius:11,padding:11,border:`1px solid ${C.border}`,marginBottom:9}}>
-        <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,marginBottom:8,fontSize:13}}>新しいタグを作成</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8,fontSize:13}}>新しいタグを作成</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 50px",gap:6,marginBottom:6}}>
           <Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/>
-          <div>
-  <div style={{fontSize:8,color:C.textMuted,marginBottom:4,fontWeight:700}}>色</div>
-  <div style={{display:"flex",gap:4,flexWrap:"wrap",marginBottom:5}}>
-    {["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0"].map(col=>(
-      <div key={col} onClick={()=>setForm(f=>({...f,color:col}))}
-        style={{width:20,height:20,borderRadius:5,background:col,cursor:"pointer",
-          border:`2px solid ${form.color===col?"#fff":"transparent"}`,
-          boxShadow:form.color===col?"0 0 0 1px "+col:"none",flexShrink:0}}/>
-    ))}
-  </div>
-  <input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} style={{width:"100%",height:28,borderRadius:5,border:`1px solid ${C.border}`,background:"none",cursor:"pointer",padding:2}}/>
-</div>
+          <div style={{position:"relative"}}>
+              <div style={{fontSize:8,color:C.textMuted,marginBottom:4,fontWeight:700}}>色</div>
+              <div onClick={()=>setColorPickerOpen(o=>!o)}
+                style={{width:32,height:28,borderRadius:6,background:form.color,cursor:"pointer",
+                  border:`2px solid ${C.border}`,boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
+              </div>
+              {colorPickerOpen && (
+                <div style={{position:"absolute",top:52,left:0,zIndex:100,background:C.surface,
+                  border:`1px solid ${C.border}`,borderRadius:10,padding:10,boxShadow:"0 8px 24px rgba(0,0,0,.4)"}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
+                    {["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0",
+                      "#8faac0","#6b9e74","#b86a6a","#b8945a","#a0b09a","#9488b8","#c09474","#80a890"].map(col=>(
+                      <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setColorPickerOpen(false);}}
+                        style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",
+                          border:`2px solid ${form.color===col?"#fff":"transparent"}`,flexShrink:0}}/>
+                    ))}
+                  </div>
+                  <input type="color" value={form.color}
+                    onChange={e=>setForm(f=>({...f,color:e.target.value}))}
+                    style={{width:"100%",height:28,borderRadius:5,border:`1px solid ${C.border}`,
+                      background:"none",cursor:"pointer",padding:2}}/>
+                  <div style={{fontSize:9,color:C.textMuted,marginTop:4,textAlign:"center"}}>カスタム色を選択</div>
+                </div>
+              )}
+            </div>
         </div>
         <div style={{marginBottom:6}}>
           <div style={{fontSize:8,color:C.textMuted,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>親タグ</div>
@@ -2618,10 +2633,15 @@ export default function App() {
         <div style={{width:sideOpen?200:42,flexShrink:0,background:C.surface,borderRight:`1px solid ${C.border}`,display:"flex",flexDirection:"column",position:"fixed",top:0,left:0,height:"100vh",overflowY:"auto",zIndex:10,transition:"width .2s",boxShadow:"2px 0 16px rgba(0,0,0,.3)"}}>
           <div style={{padding:`10px ${sideOpen?12:5}px 9px`,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",gap:4,flexShrink:0}}>
             {sideOpen && <div style={{minWidth:0,flex:1}}>
-              <div style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:14,whiteSpace:"nowrap",letterSpacing:-.5}}>
-                <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",fontFamily:"'DM Sans',sans-serif",letterSpacing:-0.5}}>◈ Slate</span>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:2}}>
+                <div style={{width:28,height:28,borderRadius:8,overflow:"hidden",flexShrink:0,boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
+                  <img src="/logo512.png" alt="Slate" style={{width:"100%",height:"100%",objectFit:"cover"}}/>
+                </div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:16,whiteSpace:"nowrap",letterSpacing:0.5}}>
+                  <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Slate</span>
+                </div>
               </div>
-              <div style={{fontSize:8,color:C.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
+              <div style={{fontSize:9,color:C.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
               {saving && <div style={{fontSize:8,color:C.success,marginTop:1}}>💾 保存中...</div>}
               <div style={{marginTop:7}}>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:C.textMuted,marginBottom:2}}>
@@ -2676,7 +2696,7 @@ export default function App() {
           <div style={{flex:1,padding:"13px 17px",minWidth:0,overflowX:"auto",overflowY:"auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:11}}>
               <div>
-                <h1 style={{fontFamily:"'DM Sans',sans-serif",fontWeight:700,fontSize:17,letterSpacing:-.4,lineHeight:1.2}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1>
+                <h1 style={{fontFamily:"'Playfair Display',serif",fontWeight:700,fontSize:17,letterSpacing:-.4,lineHeight:1.2}}>{NAV.find(n=>n.id===view)?.icon} {NAV.find(n=>n.id===view)?.label}</h1>
                 <div style={{fontSize:9,color:C.textMuted,marginTop:1}}>{new Date(today).toLocaleDateString("ja-JP",{year:"numeric",month:"long",day:"numeric",weekday:"short"})}</div>
               </div>
               {["list","day","week","gantt"].includes(view) && <Btn v="accent" onClick={()=>{setDefDate(null);setDefTime(null);setEditTask(null);setAddChildTo(null);setShowForm(true);}}>＋ 追加</Btn>}
