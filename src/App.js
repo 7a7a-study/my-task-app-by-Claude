@@ -1083,70 +1083,77 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
 
 // ── タスク行 ────────────────────────────────────────────────────────
 const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
-  const [exp, setExp]             = useState(true);
-  const [memoOpen, setMemoOpen]   = useState(false);
+  const [exp, setExp]               = useState(true);
+  const [memoOpen, setMemoOpen]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const [swipeX, setSwipeX]       = useState(0);
-  const [swiping, setSwiping]     = useState(false);
+  const [swipeX, setSwipeX]         = useState(0);
+  const [swiping, setSwiping]       = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
-  // ボタン4つ×28px + gap3×3px + paddingRight6px = 127px → 余裕を持って140
-  const SWIPE_OPEN = -140;
+  const swipeXRef   = useRef(0); // swipeX の最新値をタッチイベント内で参照する用
+  const SWIPE_OPEN  = -140;
 
-  const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
-  const today = localDate();
+  const tTags  = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
+  const today  = localDate();
   const over   = task.deadlineDate && !task.done && task.deadlineDate < today;
   const urgent = task.deadlineDate && !task.done && task.deadlineDate === today;
   const later  = task.isLater || isLaterTask(task);
-  const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
+  const tc     = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const hasMemo = !!task.memo;
-  const isOpen = swipeX <= SWIPE_OPEN / 2;
+
+  // swipeX を ref と state 両方に保持（タッチハンドラ内でclosure問題回避）
+  const setSwipe = v => { swipeXRef.current = v; setSwipeX(v); };
+  const closeSwipe = () => setSwipe(0);
 
   const onTouchStart = e => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
-    setSwiping(false); // タッチ開始時はまだスワイプ判定しない
+    setSwiping(false);
   };
+
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    // 横方向に8px以上動いたらスワイプ開始
-    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
-      setSwiping(true);
-      const offset = isOpen ? SWIPE_OPEN : 0;
-      setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx + offset)));
-    }
+    if (!swiping && Math.abs(dx) <= 8) return; // まだ判定しない
+    if (!swiping && Math.abs(dy) >= Math.abs(dx)) return; // 縦スクロール優先
+    setSwiping(true);
+    e.preventDefault(); // 縦スクロール抑制
+    const base = swipeXRef.current <= SWIPE_OPEN / 2 ? SWIPE_OPEN : 0;
+    setSwipe(Math.max(SWIPE_OPEN, Math.min(0, base + dx)));
   };
-  const onTouchEnd = e => {
-    const dx = touchStartX.current !== null
-      ? e.changedTouches[0].clientX - touchStartX.current : 0;
-    const dy = touchStartY.current !== null
-      ? e.changedTouches[0].clientY - touchStartY.current : 0;
-    const isTap = Math.abs(dx) < 8 && Math.abs(dy) < 8;
 
-    if (isTap) {
-      // タップ → メモ開閉（スワイプは動かさない）
-      if (hasMemo && !isOpen) setMemoOpen(o => !o);
-      if (isOpen) setSwipeX(0); // 開いてる時タップで閉じる
-    } else {
-      // スワイプ確定
-      setSwipeX(swipeX < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
-    }
-    setSwiping(false);
+  const onTouchEnd = e => {
+    const dx = touchStartX.current !== null ? e.changedTouches[0].clientX - touchStartX.current : 0;
+    const dy = touchStartY.current !== null ? e.changedTouches[0].clientY - touchStartY.current : 0;
+    const wasSwiping = swiping;
     touchStartX.current = null;
     touchStartY.current = null;
+    setSwiping(false);
+
+    if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
+      // タップ判定
+      if (swipeXRef.current <= SWIPE_OPEN / 2) {
+        // アクション表示中 → 閉じる
+        closeSwipe();
+      } else if (hasMemo) {
+        // 通常状態 → メモ開閉
+        setMemoOpen(o => !o);
+      }
+    } else if (wasSwiping) {
+      // スワイプ確定：中間点より左ならOPEN、右ならCLOSE
+      setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
+    }
   };
-  const closeSwipe = () => setSwipeX(0);
 
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
       {/* スワイプアクションボタン（背面・モバイルのみ） */}
       <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
-        <button title="複製"  onClick={()=>{onDuplicate(task);closeSwipe();}} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
-        <button title="編集"  onClick={()=>{onEdit(task);closeSwipe();}} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
-        <button title="削除"  onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+        <button title="複製"         onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
+        <button title="編集"         onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
+        <button title="削除"         onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
       </div>
       {/* メインコンテンツ（スワイプで左にスライド） */}
       <div className="hov tr"
@@ -1161,7 +1168,8 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           position:"relative",zIndex:1,
         }}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
-        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?e=>{if(!e.isTrusted||e.detail>0)setMemoOpen(o=>!o);}:undefined}>
+        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
+          onClick={hasMemo ? e => { e.stopPropagation(); setMemoOpen(o=>!o); } : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
@@ -1173,30 +1181,29 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           </div>
           <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tTags.map(t=><Pill key={t.id} tag={t}/>)}
-            {task.startDate && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.startDate,task.startTime)}</span>}
-            {task.duration  && <span style={{fontSize:9,color:C.accent}}>⏱{task.duration}分</span>}
+            {task.startDate    && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.startDate,task.startTime)}</span>}
+            {task.duration     && <span style={{fontSize:9,color:C.accent}}>⏱{task.duration}分</span>}
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCのみ・完了以外のみ表示 */}
+        {/* PCのみ・完了タスクは非表示 */}
         {!task.done && (
-        <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
-          <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-          <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
-          <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
-          <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-        </div>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
+            <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+            <button title="複製して編集" onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
+            <button title="編集"         onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+            <button title="削除"         onClick={()=>setConfirmDel(true)}  style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+          </div>
         )}
       </div>
-      {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
-子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
-      {/* ── メモ展開パネル ── */}
+      {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
+      {/* メモ展開パネル（スワイプと独立、タップで開閉） */}
       {memoOpen && hasMemo && (
         <div
           onClick={e=>e.stopPropagation()}
           onTouchStart={e=>e.stopPropagation()}
           onTouchEnd={e=>e.stopPropagation()}
-          style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:`0 0 7px 7px`,padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
+          style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:"0 0 7px 7px",padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
           {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
         </div>
       )}
