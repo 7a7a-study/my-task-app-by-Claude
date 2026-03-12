@@ -1089,7 +1089,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
   const [swiping, setSwiping]     = useState(false);
   const touchStartX = useRef(null);
-  const SWIPE_OPEN = -108; // アクション表示時のオフセット
+  const SWIPE_OPEN = -140; // アクション表示時のオフセット（4btn×28 + gap×3 + padding）
 
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
@@ -1100,31 +1100,48 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const hasMemo = !!task.memo;
   const isOpen = swipeX <= SWIPE_OPEN / 2;
 
+  const touchStartY = useRef(null);
   const onTouchStart = e => {
     touchStartX.current = e.touches[0].clientX;
-    setSwiping(true);
+    touchStartY.current = e.touches[0].clientY;
+    setSwiping(false);
   };
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
-    setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx)));
+    if (Math.abs(dx) > 5) setSwiping(true); // 横方向に動いたらスワイプ開始
+    if (dx < 0) setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx + (isOpen ? 0 : 0))));
   };
-  const onTouchEnd = () => {
+  const onTouchEnd = e => {
+    const dx = (touchStartX.current !== null)
+      ? e.changedTouches[0].clientX - touchStartX.current
+      : 0;
+    const dy = (touchStartY.current !== null)
+      ? e.changedTouches[0].clientY - touchStartY.current
+      : 0;
+    const isTap = Math.abs(dx) < 6 && Math.abs(dy) < 6;
+    if (isTap && hasMemo && !isOpen) {
+      // タップ → メモ開閉（スワイプ中でなければ）
+      setMemoOpen(o => !o);
+    } else {
+      // スワイプ確定
+      setSwipeX(swipeX < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
+    }
     setSwiping(false);
-    setSwipeX(swipeX < SWIPE_OPEN/2 ? SWIPE_OPEN : 0);
     touchStartX.current = null;
+    touchStartY.current = null;
   };
   const closeSwipe = () => setSwipeX(0);
 
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
-      {/* スワイプアクションボタン（背面・モバイルのみ・完了は非表示） */}
-      {!task.done && <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+      {/* スワイプアクションボタン（背面・モバイルのみ） */}
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button title="複製"  onClick={()=>{onDuplicate(task);closeSwipe();}} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button title="編集"  onClick={()=>{onEdit(task);closeSwipe();}} style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
         <button title="削除"  onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
-      </div>}
+      </div>
       {/* メインコンテンツ（スワイプで左にスライド） */}
       <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
@@ -1138,7 +1155,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           position:"relative",zIndex:1,
         }}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
-        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?()=>setMemoOpen(o=>!o):undefined}>
+        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?()=>setMemoOpen(o=>!o):undefined} onTouchEnd={e=>{e.stopPropagation();}}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
@@ -1156,20 +1173,19 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           </div>
         </div>
         {/* PCのみ常時表示ボタン（完了タスクは非表示） */}
-        {!task.done && (
-        <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
+        {!task.done && <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
           <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
           <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
           <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
           <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-        </div>
-        )}
+        </div>}
       </div>
       {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
 子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
       {/* ── メモ展開パネル ── */}
       {memoOpen && hasMemo && (
-        <div style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:`0 0 7px 7px`,padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
+        <div onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+          style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:`0 0 7px 7px`,padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
           {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
         </div>
       )}
@@ -2222,7 +2238,6 @@ const TemplatesView = ({templates,setTemplates,onUse,tags}) => {
 // ── タグ管理 ────────────────────────────────────────────────────────
 const TagsView = ({tags,setTags}) => {
   const [form,setForm]     = useState({name:"",color:"#8bb8d4",parentId:null});
-  const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [editId,setEditId] = useState(null);
   const [ef,setEf]         = useState(null);
   const [showA,setShowA]   = useState(false);
@@ -2297,31 +2312,36 @@ const TagsView = ({tags,setTags}) => {
         <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8,fontSize:13}}>新しいタグを作成</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 50px",gap:6,marginBottom:6}}>
           <Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/>
-          <div style={{position:"relative"}}>
-              <div style={{fontSize:8,color:C.textMuted,marginBottom:4,fontWeight:700}}>色</div>
-              <div onClick={()=>setColorPickerOpen(o=>!o)}
-                style={{width:32,height:28,borderRadius:6,background:form.color,cursor:"pointer",
-                  border:`2px solid ${C.border}`,boxShadow:"0 2px 8px rgba(0,0,0,.3)"}}>
-              </div>
-              {colorPickerOpen && (
-                <div style={{position:"absolute",top:52,left:0,zIndex:100,background:C.surface,
-                  border:`1px solid ${C.border}`,borderRadius:10,padding:10,boxShadow:"0 8px 24px rgba(0,0,0,.4)"}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
-                    {["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0",
-                      "#8faac0","#6b9e74","#b86a6a","#b8945a","#a0b09a","#9488b8","#c09474","#80a890"].map(col=>(
-                      <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setColorPickerOpen(false);}}
-                        style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",
-                          border:`2px solid ${form.color===col?"#fff":"transparent"}`,flexShrink:0}}/>
-                    ))}
-                  </div>
-                  <input type="color" value={form.color}
-                    onChange={e=>setForm(f=>({...f,color:e.target.value}))}
-                    style={{width:"100%",height:28,borderRadius:5,border:`1px solid ${C.border}`,
-                      background:"none",cursor:"pointer",padding:2}}/>
-                  <div style={{fontSize:9,color:C.textMuted,marginTop:4,textAlign:"center"}}>カスタム色を選択</div>
+          {(()=>{
+            const [cpOpen,setCpOpen] = React.useState(false);
+            const PALETTE = ["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0"];
+            return (
+              <div style={{position:"relative"}}>
+                <div style={{fontSize:8,color:C.textMuted,marginBottom:4,fontWeight:700}}>色</div>
+                <div onClick={()=>setCpOpen(o=>!o)}
+                  style={{width:32,height:28,borderRadius:6,background:form.color,cursor:"pointer",
+                    border:`2px solid ${C.border}`,boxShadow:"0 2px 6px rgba(0,0,0,.3)"}}>
                 </div>
-              )}
-            </div>
+                {cpOpen && (
+                  <div style={{position:"absolute",top:56,left:0,zIndex:200,background:C.surface,
+                    border:`1px solid ${C.border}`,borderRadius:10,padding:10,
+                    boxShadow:"0 8px 24px rgba(0,0,0,.5)",width:140}}>
+                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
+                      {PALETTE.map(col=>(
+                        <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setCpOpen(false);}}
+                          style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",
+                            border:`2px solid ${form.color===col?"#fff":"transparent"}`,flexShrink:0}}/>
+                      ))}
+                    </div>
+                    <input type="color" value={form.color}
+                      onChange={e=>setForm(f=>({...f,color:e.target.value}))}
+                      style={{width:"100%",height:26,borderRadius:5,border:`1px solid ${C.border}`,
+                        background:"none",cursor:"pointer",padding:2}}/>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
         <div style={{marginBottom:6}}>
           <div style={{fontSize:8,color:C.textMuted,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>親タグ</div>
