@@ -287,7 +287,7 @@ const toggleMemo = (memo, idx) => {
 const G = `
 @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&family=Playfair+Display:wght@600;700;800&display=swap');
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:#23272e;color:#e8e0d0;font-family:'Noto Sans JP',sans-serif;font-size:13px;line-height:1.5;-webkit-font-smoothing:antialiased}
+body{background:#23272e;color:#e8e0d0;font-family:'Noto Sans JP',sans-serif;font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:4px;height:4px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#5a6070;border-radius:4px}
 input,textarea,select{font-family:'Noto Sans JP',sans-serif;outline:none;border:none;color:#e8e0d0}
 input[type=date],input[type=time],input[type=number],input[type=color]{color-scheme:light dark}
@@ -1086,10 +1086,12 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [exp, setExp]             = useState(true);
   const [memoOpen, setMemoOpen]   = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
-  const [swipeX, setSwipeX]       = useState(0);   // スワイプオフセット
+  const [swipeX, setSwipeX]       = useState(0);
   const [swiping, setSwiping]     = useState(false);
   const touchStartX = useRef(null);
-  const SWIPE_OPEN = -140; // アクション表示時のオフセット（4btn×28 + gap×3 + padding）
+  const touchStartY = useRef(null);
+  // ボタン4つ×28px + gap3×3px + paddingRight6px = 127px → 余裕を持って140
+  const SWIPE_OPEN = -140;
 
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today = localDate();
@@ -1100,29 +1102,33 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const hasMemo = !!task.memo;
   const isOpen = swipeX <= SWIPE_OPEN / 2;
 
-  const touchStartY = useRef(null);
   const onTouchStart = e => {
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
-    setSwiping(false);
+    setSwiping(false); // タッチ開始時はまだスワイプ判定しない
   };
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
-    const dx = e.touches[0].clientX - touchStartX.current + (isOpen ? SWIPE_OPEN : 0);
-    if (Math.abs(dx) > 5) setSwiping(true); // 横方向に動いたらスワイプ開始
-    if (dx < 0) setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx + (isOpen ? 0 : 0))));
+    const dx = e.touches[0].clientX - touchStartX.current;
+    const dy = e.touches[0].clientY - touchStartY.current;
+    // 横方向に8px以上動いたらスワイプ開始
+    if (Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) {
+      setSwiping(true);
+      const offset = isOpen ? SWIPE_OPEN : 0;
+      setSwipeX(Math.max(SWIPE_OPEN, Math.min(0, dx + offset)));
+    }
   };
   const onTouchEnd = e => {
-    const dx = (touchStartX.current !== null)
-      ? e.changedTouches[0].clientX - touchStartX.current
-      : 0;
-    const dy = (touchStartY.current !== null)
-      ? e.changedTouches[0].clientY - touchStartY.current
-      : 0;
-    const isTap = Math.abs(dx) < 6 && Math.abs(dy) < 6;
-    if (isTap && hasMemo && !isOpen) {
-      // タップ → メモ開閉（スワイプ中でなければ）
-      setMemoOpen(o => !o);
+    const dx = touchStartX.current !== null
+      ? e.changedTouches[0].clientX - touchStartX.current : 0;
+    const dy = touchStartY.current !== null
+      ? e.changedTouches[0].clientY - touchStartY.current : 0;
+    const isTap = Math.abs(dx) < 8 && Math.abs(dy) < 8;
+
+    if (isTap) {
+      // タップ → メモ開閉（スワイプは動かさない）
+      if (hasMemo && !isOpen) setMemoOpen(o => !o);
+      if (isOpen) setSwipeX(0); // 開いてる時タップで閉じる
     } else {
       // スワイプ確定
       setSwipeX(swipeX < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
@@ -1155,7 +1161,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           position:"relative",zIndex:1,
         }}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
-        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?()=>setMemoOpen(o=>!o):undefined} onTouchEnd={e=>{e.stopPropagation();}}>
+        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={hasMemo?e=>{if(!e.isTrusted||e.detail>0)setMemoOpen(o=>!o);}:undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
@@ -1172,19 +1178,24 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCのみ常時表示ボタン（完了タスクは非表示） */}
-        {!task.done && <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
+        {/* PCのみ・完了以外のみ表示 */}
+        {!task.done && (
+        <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
           <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
           <button title="複製して編集"  onClick={()=>onDuplicate(task)} style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
           <button title="編集"          onClick={()=>onEdit(task)}      style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
           <button title="削除" onClick={()=>setConfirmDel(true)} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-        </div>}
+        </div>
+        )}
       </div>
       {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？
 子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
       {/* ── メモ展開パネル ── */}
       {memoOpen && hasMemo && (
-        <div onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()}
+        <div
+          onClick={e=>e.stopPropagation()}
+          onTouchStart={e=>e.stopPropagation()}
+          onTouchEnd={e=>e.stopPropagation()}
           style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:`0 0 7px 7px`,padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
           {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
         </div>
@@ -2238,6 +2249,7 @@ const TemplatesView = ({templates,setTemplates,onUse,tags}) => {
 // ── タグ管理 ────────────────────────────────────────────────────────
 const TagsView = ({tags,setTags}) => {
   const [form,setForm]     = useState({name:"",color:"#8bb8d4",parentId:null});
+  const [colorOpen,setColorOpen] = useState(false);
   const [editId,setEditId] = useState(null);
   const [ef,setEf]         = useState(null);
   const [showA,setShowA]   = useState(false);
@@ -2246,7 +2258,7 @@ const TagsView = ({tags,setTags}) => {
   const add = () => {
     if(!form.name.trim()) return;
     setTags(t=>[...t,{id:"tag_"+Date.now(),name:form.name,color:form.color,parentId:form.parentId||null,archived:false}]);
-    setForm({name:"",color:"#8bb8d4",parentId:null});
+    setForm({name:"",color:"#8bb8d4",parentId:null}); setColorOpen(false); setColorOpen(false);
   };
 
   const arch = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:true}:t));
@@ -2312,36 +2324,31 @@ const TagsView = ({tags,setTags}) => {
         <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8,fontSize:13}}>新しいタグを作成</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 50px",gap:6,marginBottom:6}}>
           <Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/>
-          {(()=>{
-            const [cpOpen,setCpOpen] = React.useState(false);
-            const PALETTE = ["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0"];
-            return (
-              <div style={{position:"relative"}}>
-                <div style={{fontSize:8,color:C.textMuted,marginBottom:4,fontWeight:700}}>色</div>
-                <div onClick={()=>setCpOpen(o=>!o)}
-                  style={{width:32,height:28,borderRadius:6,background:form.color,cursor:"pointer",
-                    border:`2px solid ${C.border}`,boxShadow:"0 2px 6px rgba(0,0,0,.3)"}}>
-                </div>
-                {cpOpen && (
-                  <div style={{position:"absolute",top:56,left:0,zIndex:200,background:C.surface,
-                    border:`1px solid ${C.border}`,borderRadius:10,padding:10,
-                    boxShadow:"0 8px 24px rgba(0,0,0,.5)",width:140}}>
-                    <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
-                      {PALETTE.map(col=>(
-                        <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setCpOpen(false);}}
-                          style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",
-                            border:`2px solid ${form.color===col?"#fff":"transparent"}`,flexShrink:0}}/>
-                      ))}
-                    </div>
-                    <input type="color" value={form.color}
-                      onChange={e=>setForm(f=>({...f,color:e.target.value}))}
-                      style={{width:"100%",height:26,borderRadius:5,border:`1px solid ${C.border}`,
-                        background:"none",cursor:"pointer",padding:2}}/>
-                  </div>
-                )}
+          <div style={{position:"relative"}}>
+              <div style={{fontSize:8,color:C.textMuted,marginBottom:3,fontWeight:700}}>色</div>
+              <div onClick={()=>setColorOpen(o=>!o)} style={{width:32,height:28,borderRadius:6,
+                background:form.color,cursor:"pointer",border:`2px solid ${C.border}`,
+                boxShadow:"0 2px 6px rgba(0,0,0,.3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
               </div>
-            );
-          })()}
+              {colorOpen && (
+                <div style={{position:"absolute",top:54,right:0,zIndex:200,background:C.surface,
+                  border:`1px solid ${C.border}`,borderRadius:10,padding:10,
+                  boxShadow:"0 8px 24px rgba(0,0,0,.5)",width:136}}>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
+                    {["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0"].map(col=>(
+                      <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setColorOpen(false);}}
+                        style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",
+                          border:`2px solid ${form.color===col?"#fff":"transparent"}`}}/>
+                    ))}
+                  </div>
+                  <input type="color" value={form.color}
+                    onChange={e=>setForm(f=>({...f,color:e.target.value}))}
+                    style={{width:"100%",height:26,borderRadius:5,border:`1px solid ${C.border}`,
+                      background:"none",cursor:"pointer",padding:2}}/>
+                  <div style={{fontSize:9,color:C.textMuted,marginTop:3,textAlign:"center"}}>カスタム色</div>
+                </div>
+              )}
+            </div>
         </div>
         <div style={{marginBottom:6}}>
           <div style={{fontSize:8,color:C.textMuted,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>親タグ</div>
@@ -2661,7 +2668,7 @@ export default function App() {
                   <span style={{background:`linear-gradient(135deg,${C.accent},${C.info})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent"}}>Slate</span>
                 </div>
               </div>
-              <div style={{fontSize:9,color:C.textMuted,marginTop:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
+              <div style={{fontSize:9,color:C.textMuted,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{user.email}</div>
               {saving && <div style={{fontSize:8,color:C.success,marginTop:1}}>💾 保存中...</div>}
               <div style={{marginTop:7}}>
                 <div style={{display:"flex",justifyContent:"space-between",fontSize:8,color:C.textMuted,marginBottom:2}}>
