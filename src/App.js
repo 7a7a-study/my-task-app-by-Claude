@@ -300,8 +300,8 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{opacity:0;transition:opacity .15s}
-@media(hover:hover){.tr:hover .ta{opacity:1}.swipe-actions{display:none!important}}
-@media(hover:none){.ta{display:none!important}}
+@media(hover:hover){.tr:hover .ta{opacity:1}}
+@media(hover:none){.ta{display:none!important}.swipe-actions-pc{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
@@ -1082,8 +1082,11 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
 };
 
 // ── タスク行 ────────────────────────────────────────────────────────
-// タッチデバイス判定（マウント時1回だけ）
-const isTouchDevice = () => (typeof window !== "undefined") && (window.matchMedia("(hover:none)").matches || navigator.maxTouchPoints > 0);
+// タッチデバイス判定：hover:noneかつtouchが存在する場合のみtrue
+// (PCのタッチスクリーンはhover:hoverなのでfalseになる)
+const isTouchDevice = () =>
+  typeof window !== "undefined" &&
+  window.matchMedia("(hover:none) and (pointer:coarse)").matches;
 
 const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
   const [exp, setExp]               = useState(true);
@@ -1139,13 +1142,15 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     touchStartX.current = null;
     touchStartY.current = null;
     setSwiping(false);
-    blockClick.current = true; // タッチ後は必ず合成clickをブロック
+    // ★ タッチ後は必ず合成clickをブロック（タップ・スワイプ問わず）
+    blockClick.current = true;
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
+      // タップ処理
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
         closeSwipe();
       } else if (hasMemo) {
-        setMemo(!memoOpenRef.current); // ★ refから現在値を取得
+        setMemo(!memoOpenRef.current);
       }
     } else if (wasSwiping) {
       setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
@@ -1153,7 +1158,8 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   };
 
   const handleContentClick = e => {
-    if (blockClick.current) { blockClick.current = false; return; }
+    // ★ タッチ由来の合成clickは完全無視（blockClickは次のタッチStartでリセット）
+    if (blockClick.current) return;
     if (!hasMemo) return;
     e.stopPropagation();
     setMemo(!memoOpenRef.current);
@@ -2636,9 +2642,9 @@ export default function App() {
   };
 
   const handleMemoToggle = (id, idx) => {
-    // ★ syncDone不要（メモ変更は完了状態に影響しない）
-    // syncDoneを呼ぶと全TaskRowが再マウントされmemoOpenがリセットされるため除外
-    setTasks(prev => updTree(prev, id, x => ({...x, memo: toggleMemo(x.memo, idx)})));
+    // ★ syncDone不要（メモ変更は完了状態に影響しない・syncDoneで全再マウントされmemoOpenがリセットされるため除外）
+    const next = updTree(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
+    setTasks(next);
   };
   const handleEdit   = t  => { setEditTask(t); setShowForm(true); };
 
