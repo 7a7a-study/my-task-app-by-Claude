@@ -300,8 +300,8 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{opacity:0;transition:opacity .15s}
-@media(hover:hover){.tr:hover .ta{opacity:1}}
-@media(hover:none){.ta{display:none!important}.swipe-actions-pc{display:none!important}}
+@media(hover:hover){.tr:hover .ta{opacity:1}.swipe-actions{display:none!important}}
+@media(hover:none){.ta{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
@@ -1082,47 +1082,37 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
 };
 
 // ── タスク行 ────────────────────────────────────────────────────────
-// タッチデバイス判定：hover:noneかつtouchが存在する場合のみtrue
-// (PCのタッチスクリーンはhover:hoverなのでfalseになる)
-const isTouchDevice = () =>
-  typeof window !== "undefined" &&
-  window.matchMedia("(hover:none) and (pointer:coarse)").matches;
-
 const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
   const [exp, setExp]               = useState(true);
   const [memoOpen, setMemoOpen]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [swipeX, setSwipeX]         = useState(0);
   const [swiping, setSwiping]       = useState(false);
-  const touchStartX  = useRef(null);
-  const touchStartY  = useRef(null);
-  const swipeXRef    = useRef(0);
-  const blockClick   = useRef(false);
-  const memoOpenRef  = useRef(false); // ★ 再レンダリングでリセットされないようrefで管理
-  const isTouch      = useRef(isTouchDevice()); // ★ タッチデバイス判定をrefで保持
+  const touchStartX = useRef(null);
+  const touchStartY = useRef(null);
+  const swipeXRef   = useRef(0);
+  const lastWasTouch = useRef(false); // 直前の操作がタッチだったか
+  const memoOpenRef  = useRef(false);
   const SWIPE_OPEN   = -140;
 
-  // memoOpenのstateとrefを同期するラッパー
-  const setMemo = v => { memoOpenRef.current = v; setMemoOpen(v); };
-
-  const tTags  = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
-  const today  = localDate();
-  const over   = task.deadlineDate && !task.done && task.deadlineDate < today;
-  const urgent = task.deadlineDate && !task.done && task.deadlineDate === today;
-  const later  = task.isLater || isLaterTask(task);
-  const tc     = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
+  const tTags   = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
+  const today   = localDate();
+  const over    = task.deadlineDate && !task.done && task.deadlineDate < today;
+  const urgent  = task.deadlineDate && !task.done && task.deadlineDate === today;
+  const later   = task.isLater || isLaterTask(task);
+  const tc      = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const hasMemo = !!task.memo;
 
   const setSwipe = v => { swipeXRef.current = v; setSwipeX(v); };
   const closeSwipe = () => setSwipe(0);
+  const setMemo  = v => { memoOpenRef.current = v; setMemoOpen(v); };
 
   const onTouchStart = e => {
+    lastWasTouch.current = true;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     setSwiping(false);
-    blockClick.current = false;
   };
-
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
@@ -1134,7 +1124,6 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     const base = swipeXRef.current <= SWIPE_OPEN / 2 ? SWIPE_OPEN : 0;
     setSwipe(Math.max(SWIPE_OPEN, Math.min(0, base + dx)));
   };
-
   const onTouchEnd = e => {
     const dx = touchStartX.current !== null ? e.changedTouches[0].clientX - touchStartX.current : 0;
     const dy = touchStartY.current !== null ? e.changedTouches[0].clientY - touchStartY.current : 0;
@@ -1142,11 +1131,10 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     touchStartX.current = null;
     touchStartY.current = null;
     setSwiping(false);
-    // ★ タッチ後は必ず合成clickをブロック（タップ・スワイプ問わず）
-    blockClick.current = true;
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-      // タップ処理
+      // タップ：直後の合成clickをブロックするためpreventDefault
+      e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
         closeSwipe();
       } else if (hasMemo) {
@@ -1157,30 +1145,24 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     }
   };
 
+  // PCクリックでメモ開閉（タッチ由来の合成clickは e.preventDefault()で既にブロック済み）
   const handleContentClick = e => {
-    // ★ タッチ由来の合成clickは完全無視（blockClickは次のタッチStartでリセット）
-    if (blockClick.current) return;
     if (!hasMemo) return;
     e.stopPropagation();
     setMemo(!memoOpenRef.current);
   };
 
-  // ★ アイコン表示条件：PCのみ・未完了のみ（タッチデバイスは完全非表示）
-  const showActions = !task.done && !isTouch.current;
-
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
-      {/* スワイプアクションボタン（タッチデバイスのみ表示） */}
-      {isTouch.current && (
-        <div style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
-          <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
-          <button title="複製"         onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
-          <button title="編集"         onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
-          <button title="削除"         onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
-        </div>
-      )}
+      {/* スワイプアクションボタン（背面・CSSでPCは非表示） */}
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+        <button onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
+        <button onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
+        <button onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
+        <button onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+      </div>
       {/* メインコンテンツ */}
-      <div className={isTouch.current ? "hov" : "hov tr"}
+      <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
           background:depth===0?C.surface:C.bgSub,
@@ -1209,28 +1191,25 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCホバー時のみ・完了タスクは完全非表示 */}
-        {showActions && (
+        {/* PCホバー時のみ表示・完了タスクは非表示・CSSで制御 */}
+        {!task.done && (
           <div className="ta" style={{display:"flex",gap:3,flexShrink:0,opacity:0}}>
-            <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
-            <button title="複製して編集" onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
-            <button title="編集"         onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
-            <button title="削除"         onClick={()=>setConfirmDel(true)}  style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+            <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
+            <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
+            <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
+            <button onClick={()=>setConfirmDel(true)}  style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
           </div>
         )}
       </div>
       {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
-      {/* メモ展開パネル */}
+      {/* メモ展開パネル（タスク行とは別要素・アイコンと重ならない） */}
       {memoOpen && hasMemo && (
         <div
           onClick={e=>e.stopPropagation()}
-          onTouchStart={e=>e.stopPropagation()}
-          onTouchEnd={e=>e.stopPropagation()}
+          onTouchStart={e=>{e.stopPropagation();}}
+          onTouchEnd={e=>{e.stopPropagation();e.preventDefault();}}
           style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:"0 0 7px 7px",padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
-          {renderMemo(task.memo, onMemoToggle ? idx => {
-            // ★ チェック操作：memoOpenを閉じずに更新
-            onMemoToggle(task.id, idx);
-          } : null)}
+          {renderMemo(task.memo, onMemoToggle ? idx => onMemoToggle(task.id, idx) : null)}
         </div>
       )}
       {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
@@ -2641,10 +2620,16 @@ export default function App() {
     setTasks(syncDone(updTree(tasks, id, x => ({...x, overrideDates}))));
   };
 
+  const memoSaveTimer = useRef(null);
   const handleMemoToggle = (id, idx) => {
-    // ★ syncDone不要（メモ変更は完了状態に影響しない・syncDoneで全再マウントされmemoOpenがリセットされるため除外）
-    const next = updTree(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
-    setTasks(next);
+    // ★ setTasksRawのみ（save2DBを呼ばない）→ TaskRowが再マウントされずmemoOpenが保持される
+    // 500ms後にまとめてFirestoreに保存
+    setTasksRaw(prev => {
+      const next = updTree(prev, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
+      clearTimeout(memoSaveTimer.current);
+      memoSaveTimer.current = setTimeout(() => save2DB(next, tags, templates), 500);
+      return next;
+    });
   };
   const handleEdit   = t  => { setEditTask(t); setShowForm(true); };
 
