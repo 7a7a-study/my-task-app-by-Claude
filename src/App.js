@@ -1082,6 +1082,9 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
 };
 
 // ── タスク行 ────────────────────────────────────────────────────────
+// タッチデバイス判定（マウント時1回だけ）
+const isTouchDevice = () => (typeof window !== "undefined") && (window.matchMedia("(hover:none)").matches || navigator.maxTouchPoints > 0);
+
 const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
   const [exp, setExp]               = useState(true);
   const [memoOpen, setMemoOpen]     = useState(false);
@@ -1091,8 +1094,13 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const touchStartX  = useRef(null);
   const touchStartY  = useRef(null);
   const swipeXRef    = useRef(0);
-  const blockClick   = useRef(false); // タッチ後の合成clickを無視するフラグ
+  const blockClick   = useRef(false);
+  const memoOpenRef  = useRef(false); // ★ 再レンダリングでリセットされないようrefで管理
+  const isTouch      = useRef(isTouchDevice()); // ★ タッチデバイス判定をrefで保持
   const SWIPE_OPEN   = -140;
+
+  // memoOpenのstateとrefを同期するラッパー
+  const setMemo = v => { memoOpenRef.current = v; setMemoOpen(v); };
 
   const tTags  = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today  = localDate();
@@ -1131,17 +1139,15 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     touchStartX.current = null;
     touchStartY.current = null;
     setSwiping(false);
+    blockClick.current = true; // タッチ後は必ず合成clickをブロック
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-      // タップ：合成clickをブロックしてここで処理
-      blockClick.current = true;
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
         closeSwipe();
       } else if (hasMemo) {
-        setMemoOpen(o => !o);
+        setMemo(!memoOpenRef.current); // ★ refから現在値を取得
       }
     } else if (wasSwiping) {
-      blockClick.current = true;
       setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
     }
   };
@@ -1150,20 +1156,25 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     if (blockClick.current) { blockClick.current = false; return; }
     if (!hasMemo) return;
     e.stopPropagation();
-    setMemoOpen(o => !o);
+    setMemo(!memoOpenRef.current);
   };
+
+  // ★ アイコン表示条件：PCのみ・未完了のみ（タッチデバイスは完全非表示）
+  const showActions = !task.done && !isTouch.current;
 
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
-      {/* スワイプアクションボタン（背面・モバイルのみ） */}
-      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
-        <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
-        <button title="複製"         onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
-        <button title="編集"         onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
-        <button title="削除"         onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
-      </div>
+      {/* スワイプアクションボタン（タッチデバイスのみ表示） */}
+      {isTouch.current && (
+        <div style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+          <button title="子タスク追加" onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
+          <button title="複製"         onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
+          <button title="編集"         onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
+          <button title="削除"         onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+        </div>
+      )}
       {/* メインコンテンツ */}
-      <div className="hov tr"
+      <div className={isTouch.current ? "hov" : "hov tr"}
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
           background:depth===0?C.surface:C.bgSub,
@@ -1192,8 +1203,8 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCホバー時のみ・完了タスクは非表示 */}
-        {!task.done && (
+        {/* PCホバー時のみ・完了タスクは完全非表示 */}
+        {showActions && (
           <div className="ta" style={{display:"flex",gap:3,flexShrink:0,opacity:0}}>
             <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button title="複製して編集" onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
@@ -1203,14 +1214,17 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         )}
       </div>
       {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
-      {/* メモ展開パネル（スワイプと独立、タップで開閉） */}
+      {/* メモ展開パネル */}
       {memoOpen && hasMemo && (
         <div
           onClick={e=>e.stopPropagation()}
           onTouchStart={e=>e.stopPropagation()}
           onTouchEnd={e=>e.stopPropagation()}
           style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:"0 0 7px 7px",padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
-          {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
+          {renderMemo(task.memo, onMemoToggle ? idx => {
+            // ★ チェック操作：memoOpenを閉じずに更新
+            onMemoToggle(task.id, idx);
+          } : null)}
         </div>
       )}
       {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
@@ -2622,8 +2636,9 @@ export default function App() {
   };
 
   const handleMemoToggle = (id, idx) => {
-    const t = flatten(tasks).find(x => x.id === id);
-    if (t) setTasks(syncDone(updTree(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}))));
+    // ★ syncDone不要（メモ変更は完了状態に影響しない）
+    // syncDoneを呼ぶと全TaskRowが再マウントされmemoOpenがリセットされるため除外
+    setTasks(prev => updTree(prev, id, x => ({...x, memo: toggleMemo(x.memo, idx)})));
   };
   const handleEdit   = t  => { setEditTask(t); setShowForm(true); };
 
