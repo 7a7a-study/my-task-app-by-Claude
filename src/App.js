@@ -299,9 +299,9 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .drag{cursor:grab!important}.drag:active{cursor:grabbing!important;opacity:.5!important}
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
-.tr .ta{opacity:0;transition:opacity .15s}.tr:hover .ta{opacity:1}
+.tr .ta{opacity:0;transition:opacity .15s}
+@media(hover:hover){.tr:hover .ta{opacity:1}.swipe-actions{display:none!important}}
 @media(hover:none){.ta{display:none!important}}
-@media(hover:hover){.swipe-actions{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
@@ -1088,10 +1088,11 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [confirmDel, setConfirmDel] = useState(false);
   const [swipeX, setSwipeX]         = useState(0);
   const [swiping, setSwiping]       = useState(false);
-  const touchStartX = useRef(null);
-  const touchStartY = useRef(null);
-  const swipeXRef   = useRef(0); // swipeX の最新値をタッチイベント内で参照する用
-  const SWIPE_OPEN  = -140;
+  const touchStartX  = useRef(null);
+  const touchStartY  = useRef(null);
+  const swipeXRef    = useRef(0);
+  const blockClick   = useRef(false); // タッチ後の合成clickを無視するフラグ
+  const SWIPE_OPEN   = -140;
 
   const tTags  = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today  = localDate();
@@ -1101,7 +1102,6 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const tc     = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const hasMemo = !!task.memo;
 
-  // swipeX を ref と state 両方に保持（タッチハンドラ内でclosure問題回避）
   const setSwipe = v => { swipeXRef.current = v; setSwipeX(v); };
   const closeSwipe = () => setSwipe(0);
 
@@ -1109,16 +1109,17 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     setSwiping(false);
+    blockClick.current = false;
   };
 
   const onTouchMove = e => {
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if (!swiping && Math.abs(dx) <= 8) return; // まだ判定しない
-    if (!swiping && Math.abs(dy) >= Math.abs(dx)) return; // 縦スクロール優先
+    if (!swiping && Math.abs(dx) <= 8) return;
+    if (!swiping && Math.abs(dy) >= Math.abs(dx)) return;
     setSwiping(true);
-    e.preventDefault(); // 縦スクロール抑制
+    e.preventDefault();
     const base = swipeXRef.current <= SWIPE_OPEN / 2 ? SWIPE_OPEN : 0;
     setSwipe(Math.max(SWIPE_OPEN, Math.min(0, base + dx)));
   };
@@ -1132,18 +1133,24 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     setSwiping(false);
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-      // タップ判定
+      // タップ：合成clickをブロックしてここで処理
+      blockClick.current = true;
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
-        // アクション表示中 → 閉じる
         closeSwipe();
       } else if (hasMemo) {
-        // 通常状態 → メモ開閉
         setMemoOpen(o => !o);
       }
     } else if (wasSwiping) {
-      // スワイプ確定：中間点より左ならOPEN、右ならCLOSE
+      blockClick.current = true;
       setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
     }
+  };
+
+  const handleContentClick = e => {
+    if (blockClick.current) { blockClick.current = false; return; }
+    if (!hasMemo) return;
+    e.stopPropagation();
+    setMemoOpen(o => !o);
   };
 
   return (
@@ -1155,7 +1162,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         <button title="編集"         onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
         <button title="削除"         onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
       </div>
-      {/* メインコンテンツ（スワイプで左にスライド） */}
+      {/* メインコンテンツ */}
       <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
@@ -1168,8 +1175,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           position:"relative",zIndex:1,
         }}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
-        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
-          onClick={hasMemo ? e => { e.stopPropagation(); setMemoOpen(o=>!o); } : undefined}>
+        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={handleContentClick}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
@@ -1186,9 +1192,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCのみ・完了タスクは非表示 */}
+        {/* PCホバー時のみ・完了タスクは非表示 */}
         {!task.done && (
-          <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,opacity:0}}>
             <button title="子タスク追加" onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button title="複製して編集" onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button title="編集"         onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
