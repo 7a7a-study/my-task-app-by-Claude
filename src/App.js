@@ -1090,10 +1090,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const [swiping, setSwiping]       = useState(false);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
-  const swipeXRef   = useRef(0);
-  const lastWasTouch = useRef(false); // 直前の操作がタッチだったか
-  const memoOpenRef  = useRef(false);
-  const SWIPE_OPEN   = -140;
+  const swipeXRef   = useRef(0); // closure問題回避用
+  const memoRef     = useRef(false); // 再レンダリングでリセットされないmemoOpen
+  const SWIPE_OPEN  = -140;
 
   const tTags   = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const today   = localDate();
@@ -1104,11 +1103,10 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   const hasMemo = !!task.memo;
 
   const setSwipe = v => { swipeXRef.current = v; setSwipeX(v); };
+  const setMemo  = v => { memoRef.current = v; setMemoOpen(v); };
   const closeSwipe = () => setSwipe(0);
-  const setMemo  = v => { memoOpenRef.current = v; setMemoOpen(v); };
 
   const onTouchStart = e => {
-    lastWasTouch.current = true;
     touchStartX.current = e.touches[0].clientX;
     touchStartY.current = e.touches[0].clientY;
     setSwiping(false);
@@ -1133,35 +1131,28 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     setSwiping(false);
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-      // タップ：直後の合成clickをブロックするためpreventDefault
+      // タップ確定 → ここでメモ開閉。合成clickはe.preventDefault()でブロック
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
         closeSwipe();
       } else if (hasMemo) {
-        setMemo(!memoOpenRef.current);
+        setMemo(!memoRef.current);
       }
     } else if (wasSwiping) {
       setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
     }
   };
 
-  // PCクリックでメモ開閉（タッチ由来の合成clickは e.preventDefault()で既にブロック済み）
-  const handleContentClick = e => {
-    if (!hasMemo) return;
-    e.stopPropagation();
-    setMemo(!memoOpenRef.current);
-  };
-
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
-      {/* スワイプアクションボタン（背面・CSSでPCは非表示） */}
+      {/* スワイプアクションボタン（背面・モバイルのみ。PCはCSSで非表示） */}
       <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
         <button onClick={()=>{setConfirmDel(true);closeSwipe();}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
       </div>
-      {/* メインコンテンツ */}
+      {/* メインコンテンツ（スワイプで左スライド） */}
       <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
         style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
@@ -1174,7 +1165,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
           position:"relative",zIndex:1,
         }}>
         <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
-        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}} onClick={handleContentClick}>
+        {/* PCのみclickでメモ開閉（モバイルはonTouchEndで処理済み） */}
+        <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
+          onClick={hasMemo ? e=>{e.stopPropagation();setMemo(!memoRef.current);} : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
@@ -1191,9 +1184,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCホバー時のみ表示・完了タスクは非表示・CSSで制御 */}
+        {/* PCホバーのみ・完了タスクは非表示 */}
         {!task.done && (
-          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,opacity:0}}>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
@@ -1202,14 +1195,14 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         )}
       </div>
       {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task.id);setConfirmDel(false);}} onCancel={()=>setConfirmDel(false)}/>}
-      {/* メモ展開パネル（タスク行とは別要素・アイコンと重ならない） */}
+      {/* メモ展開パネル（タスク行の外・アイコンと重ならない） */}
       {memoOpen && hasMemo && (
         <div
           onClick={e=>e.stopPropagation()}
-          onTouchStart={e=>{e.stopPropagation();}}
-          onTouchEnd={e=>{e.stopPropagation();e.preventDefault();}}
+          onTouchStart={e=>e.stopPropagation()}
+          onTouchEnd={e=>e.stopPropagation()}
           style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:"0 0 7px 7px",padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
-          {renderMemo(task.memo, onMemoToggle ? idx => onMemoToggle(task.id, idx) : null)}
+          {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
         </div>
       )}
       {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
@@ -2620,17 +2613,13 @@ export default function App() {
     setTasks(syncDone(updTree(tasks, id, x => ({...x, overrideDates}))));
   };
 
-  const memoSaveTimer = useRef(null);
   const handleMemoToggle = (id, idx) => {
-    // ★ setTasksRawのみ（save2DBを呼ばない）→ TaskRowが再マウントされずmemoOpenが保持される
-    // 500ms後にまとめてFirestoreに保存
-    setTasksRaw(prev => {
-      const next = updTree(prev, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
-      clearTimeout(memoSaveTimer.current);
-      memoSaveTimer.current = setTimeout(() => save2DB(next, tags, templates), 500);
-      return next;
-    });
-  };
+    // setTasksRaw直接呼び出し（save2DBはdebounce）→ TaskRow再マウントなしでmemoOpenを保持
+    const next = updTree(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
+    setTasksRaw(next);
+    clearTimeout(window._memoSaveTimer);
+    window._memoSaveTimer = setTimeout(() => save2DB(next, tags, templates), 800);
+  };  };
   const handleEdit   = t  => { setEditTask(t); setShowForm(true); };
 
   // ★ 複製→タイトルそのまま・(コピー)なし・フォームを開く
