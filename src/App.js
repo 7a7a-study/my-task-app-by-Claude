@@ -2619,7 +2619,7 @@ export default function App() {
     setTasksRaw(next);
     clearTimeout(window._memoSaveTimer);
     window._memoSaveTimer = setTimeout(() => save2DB(next, tags, templates), 800);
-  };  };
+  };
   const handleEdit   = t  => { setEditTask(t); setShowForm(true); };
 
   // ★ 複製→タイトルそのまま・(コピー)なし・フォームを開く
