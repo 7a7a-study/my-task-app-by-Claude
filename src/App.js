@@ -2575,10 +2575,10 @@ const TagsView = ({tags,setTags}) => {
             onTouchStart={e=>onTouchStart(e,p.id,"parent")}
             onTouchMove={e=>onTouchMove(e)}
             onTouchEnd={e=>onTouchEnd(e,"parent")}
-            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s",touchAction:"none",userSelect:"none"}}>
+            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{color:C.textMuted,fontSize:13}}>⠿</span>
+                <span style={{color:C.textMuted,fontSize:13,userSelect:"none"}}>⠿</span>
                 <div style={{width:10,height:10,borderRadius:"50%",background:p.color}}/>
                 <span style={{fontWeight:700,color:p.color,fontSize:13}}>{p.name}</span>
                 <span style={{fontSize:8,color:C.textMuted,background:C.surfHov,padding:"0 4px",borderRadius:5}}>親</span>
@@ -2602,10 +2602,10 @@ const TagsView = ({tags,setTags}) => {
                     onTouchStart={e=>onTouchStart(e,c.id,p.id)}
                     onTouchMove={e=>onTouchMove(e)}
                     onTouchEnd={e=>onTouchEnd(e,p.id)}
-                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s",touchAction:"none",userSelect:"none"}}>
+                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div style={{display:"flex",alignItems:"center",gap:5}}>
-                        <span style={{color:C.textMuted,fontSize:11}}>⠿</span>
+                        <span style={{color:C.textMuted,fontSize:11,userSelect:"none"}}>⠿</span>
                         <div style={{width:7,height:7,borderRadius:"50%",background:c.color}}/>
                         <span style={{fontSize:11,color:c.color,fontWeight:600}}>{c.name}</span>
                       </div>
