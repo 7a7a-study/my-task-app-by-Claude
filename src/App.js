@@ -227,7 +227,6 @@ const renderMemo = (memo, onToggle) => {
   // インライン装飾（太字・コード・URL）をパース
   const renderInline = (text) => {
     const parts = [];
-    // **bold**、`code`、URLを処理
     const re = /(\*\*(.+?)\*\*|`(.+?)`|(https?:\/\/[^\s<>"']+))/g;
     let last = 0, m;
     while ((m = re.exec(text)) !== null) {
@@ -237,7 +236,6 @@ const renderMemo = (memo, onToggle) => {
       } else if (m[0].startsWith("`")) {
         parts.push(<code key={m.index} style={{background:C.bg,color:C.accent,padding:"0 4px",borderRadius:3,fontSize:10,fontFamily:"monospace"}}>{m[3]}</code>);
       } else {
-        // URL
         parts.push(<a key={m.index} href={m[4]} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:C.accent,textDecoration:"underline",wordBreak:"break-all"}}>{m[4]}</a>);
       }
       last = re.lastIndex;
@@ -1316,7 +1314,7 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
   );
 
   if (isPC) {
-    // PC: 左=タスク+繰り返し、右=あとでやる の2カラム
+    // PC: 左=タスク+繰り返し、右=あとでやる
     return (
       <div>
         {sortBar}
@@ -1757,18 +1755,14 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
   }).filter(t => !(t.isLater||isLaterTask(t)));
   const todayDone = todayTasks.filter(t => t.done).length;
 
-  const overdue  = all.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today && (!t.repeat || parseRepeat(t.repeat).type==="なし"));
-  const upcoming = all.filter(t => {
-    if (!t.deadlineDate || t.done) return false;
-    const dl = t.deadlineDate;
-    const in7 = new Date(today); in7.setDate(in7.getDate()+7);
-    return dl > today && dl <= localDate(in7);
-  }).sort((a,b)=>a.deadlineDate.localeCompare(b.deadlineDate));
+  const overdue  = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today);
+  const in7 = (() => { const d=new Date(today); d.setDate(d.getDate()+7); return localDate(d); })();
+  const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate > today && t.deadlineDate <= in7)
+    .sort((a,b)=>a.deadlineDate.localeCompare(b.deadlineDate));
   const laterTasks = all.filter(t => (t.isLater||isLaterTask(t)) && !t.done);
 
-  // タグ別進捗
   const tagStats = tags.filter(t=>!t.parentId&&!t.archived).map(tag=>{
-    const tt = all.filter(t=>t.tags?.includes(tag.id) && (!t.repeat||parseRepeat(t.repeat).type==="なし"));
+    const tt = nonRep.filter(t=>t.tags?.includes(tag.id));
     const td = tt.filter(t=>t.done).length;
     return {...tag, total:tt.length, done:td, pct: tt.length ? Math.round(td/tt.length*100) : 0};
   }).filter(t=>t.total>0);
@@ -1793,7 +1787,6 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
 
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
-      {/* 全体進捗 */}
       <Card title="📊 全体進捗" color={C.accent}>
         <div style={{fontSize:34,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1}}>{pct}<span style={{fontSize:16}}>%</span></div>
         <div style={{background:C.bg,borderRadius:6,height:6,overflow:"hidden",margin:"8px 0 4px"}}>
@@ -1802,7 +1795,6 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
         <div style={{fontSize:10,color:C.textMuted}}>{doneCnt} / {totalCnt} タスク完了</div>
       </Card>
 
-      {/* 今日 */}
       <Card title={`📅 今日 (${todayDone}/${todayTasks.length})`} color={C.success}>
         {todayTasks.length===0
           ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
@@ -1811,7 +1803,6 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
         {todayTasks.length>6 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {todayTasks.length-6} 件...</div>}
       </Card>
 
-      {/* 期限超過 */}
       {overdue.length>0 && (
         <Card title={`⚠ 期限超過 (${overdue.length})`} color={C.danger}>
           {overdue.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}
@@ -1819,14 +1810,12 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
         </Card>
       )}
 
-      {/* 今後7日の締切 */}
       {upcoming.length>0 && (
         <Card title={`📆 今後7日の締切 (${upcoming.length})`} color={C.warn}>
           {upcoming.map(t=><MiniRow key={t.id} task={t}/>)}
         </Card>
       )}
 
-      {/* タグ別進捗 */}
       {tagStats.length>0 && (
         <Card title="🏷 タグ別進捗" color={C.accent}>
           {tagStats.map(tag=>(
@@ -1843,7 +1832,6 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
         </Card>
       )}
 
-      {/* あとでやる */}
       {laterTasks.length>0 && (
         <Card title={`📌 あとでやる (${laterTasks.length})`} color={C.warn}>
           {laterTasks.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}
@@ -2373,55 +2361,48 @@ const TagsView = ({tags,setTags}) => {
   const [editId,setEditId] = useState(null);
   const [ef,setEf]         = useState(null);
   const [showA,setShowA]   = useState(false);
-  const [confirmTag,setConfirmTag] = useState(null); // {id, name, isParent}
+  const [confirmTag,setConfirmTag] = useState(null);
+  // D&D用state（親タグ・小タグ共用）
   const [dragOverId,setDragOverId] = useState(null);
-  const dragIdRef = useRef(null);
-
-  // 親タグのドラッグ順序入れ替え
-  const onTagDragStart = (e, id) => { dragIdRef.current = id; e.dataTransfer.effectAllowed = "move"; };
-  const onTagDragOver  = (e, id) => { e.preventDefault(); setDragOverId(id); };
-  const onTagDrop      = (e, targetId) => {
-    e.preventDefault(); setDragOverId(null);
-    const fromId = dragIdRef.current;
-    if (!fromId || fromId === targetId) return;
-    setTags(ts => {
-      const arr = [...ts];
-      const fi = arr.findIndex(t => t.id === fromId);
-      const ti = arr.findIndex(t => t.id === targetId);
-      if (fi < 0 || ti < 0) return ts;
-      const [moved] = arr.splice(fi, 1);
-      arr.splice(ti, 0, moved);
-      return arr;
-    });
-    dragIdRef.current = null;
-  };
+  const dragIdRef  = useRef(null); // ドラッグ中のタグID
+  const dragCtxRef = useRef(null); // "parent" | 親タグID（小タグの場合）
 
   const add = () => {
     if(!form.name.trim()) return;
     setTags(t=>[...t,{id:"tag_"+Date.now(),name:form.name,color:form.color,parentId:form.parentId||null,archived:false}]);
-    setForm({name:"",color:"#8bb8d4",parentId:null}); setColorOpen(false); setColorOpen(false);
+    setForm({name:"",color:"#8bb8d4",parentId:null}); setColorOpen(false);
   };
-
   const arch = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:true}:t));
   const rest = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:false}:t));
+  const deleteTag = id => { setTags(ts=>ts.filter(t=>t.id!==id && t.parentId!==id)); setConfirmTag(null); };
 
-  // タグ削除（子タグも一緒に削除）
-  const deleteTag = id => {
-    setTags(ts=>ts.filter(t=>t.id!==id && t.parentId!==id));
-    setConfirmTag(null);
+  // 親タグのD&D（同一レベル内で順序入れ替え）
+  const onParentDragStart = (e,id) => { e.stopPropagation(); dragIdRef.current=id; dragCtxRef.current="parent"; e.dataTransfer.effectAllowed="move"; };
+  const onParentDragOver  = (e,id) => { e.preventDefault(); e.stopPropagation(); setDragOverId(id); };
+  const onParentDrop      = (e,targetId) => {
+    e.preventDefault(); e.stopPropagation(); setDragOverId(null);
+    if (dragCtxRef.current!=="parent") return;
+    const fromId=dragIdRef.current; if(!fromId||fromId===targetId) return;
+    setTags(ts=>{ const a=[...ts]; const fi=a.findIndex(t=>t.id===fromId); const ti=a.findIndex(t=>t.id===targetId); if(fi<0||ti<0)return ts; const[m]=a.splice(fi,1); a.splice(ti,0,m); return a; });
+    dragIdRef.current=null; dragCtxRef.current=null;
+  };
+
+  // 小タグのD&D（同一親タグ内で順序入れ替え）
+  const onChildDragStart = (e,id,parentId) => { e.stopPropagation(); dragIdRef.current=id; dragCtxRef.current=parentId; e.dataTransfer.effectAllowed="move"; };
+  const onChildDragOver  = (e,id) => { e.preventDefault(); e.stopPropagation(); setDragOverId(id); };
+  const onChildDrop      = (e,targetId,parentId) => {
+    e.preventDefault(); e.stopPropagation(); setDragOverId(null);
+    if (dragCtxRef.current!==parentId) return;
+    const fromId=dragIdRef.current; if(!fromId||fromId===targetId) return;
+    setTags(ts=>{ const a=[...ts]; const fi=a.findIndex(t=>t.id===fromId); const ti=a.findIndex(t=>t.id===targetId); if(fi<0||ti<0)return ts; const[m]=a.splice(fi,1); a.splice(ti,0,m); return a; });
+    dragIdRef.current=null; dragCtxRef.current=null;
   };
 
   const pt=tags.filter(t=>!t.parentId&&!t.archived), ct=pid=>tags.filter(t=>t.parentId===pid&&!t.archived), at=tags.filter(t=>t.archived);
 
-  // 親タグの編集保存：色が変わった場合は子タグも同期
   const saveEdit = () => {
     const isParent = !tags.find(t=>t.id===editId)?.parentId;
-    setTags(ts=>ts.map(t=>{
-      if (t.id===editId) return {...t,...ef};
-      // 親タグの色変更→子タグの色も自動更新
-      if (isParent && t.parentId===editId) return {...t,color:ef.color};
-      return t;
-    }));
+    setTags(ts=>ts.map(t=>{ if(t.id===editId)return{...t,...ef}; if(isParent&&t.parentId===editId)return{...t,color:ef.color}; return t; }));
     setEditId(null);
   };
 
@@ -2433,9 +2414,7 @@ const TagsView = ({tags,setTags}) => {
         <input type="color" value={ef.color} onChange={e=>setEf(f=>({...f,color:e.target.value}))} style={{width:34,height:30,borderRadius:5,border:`1px solid ${C.border}`,background:"none",cursor:"pointer",padding:2}}/>
       </div>
       {!tags.find(x=>x.id===editId)?.parentId && (
-        <div style={{fontSize:8,color:C.textMuted,marginBottom:7,alignSelf:"flex-end",paddingBottom:8}}>
-          ※色変更時は子タグも連動
-        </div>
+        <div style={{fontSize:8,color:C.textMuted,marginBottom:7,alignSelf:"flex-end",paddingBottom:8}}>※色変更時は子タグも連動</div>
       )}
       <div style={{marginBottom:7,display:"flex",gap:4}}>
         <Btn v="accent" onClick={saveEdit}>保存</Btn>
@@ -2446,18 +2425,10 @@ const TagsView = ({tags,setTags}) => {
 
   return (
     <div>
-      {/* 確認ダイアログ */}
       {confirmTag && (
-        <ConfirmDialog
-          title="タグを削除"
-          message={confirmTag.isParent
-            ? `「${confirmTag.name}」と、その子タグをすべて削除しますか？
-タスクのタグ設定も外れます。`
-            : `「${confirmTag.name}」を削除しますか？
-タスクのタグ設定も外れます。`}
-          onConfirm={()=>deleteTag(confirmTag.id)}
-          onCancel={()=>setConfirmTag(null)}
-        />
+        <ConfirmDialog title="タグを削除"
+          message={confirmTag.isParent?`「${confirmTag.name}」と、その子タグをすべて削除しますか？\nタスクのタグ設定も外れます。`:`「${confirmTag.name}」を削除しますか？\nタスクのタグ設定も外れます。`}
+          onConfirm={()=>deleteTag(confirmTag.id)} onCancel={()=>setConfirmTag(null)}/>
       )}
 
       {/* 新規作成フォーム */}
@@ -2466,30 +2437,20 @@ const TagsView = ({tags,setTags}) => {
         <div style={{display:"grid",gridTemplateColumns:"1fr 50px",gap:6,marginBottom:6}}>
           <Inp label="タグ名" value={form.name} onChange={v=>setForm(f=>({...f,name:v}))} placeholder="タグ名..."/>
           <div style={{position:"relative"}}>
-              <div style={{fontSize:8,color:C.textMuted,marginBottom:3,fontWeight:700}}>色</div>
-              <div onClick={()=>setColorOpen(o=>!o)} style={{width:32,height:28,borderRadius:6,
-                background:form.color,cursor:"pointer",border:`2px solid ${C.border}`,
-                boxShadow:"0 2px 6px rgba(0,0,0,.3)",display:"flex",alignItems:"center",justifyContent:"center"}}>
-              </div>
-              {colorOpen && (
-                <div style={{position:"absolute",top:54,right:0,zIndex:200,background:C.surface,
-                  border:`1px solid ${C.border}`,borderRadius:10,padding:10,
-                  boxShadow:"0 8px 24px rgba(0,0,0,.5)",width:136}}>
-                  <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
-                    {["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0"].map(col=>(
-                      <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setColorOpen(false);}}
-                        style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",
-                          border:`2px solid ${form.color===col?"#fff":"transparent"}`}}/>
-                    ))}
-                  </div>
-                  <input type="color" value={form.color}
-                    onChange={e=>setForm(f=>({...f,color:e.target.value}))}
-                    style={{width:"100%",height:26,borderRadius:5,border:`1px solid ${C.border}`,
-                      background:"none",cursor:"pointer",padding:2}}/>
-                  <div style={{fontSize:9,color:C.textMuted,marginTop:3,textAlign:"center"}}>カスタム色</div>
+            <div style={{fontSize:8,color:C.textMuted,marginBottom:3,fontWeight:700}}>色</div>
+            <div onClick={()=>setColorOpen(o=>!o)} style={{width:32,height:28,borderRadius:6,background:form.color,cursor:"pointer",border:`2px solid ${C.border}`,boxShadow:"0 2px 6px rgba(0,0,0,.3)"}}/>
+            {colorOpen && (
+              <div style={{position:"absolute",top:54,right:0,zIndex:200,background:C.surface,border:`1px solid ${C.border}`,borderRadius:10,padding:10,boxShadow:"0 8px 24px rgba(0,0,0,.5)",width:136}}>
+                <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:6,marginBottom:8}}>
+                  {["#8bb8d4","#7aaa82","#c47878","#c8a96e","#b8c4b0","#a89bc4","#d4a882","#94b8a0"].map(col=>(
+                    <div key={col} onClick={()=>{setForm(f=>({...f,color:col}));setColorOpen(false);}} style={{width:24,height:24,borderRadius:5,background:col,cursor:"pointer",border:`2px solid ${form.color===col?"#fff":"transparent"}`}}/>
+                  ))}
                 </div>
-              )}
-            </div>
+                <input type="color" value={form.color} onChange={e=>setForm(f=>({...f,color:e.target.value}))} style={{width:"100%",height:26,borderRadius:5,border:`1px solid ${C.border}`,background:"none",cursor:"pointer",padding:2}}/>
+                <div style={{fontSize:9,color:C.textMuted,marginTop:3,textAlign:"center"}}>カスタム色</div>
+              </div>
+            )}
+          </div>
         </div>
         <div style={{marginBottom:6}}>
           <div style={{fontSize:8,color:C.textMuted,marginBottom:2,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>親タグ</div>
@@ -2502,44 +2463,52 @@ const TagsView = ({tags,setTags}) => {
       </div>
 
       {/* タグ一覧 */}
-      <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>⠿ ドラッグして順序を変更できます</div>
+      <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>⠿ ドラッグで順序を変更できます（親タグ・小タグ両方）</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {pt.map(p=>(
           <div key={p.id}
             draggable
-            onDragStart={e=>onTagDragStart(e,p.id)}
-            onDragOver={e=>onTagDragOver(e,p.id)}
-            onDrop={e=>onTagDrop(e,p.id)}
-            onDragLeave={()=>setDragOverId(null)}
+            onDragStart={e=>onParentDragStart(e,p.id)}
+            onDragOver={e=>onParentDragOver(e,p.id)}
+            onDrop={e=>onParentDrop(e,p.id)}
+            onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOverId(null);}}
             onDragEnd={()=>setDragOverId(null)}
             style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
-                <span style={{color:C.textMuted,fontSize:14,cursor:"grab"}}>⠿</span>
+                <span style={{color:C.textMuted,fontSize:13}}>⠿</span>
                 <div style={{width:10,height:10,borderRadius:"50%",background:p.color}}/>
                 <span style={{fontWeight:700,color:p.color,fontSize:13}}>{p.name}</span>
                 <span style={{fontSize:8,color:C.textMuted,background:C.surfHov,padding:"0 4px",borderRadius:5}}>親</span>
               </div>
               <div style={{display:"flex",gap:3}}>
-                <Btn onClick={()=>{setEditId(p.id);setEf({name:p.name,color:p.color});}} style={{padding:"2px 7px",fontSize:9}}>編集</Btn>
-                <Btn v="danger" onClick={()=>arch(p.id)} style={{padding:"2px 7px",fontSize:9}}>アーカイブ</Btn>
-                <Btn v="danger" onClick={()=>setConfirmTag({id:p.id,name:p.name,isParent:true})} style={{padding:"2px 7px",fontSize:9}}>削除</Btn>
+                <Btn onClick={e=>{e.stopPropagation();setEditId(p.id);setEf({name:p.name,color:p.color});}} style={{padding:"2px 7px",fontSize:9}}>編集</Btn>
+                <Btn v="danger" onClick={e=>{e.stopPropagation();arch(p.id);}} style={{padding:"2px 7px",fontSize:9}}>アーカイブ</Btn>
+                <Btn v="danger" onClick={e=>{e.stopPropagation();setConfirmTag({id:p.id,name:p.name,isParent:true});}} style={{padding:"2px 7px",fontSize:9}}>削除</Btn>
               </div>
             </div>
             <ER t={p}/>
             {ct(p.id).length>0&&(
               <div style={{paddingLeft:14,marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
                 {ct(p.id).map(c=>(
-                  <div key={c.id} style={{background:C.bgSub,borderRadius:7,border:`1px solid ${c.color}33`,padding:"5px 8px"}}>
+                  <div key={c.id}
+                    draggable
+                    onDragStart={e=>onChildDragStart(e,c.id,p.id)}
+                    onDragOver={e=>onChildDragOver(e,c.id)}
+                    onDrop={e=>onChildDrop(e,c.id,p.id)}
+                    onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOverId(null);}}
+                    onDragEnd={()=>setDragOverId(null)}
+                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div style={{display:"flex",alignItems:"center",gap:5}}>
+                        <span style={{color:C.textMuted,fontSize:11}}>⠿</span>
                         <div style={{width:7,height:7,borderRadius:"50%",background:c.color}}/>
                         <span style={{fontSize:11,color:c.color,fontWeight:600}}>{c.name}</span>
                       </div>
                       <div style={{display:"flex",gap:3}}>
-                        <Btn onClick={()=>{setEditId(c.id);setEf({name:c.name,color:c.color});}} style={{padding:"2px 6px",fontSize:9}}>編集</Btn>
-                        <Btn v="danger" onClick={()=>arch(c.id)} style={{padding:"2px 6px",fontSize:9}}>アーカイブ</Btn>
-                        <Btn v="danger" onClick={()=>setConfirmTag({id:c.id,name:c.name,isParent:false})} style={{padding:"2px 6px",fontSize:9}}>削除</Btn>
+                        <Btn onClick={e=>{e.stopPropagation();setEditId(c.id);setEf({name:c.name,color:c.color});}} style={{padding:"2px 6px",fontSize:9}}>編集</Btn>
+                        <Btn v="danger" onClick={e=>{e.stopPropagation();arch(c.id);}} style={{padding:"2px 6px",fontSize:9}}>アーカイブ</Btn>
+                        <Btn v="danger" onClick={e=>{e.stopPropagation();setConfirmTag({id:c.id,name:c.name,isParent:false});}} style={{padding:"2px 6px",fontSize:9}}>削除</Btn>
                       </div>
                     </div>
                     <ER t={c}/>
