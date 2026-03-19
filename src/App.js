@@ -53,6 +53,9 @@ const DAYS_JP = ["月","火","水","木","金","土","日"];
 const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
 
+// タッチデバイス判定（マウント時1回のみ評価・CSS制御より確実）
+const IS_TOUCH = typeof window !== "undefined" && window.matchMedia("(hover:none)").matches;
+
 // ── ユーティリティ ──────────────────────────────────────────────────
 const flatten = (ts, res=[], pt=null, pid=null) => {
   ts.forEach(t => {
@@ -301,8 +304,8 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{display:none!important}
-@media(hover:hover){.tr:hover .ta{display:flex!important}.swipe-actions{display:none!important}}
-@media(hover:none){.ta{display:none!important}}
+.tr:hover .ta{display:flex!important}
+@media(hover:none){.tr:hover .ta{display:none!important}.swipe-actions{display:flex!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
@@ -1185,9 +1188,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {/* PCホバーのみ・完了タスクは非表示 */}
-        {!task.done && (
-          <div className="ta" style={{gap:3,flexShrink:0,alignSelf:"flex-start"}}>
+        {/* PCホバーのみ・タッチデバイスと完了タスクは非表示 */}
+        {!IS_TOUCH && !task.done && (
+          <div className="ta" style={{gap:3,flexShrink:0,alignSelf:"flex-start",marginTop:3}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
@@ -2322,6 +2325,9 @@ const TagsView = ({tags,setTags}) => {
   const [dragOverId,setDragOverId] = useState(null);
   const dragIdRef  = useRef(null);
   const dragCtxRef = useRef(null); // "parent" or 親タグID
+  // タッチD&D用
+  const touchDragRef = useRef(null); // {id, ctx, startY, itemEls:[]}
+  const touchOverRef = useRef(null);
 
   const add = () => {
     if(!form.name.trim()) return;
@@ -2332,13 +2338,17 @@ const TagsView = ({tags,setTags}) => {
   const rest = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:false}:t));
   const deleteTag = id => { setTags(ts=>ts.filter(t=>t.id!==id && t.parentId!==id)); setConfirmTag(null); };
 
+  const reorder = (fromId, targetId) => {
+    setTags(ts=>{ const a=[...ts]; const fi=a.findIndex(t=>t.id===fromId); const ti=a.findIndex(t=>t.id===targetId); if(fi<0||ti<0)return ts; const[m]=a.splice(fi,1); a.splice(ti,0,m); return a; });
+  };
+
   const onParentDragStart = (e,id) => { e.stopPropagation(); dragIdRef.current=id; dragCtxRef.current="parent"; e.dataTransfer.effectAllowed="move"; };
   const onParentDragOver  = (e,id) => { e.preventDefault(); e.stopPropagation(); setDragOverId(id); };
   const onParentDrop      = (e,targetId) => {
     e.preventDefault(); e.stopPropagation(); setDragOverId(null);
     if (dragCtxRef.current!=="parent") return;
     const fromId=dragIdRef.current; if(!fromId||fromId===targetId) return;
-    setTags(ts=>{ const a=[...ts]; const fi=a.findIndex(t=>t.id===fromId); const ti=a.findIndex(t=>t.id===targetId); if(fi<0||ti<0)return ts; const[m]=a.splice(fi,1); a.splice(ti,0,m); return a; });
+    reorder(fromId, targetId);
     dragIdRef.current=null; dragCtxRef.current=null;
   };
   const onChildDragStart = (e,id,parentId) => { e.stopPropagation(); dragIdRef.current=id; dragCtxRef.current=parentId; e.dataTransfer.effectAllowed="move"; };
@@ -2347,8 +2357,44 @@ const TagsView = ({tags,setTags}) => {
     e.preventDefault(); e.stopPropagation(); setDragOverId(null);
     if (dragCtxRef.current!==parentId) return;
     const fromId=dragIdRef.current; if(!fromId||fromId===targetId) return;
-    setTags(ts=>{ const a=[...ts]; const fi=a.findIndex(t=>t.id===fromId); const ti=a.findIndex(t=>t.id===targetId); if(fi<0||ti<0)return ts; const[m]=a.splice(fi,1); a.splice(ti,0,m); return a; });
+    reorder(fromId, targetId);
     dragIdRef.current=null; dragCtxRef.current=null;
+  };
+
+  // ── タッチD&D ──
+  const onTouchStart = (e, id, ctx) => {
+    e.stopPropagation();
+    const touch = e.touches[0];
+    touchDragRef.current = { id, ctx, startY: touch.clientY };
+    touchOverRef.current = null;
+  };
+  const onTouchMove = (e, containerSelector) => {
+    if (!touchDragRef.current) return;
+    e.preventDefault();
+    const touch = e.touches[0];
+    // 指の位置にある要素を探す
+    const el = document.elementFromPoint(touch.clientX, touch.clientY);
+    if (!el) return;
+    const row = el.closest("[data-tagid]");
+    if (row) {
+      const overId = row.getAttribute("data-tagid");
+      if (overId !== touchOverRef.current) {
+        touchOverRef.current = overId;
+        setDragOverId(overId);
+      }
+    }
+  };
+  const onTouchEnd = (e, ctx) => {
+    if (!touchDragRef.current) return;
+    const fromId = touchDragRef.current.id;
+    const fromCtx = touchDragRef.current.ctx;
+    const targetId = touchOverRef.current;
+    setDragOverId(null);
+    touchDragRef.current = null;
+    touchOverRef.current = null;
+    if (!targetId || targetId === fromId) return;
+    // 同じコンテキスト（親同士 or 同じ親の子同士）のみ並び替え
+    if (fromCtx === ctx) reorder(fromId, targetId);
   };
 
   const pt=tags.filter(t=>!t.parentId&&!t.archived), ct=pid=>tags.filter(t=>t.parentId===pid&&!t.archived), at=tags.filter(t=>t.archived);
@@ -2412,16 +2458,19 @@ const TagsView = ({tags,setTags}) => {
         </div>
         <Btn v="accent" onClick={add}>追加</Btn>
       </div>
-      <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>⠿ ドラッグで順序を変更できます（親タグ・小タグ両方）</div>
+      <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>⠿ ドラッグ（PC）またはロングタップ後スワイプ（モバイル）で順序変更</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {pt.map(p=>(
-          <div key={p.id} draggable
+          <div key={p.id} data-tagid={p.id} draggable
             onDragStart={e=>onParentDragStart(e,p.id)}
             onDragOver={e=>onParentDragOver(e,p.id)}
             onDrop={e=>onParentDrop(e,p.id)}
             onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOverId(null);}}
             onDragEnd={()=>setDragOverId(null)}
-            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s"}}>
+            onTouchStart={e=>onTouchStart(e,p.id,"parent")}
+            onTouchMove={e=>onTouchMove(e)}
+            onTouchEnd={e=>onTouchEnd(e,"parent")}
+            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{color:C.textMuted,fontSize:13}}>⠿</span>
@@ -2439,13 +2488,16 @@ const TagsView = ({tags,setTags}) => {
             {ct(p.id).length>0&&(
               <div style={{paddingLeft:14,marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
                 {ct(p.id).map(c=>(
-                  <div key={c.id} draggable
+                  <div key={c.id} data-tagid={c.id} draggable
                     onDragStart={e=>onChildDragStart(e,c.id,p.id)}
                     onDragOver={e=>onChildDragOver(e,c.id)}
                     onDrop={e=>onChildDrop(e,c.id,p.id)}
                     onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget))setDragOverId(null);}}
                     onDragEnd={()=>setDragOverId(null)}
-                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s"}}>
+                    onTouchStart={e=>onTouchStart(e,c.id,p.id)}
+                    onTouchMove={e=>onTouchMove(e)}
+                    onTouchEnd={e=>onTouchEnd(e,p.id)}
+                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div style={{display:"flex",alignItems:"center",gap:5}}>
                         <span style={{color:C.textMuted,fontSize:11}}>⠿</span>
