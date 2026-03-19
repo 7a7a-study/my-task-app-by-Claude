@@ -224,18 +224,21 @@ const syncDone = tasks => {
 const renderMemo = (memo, onToggle) => {
   if (!memo) return null;
 
-  // インライン装飾（太字・コード）をパース
+  // インライン装飾（太字・コード・URL）をパース
   const renderInline = (text) => {
     const parts = [];
-    // **bold** と `code` を処理
-    const re = /(\*\*(.+?)\*\*|`(.+?)`)/g;
+    // **bold**、`code`、URLを処理
+    const re = /(\*\*(.+?)\*\*|`(.+?)`|(https?:\/\/[^\s<>"']+))/g;
     let last = 0, m;
     while ((m = re.exec(text)) !== null) {
       if (m.index > last) parts.push(text.slice(last, m.index));
       if (m[0].startsWith("**")) {
         parts.push(<strong key={m.index} style={{color:C.text,fontWeight:700}}>{m[2]}</strong>);
-      } else {
+      } else if (m[0].startsWith("`")) {
         parts.push(<code key={m.index} style={{background:C.bg,color:C.accent,padding:"0 4px",borderRadius:3,fontSize:10,fontFamily:"monospace"}}>{m[3]}</code>);
+      } else {
+        // URL
+        parts.push(<a key={m.index} href={m[4]} target="_blank" rel="noopener noreferrer" onClick={e=>e.stopPropagation()} style={{color:C.accent,textDecoration:"underline",wordBreak:"break-all"}}>{m[4]}</a>);
       }
       last = re.lastIndex;
     }
@@ -1313,19 +1316,19 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
   );
 
   if (isPC) {
-    // PC: 2カラムレイアウト（左=習慣+あとでやる、右=通常タスク）
+    // PC: 左=タスク+繰り返し、右=あとでやる の2カラム
     return (
       <div>
         {sortBar}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
           <div>
             <Sec title="タスク" items={regular} color={C.accent} icon="📋"/>
-            {regular.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
+            <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
+            {regular.length===0 && habits.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
           </div>
           <div>
-            <Sec title="あとでやる"     items={later}  color={C.warn}   icon="📌"/>
-            <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
-            {habits.length===0 && later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>習慣・あとでやるなし</div>}
+            <Sec title="あとでやる" items={later} color={C.warn} icon="📌"/>
+            {later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>あとでやるなし</div>}
           </div>
         </div>
         {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
@@ -1337,8 +1340,8 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
     <div>
       {sortBar}
       <Sec title="タスク"         items={regular} color={C.accent}  icon="📋"/>
-      <Sec title="あとでやる"     items={later}   color={C.warn}    icon="📌"/>
       <Sec title="習慣・繰り返し" items={habits}  color={C.success} icon="🔄"/>
+      <Sec title="あとでやる"     items={later}   color={C.warn}    icon="📌"/>
       {filtered.length===0 && <div style={{textAlign:"center",padding:"36px 0",color:C.textMuted}}><div style={{fontSize:36,marginBottom:7}}>🎉</div>タスクがありません</div>}
     </div>
   );
@@ -1675,9 +1678,10 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           const isT=d===today, dt=new Date(d), isSat=dt.getDay()===6, isR=isRed(d);
           const hName = holName(d);
           return (
-            <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub}} title={hName||undefined}>
+            <div key={d} style={{padding:"4px 2px",textAlign:"center",borderBottom:`2px solid ${isT?C.accent:C.border}`,color:isT?C.accent:isSat?C.info:isR?C.danger:C.textSub,background:isT?C.accentS:"transparent"}} title={hName||undefined}>
               <div style={{fontSize:8,fontWeight:700}}>{DAYS_JP[i]}{hName?<span style={{fontSize:7}}> 祝</span>:null}</div>
               <div style={{fontSize:13,fontWeight:isT?700:400,fontFamily:"'Playfair Display',serif"}}>{dt.getDate()}</div>
+              {isT && <div style={{width:5,height:5,borderRadius:"50%",background:C.accent,margin:"1px auto 0"}}/>}
             </div>
           );
         })}
@@ -1692,7 +1696,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           const dayTasks = getDay(d).filter(t => !!t.startTime);
           const isSat=new Date(d).getDay()===6, isR=isRed(d);
           return (
-            <div key={d} style={{position:"relative",height:totalH,borderLeft:`1px solid ${C.border}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}
+            <div key={d} style={{position:"relative",height:totalH,borderLeft:`1px solid ${C.border}20`,background:d===today?"rgba(139,184,212,.06)":isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}
               onDragOver={e=>e.preventDefault()}
               onDrop={e=>{
                 e.preventDefault();
@@ -1738,6 +1742,117 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
   );
 };
 
+
+// ── ダッシュボードビュー ─────────────────────────────────────────────
+const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
+  const all = flatten(tasks);
+  const nonRep = all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし");
+  const doneCnt  = nonRep.filter(t=>t.done).length;
+  const totalCnt = nonRep.length;
+  const pct = totalCnt > 0 ? Math.round(doneCnt/totalCnt*100) : 0;
+
+  const todayTasks = all.filter(t => {
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, today);
+    return sameDay(t.startDate, today) || sameDay(t.deadlineDate, today);
+  }).filter(t => !(t.isLater||isLaterTask(t)));
+  const todayDone = todayTasks.filter(t => t.done).length;
+
+  const overdue  = all.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today && (!t.repeat || parseRepeat(t.repeat).type==="なし"));
+  const upcoming = all.filter(t => {
+    if (!t.deadlineDate || t.done) return false;
+    const dl = t.deadlineDate;
+    const in7 = new Date(today); in7.setDate(in7.getDate()+7);
+    return dl > today && dl <= localDate(in7);
+  }).sort((a,b)=>a.deadlineDate.localeCompare(b.deadlineDate));
+  const laterTasks = all.filter(t => (t.isLater||isLaterTask(t)) && !t.done);
+
+  // タグ別進捗
+  const tagStats = tags.filter(t=>!t.parentId&&!t.archived).map(tag=>{
+    const tt = all.filter(t=>t.tags?.includes(tag.id) && (!t.repeat||parseRepeat(t.repeat).type==="なし"));
+    const td = tt.filter(t=>t.done).length;
+    return {...tag, total:tt.length, done:td, pct: tt.length ? Math.round(td/tt.length*100) : 0};
+  }).filter(t=>t.total>0);
+
+  const Card = ({title,color=C.border,children}) => (
+    <div style={{background:C.surface,borderRadius:11,padding:13,border:`1px solid ${color}44`}}>
+      <div style={{fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:10}}>{title}</div>
+      {children}
+    </div>
+  );
+  const MiniRow = ({task}) => {
+    const c = tags.find(tg=>task.tags?.includes(tg.id))?.color || C.accent;
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:7,padding:"4px 0",borderBottom:`1px solid ${C.border}18`,cursor:"pointer"}} onClick={()=>onEdit(task)}>
+        <div onClick={e=>{e.stopPropagation();onToggle(task.id);}} style={{width:11,height:11,borderRadius:3,border:`2px solid ${task.done?c:C.border}`,background:task.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+        <span style={{fontSize:11,color:task.done?C.textMuted:C.text,textDecoration:task.done?"line-through":"none",flex:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{task.title}</span>
+        {task.deadlineDate && <span style={{fontSize:9,color:C.warn,flexShrink:0}}>{fd(task.deadlineDate)}</span>}
+        <div style={{width:6,height:6,borderRadius:"50%",background:c,flexShrink:0}}/>
+      </div>
+    );
+  };
+
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
+      {/* 全体進捗 */}
+      <Card title="📊 全体進捗" color={C.accent}>
+        <div style={{fontSize:34,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1}}>{pct}<span style={{fontSize:16}}>%</span></div>
+        <div style={{background:C.bg,borderRadius:6,height:6,overflow:"hidden",margin:"8px 0 4px"}}>
+          <div style={{width:`${pct}%`,height:"100%",background:`linear-gradient(90deg,${C.accent},${C.success})`,borderRadius:6,transition:"width .5s"}}/>
+        </div>
+        <div style={{fontSize:10,color:C.textMuted}}>{doneCnt} / {totalCnt} タスク完了</div>
+      </Card>
+
+      {/* 今日 */}
+      <Card title={`📅 今日 (${todayDone}/${todayTasks.length})`} color={C.success}>
+        {todayTasks.length===0
+          ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
+          : todayTasks.slice(0,6).map(t=><MiniRow key={t.id} task={t}/>)
+        }
+        {todayTasks.length>6 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {todayTasks.length-6} 件...</div>}
+      </Card>
+
+      {/* 期限超過 */}
+      {overdue.length>0 && (
+        <Card title={`⚠ 期限超過 (${overdue.length})`} color={C.danger}>
+          {overdue.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}
+          {overdue.length>5 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {overdue.length-5} 件...</div>}
+        </Card>
+      )}
+
+      {/* 今後7日の締切 */}
+      {upcoming.length>0 && (
+        <Card title={`📆 今後7日の締切 (${upcoming.length})`} color={C.warn}>
+          {upcoming.map(t=><MiniRow key={t.id} task={t}/>)}
+        </Card>
+      )}
+
+      {/* タグ別進捗 */}
+      {tagStats.length>0 && (
+        <Card title="🏷 タグ別進捗" color={C.accent}>
+          {tagStats.map(tag=>(
+            <div key={tag.id} style={{marginBottom:9}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
+                <span style={{color:tag.color,fontWeight:700}}>{tag.name}</span>
+                <span style={{color:C.textMuted,fontSize:10}}>{tag.pct}%　({tag.done}/{tag.total})</span>
+              </div>
+              <div style={{background:C.bg,borderRadius:5,height:5,overflow:"hidden"}}>
+                <div style={{width:`${tag.pct}%`,height:"100%",background:tag.color,borderRadius:5,transition:"width .5s"}}/>
+              </div>
+            </div>
+          ))}
+        </Card>
+      )}
+
+      {/* あとでやる */}
+      {laterTasks.length>0 && (
+        <Card title={`📌 あとでやる (${laterTasks.length})`} color={C.warn}>
+          {laterTasks.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}
+          {laterTasks.length>5 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {laterTasks.length-5} 件...</div>}
+        </Card>
+      )}
+    </div>
+  );
+};
 
 // ── レポートビュー ────────────────────────────────────────────────────
 const ReportView = ({tasks, tags}) => {
@@ -2077,7 +2192,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
           onDragOver={e=>{e.preventDefault();const n=Math.ceil(e.nativeEvent.offsetX/DW);setDropDay(Math.max(1,Math.min(D,n)));}}
           onDragLeave={()=>setDropDay(null)}
           onDrop={e=>{const n=Math.ceil(e.nativeEvent.offsetX/DW);hDrop(e,Math.max(1,Math.min(D,n)));}}>
-          {todD && <div style={{position:"absolute",left:(todD-1)*DW+DW/2,top:0,bottom:0,width:1,background:`${C.danger}30`,pointerEvents:"none",zIndex:1}}/>}
+          {todD && <div style={{position:"absolute",left:(todD-1)*DW+DW/2,top:0,bottom:0,width:2,background:`${C.accent}55`,pointerEvents:"none",zIndex:1}}/>}
           {bar && (
             <div draggable
               onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed="move";setDragBar({task,startDay:bar.startDay});}}
@@ -2132,7 +2247,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
               <span style={{fontSize:8,color:C.textMuted,marginLeft:"auto"}}>{gTasks.length}</span>
             </div>
             <div style={{flex:1,position:"relative"}}>
-              {todD && <div style={{position:"absolute",left:(todD-1)*DW+DW/2,top:0,bottom:0,width:1,background:`${C.danger}30`,pointerEvents:"none"}}/>}
+              {todD && <div style={{position:"absolute",left:(todD-1)*DW+DW/2,top:0,bottom:0,width:2,background:`${C.accent}55`,pointerEvents:"none"}}/>}
             </div>
           </div>
         )}
@@ -2259,6 +2374,27 @@ const TagsView = ({tags,setTags}) => {
   const [ef,setEf]         = useState(null);
   const [showA,setShowA]   = useState(false);
   const [confirmTag,setConfirmTag] = useState(null); // {id, name, isParent}
+  const [dragOverId,setDragOverId] = useState(null);
+  const dragIdRef = useRef(null);
+
+  // 親タグのドラッグ順序入れ替え
+  const onTagDragStart = (e, id) => { dragIdRef.current = id; e.dataTransfer.effectAllowed = "move"; };
+  const onTagDragOver  = (e, id) => { e.preventDefault(); setDragOverId(id); };
+  const onTagDrop      = (e, targetId) => {
+    e.preventDefault(); setDragOverId(null);
+    const fromId = dragIdRef.current;
+    if (!fromId || fromId === targetId) return;
+    setTags(ts => {
+      const arr = [...ts];
+      const fi = arr.findIndex(t => t.id === fromId);
+      const ti = arr.findIndex(t => t.id === targetId);
+      if (fi < 0 || ti < 0) return ts;
+      const [moved] = arr.splice(fi, 1);
+      arr.splice(ti, 0, moved);
+      return arr;
+    });
+    dragIdRef.current = null;
+  };
 
   const add = () => {
     if(!form.name.trim()) return;
@@ -2366,11 +2502,20 @@ const TagsView = ({tags,setTags}) => {
       </div>
 
       {/* タグ一覧 */}
+      <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>⠿ ドラッグして順序を変更できます</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {pt.map(p=>(
-          <div key={p.id} style={{background:C.surface,borderRadius:10,padding:10,border:`1px solid ${p.color}33`}}>
+          <div key={p.id}
+            draggable
+            onDragStart={e=>onTagDragStart(e,p.id)}
+            onDragOver={e=>onTagDragOver(e,p.id)}
+            onDrop={e=>onTagDrop(e,p.id)}
+            onDragLeave={()=>setDragOverId(null)}
+            onDragEnd={()=>setDragOverId(null)}
+            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
+                <span style={{color:C.textMuted,fontSize:14,cursor:"grab"}}>⠿</span>
                 <div style={{width:10,height:10,borderRadius:"50%",background:p.color}}/>
                 <span style={{fontWeight:700,color:p.color,fontSize:13}}>{p.name}</span>
                 <span style={{fontSize:8,color:C.textMuted,background:C.surfHov,padding:"0 4px",borderRadius:5}}>親</span>
@@ -2450,7 +2595,7 @@ export default function App() {
   const [showForm,setShowForm]     = useState(false);
   const [editTask,setEditTask]     = useState(null);
   const [addChildTo,setAddChildTo] = useState(null);
-  const [filters,setFilters]       = useState({tag:"",search:"",hideCompleted:false});
+  const [filters,setFilters]       = useState({tag:"",search:"",hideCompleted:true});
   const [dragTask,setDragTask]     = useState(null);
   const [defDate,setDefDate]       = useState(null);
   const [defTime,setDefTime]       = useState(null);
@@ -2646,6 +2791,7 @@ export default function App() {
   const pct      = totalCnt>0 ? Math.round((doneCnt/totalCnt)*100) : 0;
 
   const NAV = [
+    {id:"dashboard",label:"ダッシュボード",icon:"◈"},
     {id:"list",     label:"リスト",       icon:"☰"},
     {id:"day",      label:"日",           icon:"📆"},
     {id:"week",     label:"週",           icon:"📅"},
@@ -2736,6 +2882,7 @@ export default function App() {
               </div>
               {["list","day","week","gantt"].includes(view) && <Btn v="accent" onClick={()=>{setDefDate(null);setDefTime(null);setEditTask(null);setAddChildTo(null);setShowForm(true);}}>＋ 追加</Btn>}
             </div>
+            {view==="dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit}/>}
             {view==="list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
             {view==="day"       && <DayView  tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view==="week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
