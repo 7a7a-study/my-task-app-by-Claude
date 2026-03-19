@@ -2466,18 +2466,25 @@ const TagsView = ({tags,setTags}) => {
     dragIdRef.current=null; dragCtxRef.current=null;
   };
 
-  // ── タッチD&D ──
+  // ── タッチD&D（長押し後のみ発動）──
   const onTouchStart = (e, id, ctx) => {
     e.stopPropagation();
     const touch = e.touches[0];
-    touchDragRef.current = { id, ctx, startY: touch.clientY };
+    touchDragRef.current = null; // まだドラッグ開始していない
     touchOverRef.current = null;
+    // 500ms長押しでドラッグ開始
+    window._tagLongPress = setTimeout(() => {
+      touchDragRef.current = { id, ctx, startY: touch.clientY };
+    }, 500);
   };
-  const onTouchMove = (e, containerSelector) => {
-    if (!touchDragRef.current) return;
+  const onTouchMove = (e) => {
+    if (!touchDragRef.current) {
+      // 長押し前に動いたらキャンセル
+      clearTimeout(window._tagLongPress);
+      return;
+    }
     e.preventDefault();
     const touch = e.touches[0];
-    // 指の位置にある要素を探す
     const el = document.elementFromPoint(touch.clientX, touch.clientY);
     if (!el) return;
     const row = el.closest("[data-tagid]");
@@ -2490,6 +2497,7 @@ const TagsView = ({tags,setTags}) => {
     }
   };
   const onTouchEnd = (e, ctx) => {
+    clearTimeout(window._tagLongPress);
     if (!touchDragRef.current) return;
     const fromId = touchDragRef.current.id;
     const fromCtx = touchDragRef.current.ctx;
@@ -2498,7 +2506,6 @@ const TagsView = ({tags,setTags}) => {
     touchDragRef.current = null;
     touchOverRef.current = null;
     if (!targetId || targetId === fromId) return;
-    // 同じコンテキスト（親同士 or 同じ親の子同士）のみ並び替え
     if (fromCtx === ctx) reorder(fromId, targetId);
   };
 
@@ -2575,7 +2582,7 @@ const TagsView = ({tags,setTags}) => {
             onTouchStart={e=>onTouchStart(e,p.id,"parent")}
             onTouchMove={e=>onTouchMove(e)}
             onTouchEnd={e=>onTouchEnd(e,"parent")}
-            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
+            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{color:C.textMuted,fontSize:13,userSelect:"none"}}>⠿</span>
@@ -2602,7 +2609,7 @@ const TagsView = ({tags,setTags}) => {
                     onTouchStart={e=>onTouchStart(e,c.id,p.id)}
                     onTouchMove={e=>onTouchMove(e)}
                     onTouchEnd={e=>onTouchEnd(e,p.id)}
-                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
+                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div style={{display:"flex",alignItems:"center",gap:5}}>
                         <span style={{color:C.textMuted,fontSize:11,userSelect:"none"}}>⠿</span>
