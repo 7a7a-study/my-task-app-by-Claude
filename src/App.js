@@ -260,6 +260,7 @@ const renderMemo = (memo, onToggle) => {
       return (
         <div key={i} style={{display:"flex",alignItems:"center",gap:6,marginBottom:3}}>
           <div onClick={e=>{e.stopPropagation();e.preventDefault();onToggle&&onToggle(i);}}
+            onTouchEnd={e=>{e.stopPropagation();e.preventDefault();onToggle&&onToggle(i);}}
             style={{width:13,height:13,borderRadius:3,border:`2px solid ${checked?C.accent:C.border}`,background:checked?C.accent:"transparent",cursor:"pointer",flexShrink:0,display:"flex",alignItems:"center",justifyContent:"center"}}>
             {checked && <span style={{color:"#fff",fontSize:8,fontWeight:800}}>✓</span>}
           </div>
@@ -1236,7 +1237,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
       {/* メインコンテンツ（スワイプで左スライド） */}
       <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
+        style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",
           background:depth===0?C.surface:C.bgSub,
           border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,
           borderLeft:depth>0?`3px solid ${tc}55`:undefined,
@@ -1268,7 +1269,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         </div>
         {/* PCホバーのみ・タッチデバイスと完了タスクは非表示 */}
         {!IS_TOUCH && !task.done && (
-          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"flex-start",marginTop:5}}>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"center"}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
@@ -1282,7 +1283,8 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         <div
           onClick={e=>e.stopPropagation()}
           onTouchStart={e=>e.stopPropagation()}
-          onTouchEnd={e=>e.stopPropagation()}
+          onTouchMove={e=>e.stopPropagation()}
+          onTouchEnd={e=>{e.stopPropagation();e.preventDefault();}}
           style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:"0 0 7px 7px",padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
           {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
         </div>
