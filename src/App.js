@@ -304,8 +304,9 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{display:none!important}
-.tr:hover .ta{display:flex!important}
-@media(hover:none){.tr:hover .ta{display:none!important}.swipe-actions{display:flex!important}}
+.swipe-actions{display:none!important}
+@media(hover:hover){.tr:hover .ta{display:flex!important}}
+@media(hover:none){.swipe-actions{display:flex!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
@@ -506,14 +507,15 @@ const ConfirmDialog = ({title, message, confirmLabel="削除", onConfirm, onCanc
 );
 
 // ── ポップアップ ────────────────────────────────────────────────────
-const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,anchor}) => {
+const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,anchor,viewDate}) => {
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
   // 繰り返しタスクかどうか（仮想オーバーライドタスクも含む）
   const isRepeat = (task.repeat && parseRepeat(task.repeat).type !== "なし") || !!task._overrideKey;
   // 今回の「本来の日付」（スキップ/移動のキー）
-  const origDate = task._overrideKey || task.startDate || task.deadlineDate || "";
+  // 繰り返しタスクはviewDate（クリックした日）を使う。overrideタスクはオリジナルのorigKey
+  const origDate = task._overrideKey || viewDate || task.startDate || task.deadlineDate || "";
   // 今回だけ日程変更フォームの表示
   const [showOverride, setShowOverride] = useState(false);
   const [confirmDel, setConfirmDel]   = useState(false);
@@ -1190,7 +1192,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         </div>
         {/* PCホバーのみ・タッチデバイスと完了タスクは非表示 */}
         {!IS_TOUCH && !task.done && (
-          <div className="ta" style={{gap:3,flexShrink:0,alignSelf:"flex-start",marginTop:3}}>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"flex-start",marginTop:5}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
@@ -1406,7 +1408,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
   const timed   = todayT.filter(t =>  t.startTime && !(t.isLater||isLaterTask(t)));
   const untimed = todayT.filter(t => !t.startTime && !(t.isLater||isLaterTask(t)));
 
-  const hp = (e,task) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
+  const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||viewDate}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
   // 繰り返しタスクのトグルには日付を渡す
   const hToggle = (id) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?viewDate:undefined); };
@@ -1549,7 +1551,7 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           })}
         </div>
       </div>
-      {popup && <Popup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
@@ -1586,7 +1588,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
     ...expandOverrides(tasks).filter(t => sameDay(t.startDate,date)||sameDay(t.deadlineDate,date)),
   ].filter(t => !(t.isLater||isLaterTask(t)));
 
-  const hp = (e,task) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
+  const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
   const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||localDate()):undefined); };
 
@@ -1656,7 +1658,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                         <div draggable className="drag"
                           onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);e.stopPropagation();}}
                           onDragEnd={()=>setDragTask(null)}
-                          onClick={e=>hp(e,t)}
+                          onClick={e=>hp(e,t,d)}
                           style={{display:"flex",alignItems:"center",gap:3,flex:1,minWidth:0,cursor:"grab"}}>
                           <div onClick={e=>{e.stopPropagation();hToggle(t.id,date);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
                           <span style={{fontSize:8,fontWeight:600,color:t.done?C.textMuted:c,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
@@ -1731,13 +1733,13 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
                 const sm = t2m(t.startTime)||0;
                 const dur = Number(t.duration)||60;
                 const em = t.endTime ? t2m(t.endTime) : sm+dur;
-                return <TimelineChip key={t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={onToggle} onUpdate={onUpdate} onRSStart={onRSStart}/>;
+                return <TimelineChip key={t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={onToggle} onUpdate={onUpdate} onRSStart={onRSStart}/>;
               })}
             </div>
           );
         })}
       </div>
-      {popup && <Popup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
@@ -2080,7 +2082,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
   const MN = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
   const todD = today.startsWith(`${vy}-${String(vm+1).padStart(2,"0")}`) ? parseInt(today.slice(8)) : null;
 
-  const hp = (e,task) => { e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)}); };
+  const hp = (e,task,vd) => { e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||task.startDate||today}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
 
   const hDrop = (e,n) => {
@@ -2130,7 +2132,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
       <div key={task.id} style={{display:"flex",borderBottom:`1px solid ${C.border}18`,height:RH,background:ri%2===0?"transparent":"rgba(255,255,255,.01)"}}
         onMouseEnter={e=>e.currentTarget.style.background=C.surfHov+"44"}
         onMouseLeave={e=>e.currentTarget.style.background=ri%2===0?"transparent":"rgba(255,255,255,.01)"}>
-        <div onClick={e=>{const r=e.currentTarget.getBoundingClientRect();setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350)});}} style={{width:280,flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:`0 7px 0 ${leftPad}px`,borderRight:`1px solid ${C.border}`,overflow:"hidden",cursor:"pointer"}}>
+        <div onClick={e=>hp(e,task,task.startDate||today)} style={{width:280,flexShrink:0,display:"flex",alignItems:"center",gap:5,padding:`0 7px 0 ${leftPad}px`,borderRight:`1px solid ${C.border}`,overflow:"hidden",cursor:"pointer"}}>
           {task._pid && <span style={{color:C.textMuted,fontSize:9,flexShrink:0}}>└</span>}
           <CB checked={task.done} onChange={()=>onToggle(task.id)} size={12} color={c}/>
           <span style={{fontSize:10,fontWeight:isParent?600:400,color:task.done?C.textMuted:C.text,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none",flex:1}}>{task.title}</span>
@@ -2264,7 +2266,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
           {vis.length===0 && <div style={{padding:"28px 0",textAlign:"center",color:C.textMuted,fontSize:11}}>この月にタスクがありません</div>}
         </div>
       </div>
-      {popup && <Popup task={popup.task} tags={tags} anchor={popup} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
@@ -2470,7 +2472,7 @@ const TagsView = ({tags,setTags}) => {
             onTouchStart={e=>onTouchStart(e,p.id,"parent")}
             onTouchMove={e=>onTouchMove(e)}
             onTouchEnd={e=>onTouchEnd(e,"parent")}
-            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
+            style={{background:C.surface,borderRadius:10,padding:10,border:`2px solid ${dragOverId===p.id?C.accent:p.color+"33"}`,cursor:"grab",transition:"border-color .15s",touchAction:"none",userSelect:"none"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
               <div style={{display:"flex",alignItems:"center",gap:6}}>
                 <span style={{color:C.textMuted,fontSize:13}}>⠿</span>
@@ -2497,7 +2499,7 @@ const TagsView = ({tags,setTags}) => {
                     onTouchStart={e=>onTouchStart(e,c.id,p.id)}
                     onTouchMove={e=>onTouchMove(e)}
                     onTouchEnd={e=>onTouchEnd(e,p.id)}
-                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s",touchAction:"none"}}>
+                    style={{background:C.bgSub,borderRadius:7,border:`2px solid ${dragOverId===c.id?C.accent:c.color+"33"}`,padding:"5px 8px",cursor:"grab",transition:"border-color .15s",touchAction:"none",userSelect:"none"}}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
                       <div style={{display:"flex",alignItems:"center",gap:5}}>
                         <span style={{color:C.textMuted,fontSize:11}}>⠿</span>
