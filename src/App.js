@@ -53,17 +53,10 @@ const DAYS_JP = ["月","火","水","木","金","土","日"];
 const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
 
-// タッチデバイス判定
-// hover:hover = マウスあり → 絶対にfalse
-// それ以外でタッチ条件いずれか該当 → true
-const IS_TOUCH = typeof window !== "undefined" && (
-  !window.matchMedia("(hover:hover)").matches &&
-  (
-    window.matchMedia("(pointer:coarse)").matches ||
-    ("ontouchstart" in window) ||
-    navigator.maxTouchPoints > 0
-  )
-);
+// タッチデバイス判定：hover:hoverならPC確定、それ以外でpointer:coarseならタッチ
+const IS_TOUCH = typeof window !== "undefined" &&
+  !window.matchMedia("(hover:hover) and (pointer:fine)").matches &&
+  (window.matchMedia("(pointer:coarse)").matches || "ontouchstart" in window);
 
 // ── ユーティリティ ──────────────────────────────────────────────────
 const flatten = (ts, res=[], pt=null, pid=null) => {
@@ -1214,12 +1207,10 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     setSwiping(false);
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-      // input/button/select/メモパネル内 へのタップはpreventDefaultしない
       const tag = e.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;
-      // メモパネル内のタップは無視（チェックボックス等の操作を守る）
+      // メモパネル内タップは無視（チェックボックス等）
       if (e.target?.closest?.("[data-memo-panel]")) return;
-      // タップ確定 → ここでメモ開閉。合成clickはe.preventDefault()でブロック
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
         closeSwipe();
@@ -1289,9 +1280,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         <div
           data-memo-panel="1"
           onClick={e=>e.stopPropagation()}
-          onTouchStart={e=>e.stopPropagation()}
+          onTouchStart={e=>{e.stopPropagation(); touchStartX.current=null; touchStartY.current=null;}}
           onTouchMove={e=>e.stopPropagation()}
-          onTouchEnd={e=>{e.stopPropagation();e.preventDefault();}}
+          onTouchEnd={e=>e.stopPropagation()}
           style={{background:depth===0?C.surface:C.bgSub,borderTop:`1px solid ${C.border}22`,borderRadius:"0 0 7px 7px",padding:"6px 12px 8px 36px",marginBottom:2,border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,borderLeft:depth>0?`3px solid ${tc}55`:undefined}}>
           {renderMemo(task.memo, onMemoToggle ? idx=>onMemoToggle(task.id,idx) : null)}
         </div>
