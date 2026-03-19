@@ -53,8 +53,13 @@ const DAYS_JP = ["月","火","水","木","金","土","日"];
 const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
 
-// タッチデバイス判定（マウント時1回のみ評価・CSS制御より確実）
-const IS_TOUCH = typeof window !== "undefined" && window.matchMedia("(hover:none)").matches;
+// タッチデバイス判定（複数条件で確実に判定）
+const IS_TOUCH = typeof window !== "undefined" && (
+  window.matchMedia("(hover:none)").matches ||
+  window.matchMedia("(pointer:coarse)").matches ||
+  ("ontouchstart" in window) ||
+  navigator.maxTouchPoints > 0
+);
 
 // ── ユーティリティ ──────────────────────────────────────────────────
 const flatten = (ts, res=[], pt=null, pid=null) => {
@@ -304,9 +309,8 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{display:none!important}
-.swipe-actions{display:none!important}
-@media(hover:hover){.tr:hover .ta{display:flex!important}}
-@media(hover:none){.swipe-actions{display:flex!important}}
+.swipe-actions{display:flex!important}
+@media(hover:hover){.tr:hover .ta{display:flex!important}.swipe-actions{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
@@ -1205,6 +1209,9 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     setSwiping(false);
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
+      // input/button/select へのタップはpreventDefaultしない
+      const tag = e.target?.tagName?.toLowerCase();
+      if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;
       // タップ確定 → ここでメモ開閉。合成clickはe.preventDefault()でブロック
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
