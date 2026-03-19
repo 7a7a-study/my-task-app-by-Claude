@@ -73,7 +73,7 @@ const weekDates = base => {
   m.setDate(d.getDate()-w+1);
   return Array.from({length:7},(_,i)=>{const x=new Date(m);x.setDate(m.getDate()+i);return localDate(x);});
 };
-const isLaterTask = t => !t.startDate && !t.startTime;
+const isLaterTask = t => !t.startDate && !t.startTime && !(t.sessions||[]).length;
 
 // ── 繰り返しユーティリティ ────────────────────────────────────────
 // repeat フィールドは文字列（旧） or { type, weekDays, monthDays, customDates } (新)
@@ -507,7 +507,7 @@ const ConfirmDialog = ({title, message, confirmLabel="削除", onConfirm, onCanc
 );
 
 // ── ポップアップ ────────────────────────────────────────────────────
-const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,anchor,viewDate}) => {
+const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,onAddSession,anchor,viewDate}) => {
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
@@ -519,6 +519,8 @@ const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplic
   // 今回だけ日程変更フォームの表示
   const [showOverride, setShowOverride] = useState(false);
   const [confirmDel, setConfirmDel]   = useState(false);
+  const [showAddSession, setShowAddSession] = useState(false);
+  const [newSession, setNewSession] = useState({date: viewDate||"", startTime:"", endTime:""});
   const [ov, setOv] = useState({
     startDate: task.startDate||"", startTime: task.startTime||"",
     endDate: task.endDate||"",     endTime: task.endTime||"",
@@ -598,6 +600,46 @@ const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplic
               <Btn onClick={()=>setShowOverride(false)} style={{flex:1,padding:"4px",fontSize:9}}>キャンセル</Btn>
               <Btn v="accent" onClick={()=>{onOverride(task._overrideId||task.id, origDate, ov);onClose();}} style={{flex:1,padding:"4px",fontSize:9}}>保存</Btn>
             </div>
+          </div>
+        )}
+
+        {/* ── 時間枠追加 ── */}
+        {onAddSession && !showOverride && (
+          <div style={{marginBottom:8}}>
+            {!showAddSession ? (
+              <button onClick={()=>setShowAddSession(true)}
+                style={{width:"100%",padding:"4px 6px",borderRadius:6,border:`1px solid ${C.success}44`,background:C.successS,color:C.success,fontSize:9,cursor:"pointer",fontWeight:600}}>
+                📆 時間枠を追加
+              </button>
+            ) : (
+              <div style={{background:C.bg,borderRadius:8,padding:"8px 9px",border:`1px solid ${C.success}44`}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.success,marginBottom:6}}>📆 時間枠を追加</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:6}}>
+                  <div>
+                    <div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>日付</div>
+                    <input type="date" value={newSession.date} onChange={e=>setNewSession(p=>({...p,date:e.target.value}))} style={inpStyle}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始</div>
+                    <input type="time" value={newSession.startTime} onChange={e=>setNewSession(p=>({...p,startTime:e.target.value}))} style={inpStyle}/>
+                  </div>
+                  <div>
+                    <div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了</div>
+                    <input type="time" value={newSession.endTime} onChange={e=>setNewSession(p=>({...p,endTime:e.target.value}))} style={inpStyle}/>
+                  </div>
+                </div>
+                <div style={{display:"flex",gap:4}}>
+                  <Btn onClick={()=>setShowAddSession(false)} style={{flex:1,padding:"4px",fontSize:9}}>キャンセル</Btn>
+                  <Btn v="success" onClick={()=>{
+                    if(!newSession.date||!newSession.startTime) return;
+                    onAddSession(task._overrideId||task.id, {...newSession,id:"s_"+Date.now()});
+                    setShowAddSession(false);
+                    setNewSession({date:viewDate||"",startTime:"",endTime:""});
+                    onClose();
+                  }} style={{flex:1,padding:"4px",fontSize:9}}>追加</Btn>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1204,7 +1246,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{repeatLabel(task.repeat)}</span>}
-            {(task.sessions||[]).length>0 && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.accentS,color:C.accent,fontWeight:600}}>📆{task.sessions.length}枠</span>}
+            {(()=>{const total=(task.sessions||[]).length+(task.startDate?1:0);return total>1?<span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.accentS,color:C.accent,fontWeight:600}}>📆{total}枠</span>:null;})()}
             {later  && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>📌</span>}
             {over   && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.dangerS,color:C.danger,fontWeight:600}}>⚠超過</span>}
             {urgent && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>🔥今日</span>}
@@ -1407,7 +1449,7 @@ const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,o
 };
 
 // ── 日ビュー ────────────────────────────────────────────────────────
-const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
+const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,dragTask,setDragTask}) => {
   const DAY_START = 6;
   const DAY_END   = 23;
   const PPM       = 0.85;  // pixel per minute（週ビューに統一）
@@ -1583,13 +1625,13 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
           })}
         </div>
       </div>
-      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
 
 // ── 週ビュー ────────────────────────────────────────────────────────
-const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
+const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,dragTask,setDragTask}) => {
   const DAY_START = 6;
   const DAY_END   = 23;
   const PPM       = 0.85;
@@ -1776,7 +1818,7 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
           );
         })}
       </div>
-      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
@@ -2071,7 +2113,7 @@ const ReportView = ({tasks, tags}) => {
 };
 
 // ── ガントチャート ──────────────────────────────────────────────────
-const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,dragTask,setDragTask}) => {
+const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,hideCompleted,dragTask,setDragTask}) => {
   const [vy,setVy] = useState(new Date(today).getFullYear());
   const [vm,setVm] = useState(new Date(today).getMonth());
   const [popup,setPopup]   = useState(null);
@@ -2083,7 +2125,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
   const DW  = 30;
   const RH  = 28;
   const all = flatten(tasks);
-  const vis = all.filter(t => (t.startDate||t.endDate||t.deadlineDate) && !(t.isLater||isLaterTask(t)));
+  const vis = all.filter(t => (t.startDate||t.endDate||t.deadlineDate||(t.sessions||[]).length>0) && !(t.isLater||isLaterTask(t)) && !(hideCompleted&&t.done));
 
   useEffect(() => { fetchHolidays(vy).then(()=>setHolReady(true)); }, [vy]);
 
@@ -2196,7 +2238,10 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
               onDragEnd={()=>{setDragBar(null);setDropDay(null);}}
               onClick={e=>hp(e,task)}
               style={{position:"absolute",left:(bar.startDay-1)*DW+1,width:Math.max(bar.width*DW-2,DW/2),height:isParent?18:13,top:(RH-(isParent?18:13))/2,background:isBarDrag?`${c}38`:task.done?C.border+"44":`linear-gradient(90deg,${c}55,${c}38)`,border:`1px solid ${c}77`,borderRadius:4,display:"flex",alignItems:"center",paddingLeft:4,fontSize:8,color:task.done?C.textMuted:c,fontWeight:600,overflow:"hidden",whiteSpace:"nowrap",cursor:"grab",textDecoration:task.done?"line-through":"none",zIndex:3,userSelect:"none"}}>
-              {bar.width>1 ? task.title.slice(0,16) : ""}
+              {task.startTime
+                ? <span style={{fontSize:7,fontWeight:700,opacity:.9}}>{task.startTime}{task.endTime?`–${task.endTime}`:""}</span>
+                : (bar.width>1 ? task.title.slice(0,16) : "")
+              }
               <div className="ew" onMouseDown={e=>onBRS(e,task,bar.width)} onTouchStart={e=>onBRS(e,task,bar.width)} onClick={e=>e.stopPropagation()}
                 style={{position:"absolute",right:0,top:0,bottom:0,width:6,background:`${c}55`,borderRadius:"0 3px 3px 0",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <div style={{width:1.5,height:7,background:"rgba(255,255,255,.5)",borderRadius:1}}/>
@@ -2784,6 +2829,11 @@ export default function App() {
     setTasks(syncDone(updTree(tasks, id, x => ({...x, overrideDates}))));
   };
 
+  // セッション（時間枠）追加
+  const handleAddSession = (id, session) => {
+    setTasks(updTree(tasks, id, t => ({...t, sessions: [...(t.sessions||[]), session]})));
+  };
+
   const handleMemoToggle = (id, idx) => {
     // setTasksRaw直接呼び出し（save2DBはdebounce）→ TaskRow再マウントなしでmemoOpenを保持
     const next = updTree(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
@@ -2910,9 +2960,9 @@ export default function App() {
             </div>
             {view==="dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit}/>}
             {view==="list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid=>{setAddChildTo(pid);setShowForm(true);}} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
-            {view==="day"       && <DayView  tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view==="week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view==="gantt"     && <GanttView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="day"       && <DayView  tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view==="gantt"     && <GanttView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} hideCompleted={filters.hideCompleted} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view==="report"    && <ReportView tasks={tasks} tags={tags}/>}
             {view==="templates" && <TemplatesView templates={templates} setTemplates={setTemplates} onUse={handleUseTemplate} tags={tags}/>}
             {view==="tagmgr"    && <TagsView tags={tags} setTags={setTags}/>}
