@@ -940,7 +940,7 @@ const RepeatEditor = ({value, onChange}) => {
 
 // ── タスクフォーム ──────────────────────────────────────────────────
 const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags}) => {
-  const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false,notifyStart:0,notifyDeadline:null};
+  const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false,notifyStart:0,notifyDeadline:null,sessions:[]};
   // ★ 子タスク作成時は親タスクのタグを初期値に設定
   const initTags = isChild && parentTags ? parentTags : (task?.tags || []);
   const [f, setF] = useState(task ? {...task, tags:initTags} : {...blank, tags:initTags});
@@ -1078,6 +1078,32 @@ const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags})
       </div>
       {/* ── 繰り返しUI ── */}
       <RepeatEditor value={f.repeat} onChange={v=>u("repeat",v)}/>
+      {/* ── セッション（複数日時枠）UI ── */}
+      <div style={{marginBottom:8}}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.4}}>📆 時間枠（複数日またぎ）</div>
+          <Btn v="accent" style={{padding:"2px 9px",fontSize:9}} onClick={()=>{
+            u("sessions",[...(f.sessions||[]),{id:"s_"+Date.now(),date:"",startTime:"",endTime:""}]);
+          }}>＋ 追加</Btn>
+        </div>
+        {(f.sessions||[]).length>0 && (
+          <div style={{display:"flex",flexDirection:"column",gap:4}}>
+            {(f.sessions||[]).map((s,i)=>(
+              <div key={s.id||i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 28px",gap:4,alignItems:"center",background:C.bgSub,borderRadius:6,padding:"5px 7px"}}>
+                <input type="date" value={s.date} onChange={e=>{const ns=[...(f.sessions||[])];ns[i]={...ns[i],date:e.target.value};u("sessions",ns);}}
+                  style={{background:C.surface,color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                <input type="time" value={s.startTime} onChange={e=>{const ns=[...(f.sessions||[])];ns[i]={...ns[i],startTime:e.target.value};u("sessions",ns);}}
+                  style={{background:C.surface,color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                <input type="time" value={s.endTime} onChange={e=>{const ns=[...(f.sessions||[])];ns[i]={...ns[i],endTime:e.target.value};u("sessions",ns);}}
+                  style={{background:C.surface,color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                <button onClick={()=>{const ns=(f.sessions||[]).filter((_,j)=>j!==i);u("sessions",ns);}}
+                  style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+              </div>
+            ))}
+          </div>
+        )}
+        {(f.sessions||[]).length===0 && <div style={{fontSize:9,color:C.textMuted,padding:"3px 0"}}>追加なし（通常のstartDate/endTimeを使用）</div>}
+      </div>
       <MemoEditor value={f.memo} onChange={v=>u("memo",v)}/>
       <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
         <Btn onClick={onClose}>キャンセル</Btn>
@@ -1178,6 +1204,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{repeatLabel(task.repeat)}</span>}
+            {(task.sessions||[]).length>0 && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.accentS,color:C.accent,fontWeight:600}}>📆{task.sessions.length}枠</span>}
             {later  && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>📌</span>}
             {over   && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.dangerS,color:C.danger,fontWeight:600}}>⚠超過</span>}
             {urgent && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>🔥今日</span>}
@@ -1404,6 +1431,11 @@ const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDup
       return sameDay(t.startDate,viewDate) || sameDay(t.deadlineDate,viewDate);
     }),
     ...expandOverrides(tasks).filter(t => sameDay(t.startDate,viewDate) || sameDay(t.deadlineDate,viewDate)),
+    // sessionsの仮想エントリ
+    ...all.filter(t=>(t.sessions||[]).some(s=>s.date===viewDate)).map(t=>{
+      const ss=(t.sessions||[]).filter(s=>s.date===viewDate);
+      return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
+    }).flat(),
   ];
   const timed   = todayT.filter(t =>  t.startTime && !(t.isLater||isLaterTask(t)));
   const untimed = todayT.filter(t => !t.startTime && !(t.isLater||isLaterTask(t)));
@@ -1586,6 +1618,11 @@ const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDu
       return sameDay(t.startDate,date)||sameDay(t.deadlineDate,date);
     }),
     ...expandOverrides(tasks).filter(t => sameDay(t.startDate,date)||sameDay(t.deadlineDate,date)),
+    // sessionsの仮想エントリ
+    ...all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>{
+      const ss=(t.sessions||[]).filter(s=>s.date===date);
+      return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
+    }).flat(),
   ].filter(t => !(t.isLater||isLaterTask(t)));
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
@@ -2070,6 +2107,15 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
     const cs=s<ms?ms:s, ce=e>me?me:e;
     return { startDay:cs.getDate(), width:Math.max(1,ce.getDate()-cs.getDate()+1) };
   };
+  // sessionsから当月のセグメントを取得
+  const getSessionSegs = task => {
+    if (!(task.sessions||[]).length) return [];
+    return (task.sessions||[]).filter(s=>{
+      if (!s.date) return false;
+      const d=new Date(s.date);
+      return d.getFullYear()===vy && d.getMonth()===vm;
+    }).map(s=>({day:new Date(s.date).getDate(), s}));
+  };
   const getDL = task => {
     if (!task.deadlineDate) return null;
     const x=new Date(task.deadlineDate);
@@ -2120,6 +2166,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
   // indent: 0=通常, 1=サブグループ内トップレベル, 2=サブグループ内子タスク
   const renderTaskRow = (task, ri, gc, indent=0) => {
     const bar = getBar(task);
+    const segs = getSessionSegs(task);
     const dlDay = getDL(task);
     const c = tags.find(t=>task.tags?.includes(t.id))?.color||C.accent;
     const isParent = !task._pid;
@@ -2127,7 +2174,7 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
     const isDLDrag  = dragDL?.id===task.id;
     const todStr = localDate();
     const isOver = task.deadlineDate && !task.done && task.deadlineDate < todStr;
-    const leftPad = 10 + indent * 14; // インデント
+    const leftPad = 10 + indent * 14;
     return (
       <div key={task.id} style={{display:"flex",borderBottom:`1px solid ${C.border}18`,height:RH,background:ri%2===0?"transparent":"rgba(255,255,255,.01)"}}
         onMouseEnter={e=>e.currentTarget.style.background=C.surfHov+"44"}
@@ -2156,6 +2203,17 @@ const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onD
               </div>
             </div>
           )}
+          {/* セッションセグメント（複数日またぎ） */}
+          {segs.map(({day,s},si)=>(
+            <div key={s.id||si}
+              onClick={e=>hp(e,task,s.date)}
+              title={`${s.date} ${s.startTime}–${s.endTime}`}
+              style={{position:"absolute",left:(day-1)*DW+1,width:Math.max(DW-2,8),height:isParent?18:13,top:(RH-(isParent?18:13))/2,background:task.done?C.border+"44":`${c}88`,border:`1.5px solid ${c}`,borderRadius:4,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
+              <span style={{fontSize:7,color:task.done?C.textMuted:"#fff",fontWeight:700,lineHeight:1,padding:"0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                {s.startTime}
+              </span>
+            </div>
+          ))}
           {dlDay && (
             <div draggable
               onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed="move";setDragDL(task);}}
