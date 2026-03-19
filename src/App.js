@@ -224,7 +224,7 @@ const syncDone = tasks => {
 const renderMemo = (memo, onToggle) => {
   if (!memo) return null;
 
-  // インライン装飾（太字・コード・URL）をパース
+  // インライン装飾（太字・コード）をパース
   const renderInline = (text) => {
     const parts = [];
     const re = /(\*\*(.+?)\*\*|`(.+?)`|(https?:\/\/[^\s<>"']+))/g;
@@ -300,8 +300,8 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .drag{cursor:grab!important}.drag:active{cursor:grabbing!important;opacity:.5!important}
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
-.tr .ta{opacity:0;transition:opacity .15s}
-@media(hover:hover){.tr:hover .ta{opacity:1}.swipe-actions{display:none!important}}
+.tr .ta{display:none!important}
+@media(hover:hover){.tr:hover .ta{display:flex!important}.swipe-actions{display:none!important}}
 @media(hover:none){.ta{display:none!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
@@ -1147,7 +1147,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
   return (
     <div style={{marginLeft:depth*16, position:"relative", overflow:"hidden", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
       {/* スワイプアクションボタン（背面・モバイルのみ。PCはCSSで非表示） */}
-      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,height:38,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>
@@ -1187,7 +1187,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
         </div>
         {/* PCホバーのみ・完了タスクは非表示 */}
         {!task.done && (
-          <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
+          <div className="ta" style={{gap:3,flexShrink:0,alignSelf:"flex-start"}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
@@ -1314,7 +1314,6 @@ const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDupl
   );
 
   if (isPC) {
-    // PC: 左=タスク+繰り返し、右=あとでやる
     return (
       <div>
         {sortBar}
@@ -1748,25 +1747,20 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
   const doneCnt  = nonRep.filter(t=>t.done).length;
   const totalCnt = nonRep.length;
   const pct = totalCnt > 0 ? Math.round(doneCnt/totalCnt*100) : 0;
-
   const todayTasks = all.filter(t => {
     if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, today);
     return sameDay(t.startDate, today) || sameDay(t.deadlineDate, today);
   }).filter(t => !(t.isLater||isLaterTask(t)));
   const todayDone = todayTasks.filter(t => t.done).length;
-
   const overdue  = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today);
   const in7 = (() => { const d=new Date(today); d.setDate(d.getDate()+7); return localDate(d); })();
-  const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate > today && t.deadlineDate <= in7)
-    .sort((a,b)=>a.deadlineDate.localeCompare(b.deadlineDate));
+  const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate > today && t.deadlineDate <= in7).sort((a,b)=>a.deadlineDate.localeCompare(b.deadlineDate));
   const laterTasks = all.filter(t => (t.isLater||isLaterTask(t)) && !t.done);
-
   const tagStats = tags.filter(t=>!t.parentId&&!t.archived).map(tag=>{
     const tt = nonRep.filter(t=>t.tags?.includes(tag.id));
     const td = tt.filter(t=>t.done).length;
     return {...tag, total:tt.length, done:td, pct: tt.length ? Math.round(td/tt.length*100) : 0};
   }).filter(t=>t.total>0);
-
   const Card = ({title,color=C.border,children}) => (
     <div style={{background:C.surface,borderRadius:11,padding:13,border:`1px solid ${color}44`}}>
       <div style={{fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.6,marginBottom:10}}>{title}</div>
@@ -1784,7 +1778,6 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
       </div>
     );
   };
-
   return (
     <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:12}}>
       <Card title="📊 全体進捗" color={C.accent}>
@@ -1794,50 +1787,14 @@ const DashboardView = ({tasks,tags,today,onToggle,onEdit}) => {
         </div>
         <div style={{fontSize:10,color:C.textMuted}}>{doneCnt} / {totalCnt} タスク完了</div>
       </Card>
-
       <Card title={`📅 今日 (${todayDone}/${todayTasks.length})`} color={C.success}>
-        {todayTasks.length===0
-          ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
-          : todayTasks.slice(0,6).map(t=><MiniRow key={t.id} task={t}/>)
-        }
+        {todayTasks.length===0 ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div> : todayTasks.slice(0,6).map(t=><MiniRow key={t.id} task={t}/>)}
         {todayTasks.length>6 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {todayTasks.length-6} 件...</div>}
       </Card>
-
-      {overdue.length>0 && (
-        <Card title={`⚠ 期限超過 (${overdue.length})`} color={C.danger}>
-          {overdue.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}
-          {overdue.length>5 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {overdue.length-5} 件...</div>}
-        </Card>
-      )}
-
-      {upcoming.length>0 && (
-        <Card title={`📆 今後7日の締切 (${upcoming.length})`} color={C.warn}>
-          {upcoming.map(t=><MiniRow key={t.id} task={t}/>)}
-        </Card>
-      )}
-
-      {tagStats.length>0 && (
-        <Card title="🏷 タグ別進捗" color={C.accent}>
-          {tagStats.map(tag=>(
-            <div key={tag.id} style={{marginBottom:9}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-                <span style={{color:tag.color,fontWeight:700}}>{tag.name}</span>
-                <span style={{color:C.textMuted,fontSize:10}}>{tag.pct}%　({tag.done}/{tag.total})</span>
-              </div>
-              <div style={{background:C.bg,borderRadius:5,height:5,overflow:"hidden"}}>
-                <div style={{width:`${tag.pct}%`,height:"100%",background:tag.color,borderRadius:5,transition:"width .5s"}}/>
-              </div>
-            </div>
-          ))}
-        </Card>
-      )}
-
-      {laterTasks.length>0 && (
-        <Card title={`📌 あとでやる (${laterTasks.length})`} color={C.warn}>
-          {laterTasks.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}
-          {laterTasks.length>5 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {laterTasks.length-5} 件...</div>}
-        </Card>
-      )}
+      {overdue.length>0 && <Card title={`⚠ 期限超過 (${overdue.length})`} color={C.danger}>{overdue.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}{overdue.length>5 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {overdue.length-5} 件...</div>}</Card>}
+      {upcoming.length>0 && <Card title={`📆 今後7日の締切 (${upcoming.length})`} color={C.warn}>{upcoming.map(t=><MiniRow key={t.id} task={t}/>)}</Card>}
+      {tagStats.length>0 && <Card title="🏷 タグ別進捗" color={C.accent}>{tagStats.map(tag=><div key={tag.id} style={{marginBottom:9}}><div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}><span style={{color:tag.color,fontWeight:700}}>{tag.name}</span><span style={{color:C.textMuted,fontSize:10}}>{tag.pct}% ({tag.done}/{tag.total})</span></div><div style={{background:C.bg,borderRadius:5,height:5,overflow:"hidden"}}><div style={{width:`${tag.pct}%`,height:"100%",background:tag.color,borderRadius:5,transition:"width .5s"}}/></div></div>)}</Card>}
+      {laterTasks.length>0 && <Card title={`📌 あとでやる (${laterTasks.length})`} color={C.warn}>{laterTasks.slice(0,5).map(t=><MiniRow key={t.id} task={t}/>)}{laterTasks.length>5 && <div style={{fontSize:10,color:C.textMuted,marginTop:5}}>他 {laterTasks.length-5} 件...</div>}</Card>}
     </div>
   );
 };
@@ -2362,10 +2319,9 @@ const TagsView = ({tags,setTags}) => {
   const [ef,setEf]         = useState(null);
   const [showA,setShowA]   = useState(false);
   const [confirmTag,setConfirmTag] = useState(null);
-  // D&D用state（親タグ・小タグ共用）
   const [dragOverId,setDragOverId] = useState(null);
-  const dragIdRef  = useRef(null); // ドラッグ中のタグID
-  const dragCtxRef = useRef(null); // "parent" | 親タグID（小タグの場合）
+  const dragIdRef  = useRef(null);
+  const dragCtxRef = useRef(null); // "parent" or 親タグID
 
   const add = () => {
     if(!form.name.trim()) return;
@@ -2376,7 +2332,6 @@ const TagsView = ({tags,setTags}) => {
   const rest = id => setTags(ts=>ts.map(t=>t.id===id?{...t,archived:false}:t));
   const deleteTag = id => { setTags(ts=>ts.filter(t=>t.id!==id && t.parentId!==id)); setConfirmTag(null); };
 
-  // 親タグのD&D（同一レベル内で順序入れ替え）
   const onParentDragStart = (e,id) => { e.stopPropagation(); dragIdRef.current=id; dragCtxRef.current="parent"; e.dataTransfer.effectAllowed="move"; };
   const onParentDragOver  = (e,id) => { e.preventDefault(); e.stopPropagation(); setDragOverId(id); };
   const onParentDrop      = (e,targetId) => {
@@ -2386,8 +2341,6 @@ const TagsView = ({tags,setTags}) => {
     setTags(ts=>{ const a=[...ts]; const fi=a.findIndex(t=>t.id===fromId); const ti=a.findIndex(t=>t.id===targetId); if(fi<0||ti<0)return ts; const[m]=a.splice(fi,1); a.splice(ti,0,m); return a; });
     dragIdRef.current=null; dragCtxRef.current=null;
   };
-
-  // 小タグのD&D（同一親タグ内で順序入れ替え）
   const onChildDragStart = (e,id,parentId) => { e.stopPropagation(); dragIdRef.current=id; dragCtxRef.current=parentId; e.dataTransfer.effectAllowed="move"; };
   const onChildDragOver  = (e,id) => { e.preventDefault(); e.stopPropagation(); setDragOverId(id); };
   const onChildDrop      = (e,targetId,parentId) => {
@@ -2430,8 +2383,6 @@ const TagsView = ({tags,setTags}) => {
           message={confirmTag.isParent?`「${confirmTag.name}」と、その子タグをすべて削除しますか？\nタスクのタグ設定も外れます。`:`「${confirmTag.name}」を削除しますか？\nタスクのタグ設定も外れます。`}
           onConfirm={()=>deleteTag(confirmTag.id)} onCancel={()=>setConfirmTag(null)}/>
       )}
-
-      {/* 新規作成フォーム */}
       <div style={{background:C.surface,borderRadius:11,padding:11,border:`1px solid ${C.border}`,marginBottom:9}}>
         <div style={{fontFamily:"'Playfair Display',serif",fontWeight:700,marginBottom:8,fontSize:13}}>新しいタグを作成</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 50px",gap:6,marginBottom:6}}>
@@ -2461,13 +2412,10 @@ const TagsView = ({tags,setTags}) => {
         </div>
         <Btn v="accent" onClick={add}>追加</Btn>
       </div>
-
-      {/* タグ一覧 */}
       <div style={{fontSize:9,color:C.textMuted,marginBottom:5}}>⠿ ドラッグで順序を変更できます（親タグ・小タグ両方）</div>
       <div style={{display:"flex",flexDirection:"column",gap:6}}>
         {pt.map(p=>(
-          <div key={p.id}
-            draggable
+          <div key={p.id} draggable
             onDragStart={e=>onParentDragStart(e,p.id)}
             onDragOver={e=>onParentDragOver(e,p.id)}
             onDrop={e=>onParentDrop(e,p.id)}
@@ -2491,8 +2439,7 @@ const TagsView = ({tags,setTags}) => {
             {ct(p.id).length>0&&(
               <div style={{paddingLeft:14,marginTop:6,display:"flex",flexDirection:"column",gap:3}}>
                 {ct(p.id).map(c=>(
-                  <div key={c.id}
-                    draggable
+                  <div key={c.id} draggable
                     onDragStart={e=>onChildDragStart(e,c.id,p.id)}
                     onDragOver={e=>onChildDragOver(e,c.id)}
                     onDrop={e=>onChildDrop(e,c.id,p.id)}
@@ -2519,8 +2466,6 @@ const TagsView = ({tags,setTags}) => {
           </div>
         ))}
       </div>
-
-      {/* アーカイブ済み */}
       {at.length>0&&(
         <div style={{marginTop:12}}>
           <button onClick={()=>setShowA(!showA)} style={{background:"none",border:"none",color:C.textMuted,fontSize:11,cursor:"pointer",display:"flex",alignItems:"center",gap:4,marginBottom:5}}>
