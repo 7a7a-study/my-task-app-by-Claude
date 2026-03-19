@@ -53,12 +53,16 @@ const DAYS_JP = ["月","火","水","木","金","土","日"];
 const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
 
-// タッチデバイス判定（複数条件で確実に判定）
+// タッチデバイス判定
+// hover:hover = マウスあり → 絶対にfalse
+// それ以外でタッチ条件いずれか該当 → true
 const IS_TOUCH = typeof window !== "undefined" && (
-  window.matchMedia("(hover:none)").matches ||
-  window.matchMedia("(pointer:coarse)").matches ||
-  ("ontouchstart" in window) ||
-  navigator.maxTouchPoints > 0
+  !window.matchMedia("(hover:hover)").matches &&
+  (
+    window.matchMedia("(pointer:coarse)").matches ||
+    ("ontouchstart" in window) ||
+    navigator.maxTouchPoints > 0
+  )
 );
 
 // ── ユーティリティ ──────────────────────────────────────────────────
@@ -1210,9 +1214,11 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
     setSwiping(false);
 
     if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
-      // input/button/select へのタップはpreventDefaultしない
+      // input/button/select/メモパネル内 へのタップはpreventDefaultしない
       const tag = e.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;
+      // メモパネル内のタップは無視（チェックボックス等の操作を守る）
+      if (e.target?.closest?.("[data-memo-panel]")) return;
       // タップ確定 → ここでメモ開閉。合成clickはe.preventDefault()でブロック
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) {
@@ -1281,6 +1287,7 @@ const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplic
       {/* メモ展開パネル（タスク行の外・アイコンと重ならない） */}
       {memoOpen && hasMemo && (
         <div
+          data-memo-panel="1"
           onClick={e=>e.stopPropagation()}
           onTouchStart={e=>e.stopPropagation()}
           onTouchMove={e=>e.stopPropagation()}
