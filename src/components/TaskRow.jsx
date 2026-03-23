@@ -91,7 +91,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
       {/* タスク行本体（スワイプでX軸移動、タッチイベントをここで捕捉） */}
       <div className="hov tr"
         onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEnd}
-        style={{display:"flex",alignItems:"flex-start",gap:6,padding:"5px 9px",
+        style={{display:"flex",alignItems:"center",gap:6,padding:"5px 9px",
           background:depth===0?C.surface:C.bgSub,
           border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,
           borderLeft:depth>0?`3px solid ${tc}55`:undefined, // 子タスクは左ボーダーで親色を示す
@@ -102,7 +102,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
         }}>
 
         {/* チェックボックス（data-cbでタッチイベントのバブリングを止める） */}
-        <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{paddingTop:3,flexShrink:0}}>
+        <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{flexShrink:0}}>
           <CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/>
         </div>
 
@@ -133,7 +133,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
 
         {/* PCホバー時のアクションボタン群（.tr:hover .ta で表示、タッチ時は非表示） */}
         {!isTouch && !task.done && (
-          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"flex-start",paddingTop:3}}>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
