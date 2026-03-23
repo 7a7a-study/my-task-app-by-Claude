@@ -54,6 +54,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
       const tag = e.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;
       if (e.target?.closest?.("[data-memo-panel]")) return;
+      if (e.target?.closest?.("[data-cb]")) return;
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) { closeSwipe(); }
       else if (hasMemo) { setMemo(!memoRef.current); }
@@ -83,7 +84,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           transition:swiping?"none":"transform .2s ease",
           position:"relative",zIndex:1,
         }}>
-        <div style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
+        <div data-cb="1" style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
         <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
           onClick={hasMemo ? e=>{e.stopPropagation();setMemo(!memoRef.current);} : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
@@ -104,7 +105,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           </div>
         </div>
         {!IS_TOUCH && !task.done && (
-          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"center"}}>
+          <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"flex-start",paddingTop:3}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
             <button onClick={()=>onEdit(task)}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✎</button>
