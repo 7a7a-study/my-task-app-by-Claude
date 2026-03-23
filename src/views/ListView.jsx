@@ -3,10 +3,11 @@ import { C, SORTS } from "../constants";
 import { parseRepeat, isLaterTask, localDate } from "../utils";
 import { TaskRow } from "../components/TaskRow";
 
-// ★ タイムラインチップ（開始〜終了の高さにまたがる）
+// ── タイムラインチップ（日/週ビューで使う時間軸上のタスクブロック）──
+// DayView/WeekViewからimportして使う。ListViewとは別用途。
 export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,onToggle,onUpdate,onRSStart}) => {
-  const top  = (startMin - dayStartMin) * ppm;
-  const h    = Math.max(22, (endMin - startMin) * ppm);
+  const top  = (startMin - dayStartMin) * ppm;                  // タイムライン上の縦位置（px）
+  const h    = Math.max(22, (endMin - startMin) * ppm);         // ブロックの高さ（最小22px）
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
   return (
     <div className="drag" draggable
@@ -24,7 +25,7 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
         {h > 34 && task.endTime && <div style={{fontSize:8,color:color,paddingLeft:11,opacity:.8}}>〜{task.endTime}（{task.duration}分）</div>}
         {h > 48 && task._pt    && <div style={{fontSize:7,color:C.textMuted,paddingLeft:11}}>📁{task._pt}</div>}
       </div>
-      {/* ★ リサイズハンドル（下端ドラッグで終了時刻を変更） */}
+      {/* 下端ドラッグで終了時刻を変更するリサイズハンドル */}
       <div className="rh" onMouseDown={e=>onRSStart(e,task)} onTouchStart={e=>onRSStart(e,task)} onClick={e=>e.stopPropagation()}
         style={{height:7,background:color+"30",borderTop:`1px dashed ${color}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
         <div style={{width:14,height:1.5,borderRadius:1,background:color+"88"}}/>
@@ -33,24 +34,28 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   );
 };
 
+// ── リストビュー本体 ──────────────────────────────────────────────────
 export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,sortOrder,setSortOrder}) => {
+
+  // ── フィルタ＆ソート（filtersやsortOrderが変わったときだけ再計算）──
   const filtered = useMemo(() => {
     let list = tasks;
     if (filters.tag)           list = list.filter(t => t.tags?.includes(filters.tag));
     if (filters.search)        list = list.filter(t => t.title.toLowerCase().includes(filters.search.toLowerCase()));
     if (filters.hideCompleted) list = list.filter(t => !t.done);
-    if (sortOrder==="開始日順")     list = [...list].sort((a,b) => (a.startDate||"9")>(b.startDate||"9")?1:-1);
-    else if (sortOrder==="締切日順") list = [...list].sort((a,b) => (a.deadlineDate||"9")>(b.deadlineDate||"9")?1:-1);
+    if (sortOrder==="開始日順")       list = [...list].sort((a,b) => (a.startDate||"9")>(b.startDate||"9")?1:-1);
+    else if (sortOrder==="締切日順")   list = [...list].sort((a,b) => (a.deadlineDate||"9")>(b.deadlineDate||"9")?1:-1);
     else if (sortOrder==="タググループ順") list = [...list].sort((a,b) => (a.tags?.[0]||"")>(b.tags?.[0]||"")?1:-1);
     else if (sortOrder==="完了を最後に") list = [...list].sort((a,b) => a.done===b.done?0:a.done?1:-1);
     return list;
   }, [tasks, filters, sortOrder]);
 
+  // ── セクション分類（通常タスク / 繰り返し / あとでやる）────────────
   const later   = filtered.filter(t => t.isLater||isLaterTask(t));
   const habits  = filtered.filter(t => !(t.isLater||isLaterTask(t)) && t.repeat && parseRepeat(t.repeat).type !== "なし");
   const regular = filtered.filter(t => !(t.isLater||isLaterTask(t)) && (!t.repeat || parseRepeat(t.repeat).type === "なし"));
 
-  // タググループ順：親タグ→その子タグでグループ化
+  // ── タググループ表示（ソート「タググループ順」のときに使うサブコンポーネント）──
   const TagGroupView = ({items}) => {
     if (items.length === 0) return null;
     const parentTags = tags.filter(t => !t.parentId && !t.archived);
@@ -58,7 +63,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
     return (
       <div>
         {parentTags.map(pt => {
-          const childTags = tags.filter(ct => ct.parentId === pt.id && !ct.archived);
+          const childTags   = tags.filter(ct => ct.parentId === pt.id && !ct.archived);
           const directItems = items.filter(t => t.tags?.includes(pt.id) && !childTags.some(ct => t.tags?.includes(ct.id)));
           const childGroups = childTags.map(ct => ({
             tag: ct,
@@ -67,6 +72,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
           if (directItems.length === 0 && childGroups.length === 0) return null;
           return (
             <div key={pt.id} style={{marginBottom:14}}>
+              {/* 親タグのヘッダー */}
               <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5,padding:"3px 0",borderBottom:`1px solid ${pt.color}33`}}>
                 <div style={{width:9,height:9,borderRadius:2,background:pt.color,flexShrink:0}}/>
                 <span style={{fontSize:11,fontWeight:700,color:pt.color}}>{pt.name}</span>
@@ -74,7 +80,8 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
                   {directItems.length + childGroups.reduce((s,g)=>s+g.items.length,0)}
                 </span>
               </div>
-              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)}
+              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)}
+              {/* 子タグのグループ */}
               {childGroups.map(({tag:ct, items:ci}) => (
                 <div key={ct.id} style={{marginLeft:12,marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
@@ -82,12 +89,13 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
                     <span style={{fontSize:9,fontWeight:700,color:ct.color}}>{ct.name}</span>
                     <span style={{fontSize:8,color:C.textMuted}}>{ci.length}</span>
                   </div>
-                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)}
+                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)}
                 </div>
               ))}
             </div>
           );
         })}
+        {/* タグなしのタスク */}
         {noTagItems.length > 0 && (
           <div style={{marginBottom:14}}>
             <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
@@ -95,13 +103,14 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
               <span style={{fontSize:10,fontWeight:700,color:C.textMuted}}>タグなし</span>
               <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>{noTagItems.length}</span>
             </div>
-            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)}
+            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)}
           </div>
         )}
       </div>
     );
   };
 
+  // ── セクションヘッダー付きのタスクリスト（Sec = Section）──────────
   const Sec = ({title,items,color,icon}) => items.length===0 ? null : (
     <div style={{marginBottom:14}}>
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:5}}>
@@ -111,16 +120,18 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
       </div>
       {sortOrder==="タググループ順"
         ? <TagGroupView items={items}/>
-        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)
+        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)
       }
     </div>
   );
 
-  const [isPC, setIsPC] = useState(window.innerWidth >= 768);
-  const [isTouch, setIsTouch] = useState(true);
-  const [memoOpenMap, setMemoOpenMap] = useState({});
+  // ── デバイス判定・メモ開閉状態（ここで管理することでtasks更新時に閉じない）──
+  const [isPC, setIsPC]       = useState(window.innerWidth >= 768);
+  const [isTouch, setIsTouch] = useState(true); // 安全側デフォルト=true（スマホ扱い）
+  const [memoOpenMap, setMemoOpenMap] = useState({}); // { taskId: bool } でメモ開閉を管理
   useEffect(() => {
     setIsPC(window.innerWidth >= 768);
+    // ontouchstart の有無でタッチデバイスを判定（matchMediaより確実）
     setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
     const fn = () => setIsPC(window.innerWidth >= 768);
     window.addEventListener("resize", fn);
@@ -128,6 +139,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
   }, []);
   const toggleMemo = (id) => setMemoOpenMap(m => ({...m, [id]: !m[id]}));
 
+  // ── 並び替えボタンバー ───────────────────────────────────────────
   const sortBar = (
     <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:11,flexWrap:"wrap"}}>
       <span style={{fontSize:9,color:C.textMuted,fontWeight:600}}>並び替え</span>
@@ -135,14 +147,15 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
     </div>
   );
 
+  // ── PC表示：2カラムレイアウト（タスク列 / あとでやる列）────────────
   if (isPC) {
     return (
       <div>
         {sortBar}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
           <div>
-            <Sec title="タスク" items={regular} color={C.accent} icon="📋"/>
-            <Sec title="習慣・繰り返し" items={habits} color={C.success} icon="🔄"/>
+            <Sec title="タスク"         items={regular} color={C.accent}  icon="📋"/>
+            <Sec title="習慣・繰り返し" items={habits}  color={C.success} icon="🔄"/>
             {regular.length===0 && habits.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
           </div>
           <div>
@@ -155,6 +168,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
     );
   }
 
+  // ── スマホ表示：1カラムレイアウト ───────────────────────────────
   return (
     <div>
       {sortBar}
