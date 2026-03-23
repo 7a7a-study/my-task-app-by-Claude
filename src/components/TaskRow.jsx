@@ -11,10 +11,8 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
   const [swiping, setSwiping]       = useState(false);
   const [isTouch, setIsTouch]       = useState(true); // 安全側デフォルト=true、useEffectで上書き
   useEffect(() => {
-    setIsTouch(
-      !window.matchMedia("(hover:hover) and (pointer:fine)").matches &&
-      (window.matchMedia("(pointer:coarse)").matches || "ontouchstart" in window)
-    );
+    // ontouchstart が存在すればタッチデバイス確定（Android Chromeで最も信頼性が高い）
+    setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
   }, []);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
@@ -91,7 +89,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
         }}>
         <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
         <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
-          onClick={hasMemo ? e=>{e.stopPropagation();setMemoOpen(v=>!v);} : undefined}>
+          onClick={hasMemo ? e=>{e.stopPropagation();if(e.target?.closest?.("[data-cb]"))return;setMemoOpen(v=>!v);} : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>

@@ -3,7 +3,7 @@ import { C } from "../constants";
 import { requestNotificationPermission, sendTestNotification } from "../notifications";
 
 export const CB = ({checked,onChange,size=14,color}) => (
-  <div onClick={e=>{e.stopPropagation();onChange();}}
+  <div onClick={e=>{e.stopPropagation();onChange();}} onTouchEnd={e=>e.stopPropagation()}
     style={{width:size,height:size,borderRadius:Math.max(3,size*.22),border:`2px solid ${checked?(color||C.accent):C.border}`,background:checked?(color||C.accent):"transparent",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",flexShrink:0,transition:"all .15s"}}>
     {checked && <span style={{color:"#fff",fontSize:size*.58,fontWeight:800,lineHeight:1}}>✓</span>}
   </div>
