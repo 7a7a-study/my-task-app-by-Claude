@@ -297,28 +297,42 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         </div>
         {(f._sessions||[]).map((s,i)=>(
           <div key={s.id||i} style={{marginBottom:5}}>
-            <div style={{display:"grid", gridTemplateColumns: i===0 ? "1fr 80px 80px 60px" : "1fr 80px 80px 28px", gap:4, alignItems:"center", background:i===0?C.surface:C.bg, borderRadius:6, padding:"5px 7px", border:`1px solid ${i===0?C.accent+"44":C.border}`}}>
-              <input type="date" value={s.date}
-                onChange={e=>{ updateSession(i,"date",e.target.value); if(i===0) u("startDate",e.target.value); }}
-                placeholder="開始日"
-                style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-              <input type="time" value={s.startTime}
-                onChange={e=>{ if(i===0){hSt(e.target.value);}else{updateSession(i,"startTime",e.target.value);} }}
-                style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-              <input type="time" value={s.endTime}
-                onChange={e=>{ if(i===0){hEt(e.target.value);}else{updateSession(i,"endTime",e.target.value);} }}
-                style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-              {i===0 ? (
-                <div>
-                  <div style={{fontSize:8,color:C.textMuted,marginBottom:1}}>所要(分)</div>
-                  <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
-                    style={{width:"100%",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+            {i===0 ? (
+              /* 1枠目: 2行レイアウト（スマホ対応） */
+              <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px",gap:4,marginBottom:4}}>
+                  <input type="date" value={s.date}
+                    onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
+                    style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <input type="time" value={s.startTime}
+                    onChange={e=>hSt(e.target.value)}
+                    style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <input type="time" value={s.endTime}
+                    onChange={e=>hEt(e.target.value)}
+                    style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                 </div>
-              ) : (
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{fontSize:9,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 所要(分)</div>
+                  <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
+                    style={{width:70,background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <div style={{fontSize:8,color:C.textMuted}}>未入力→「あとでやる」へ</div>
+                </div>
+              </div>
+            ) : (
+              /* 2枠目以降 */
+              <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 28px",gap:4,alignItems:"center",background:C.bg,borderRadius:6,padding:"5px 7px",border:`1px solid ${C.border}`}}>
+                <input type="date" value={s.date}
+                  onChange={e=>updateSession(i,"date",e.target.value)}
+                  style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                <input type="time" value={s.startTime}
+                  onChange={e=>updateSession(i,"startTime",e.target.value)}
+                  style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                <input type="time" value={s.endTime}
+                  onChange={e=>updateSession(i,"endTime",e.target.value)}
+                  style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                 <button onClick={()=>{ const ns=(f._sessions||[]).filter((_,j)=>j!==i); u("_sessions",ns); }} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-              )}
-            </div>
-            {i===0 && <div style={{fontSize:8,color:C.textMuted,marginTop:2,paddingLeft:2}}>1枠目 = 開始日時　未入力→「あとでやる」へ</div>}
+              </div>
+            )}
           </div>
         ))}
       </div>
