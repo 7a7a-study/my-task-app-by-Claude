@@ -9,7 +9,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
   const [confirmDel, setConfirmDel] = useState(false);
   const [swipeX, setSwipeX]         = useState(0);
   const [swiping, setSwiping]       = useState(false);
-  const [isTouch, setIsTouch]       = useState(IS_TOUCH);
+  const [isTouch, setIsTouch]       = useState(true); // 安全側デフォルト=true、useEffectで上書き
   useEffect(() => {
     setIsTouch(
       !window.matchMedia("(hover:hover) and (pointer:fine)").matches &&
@@ -19,7 +19,6 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const swipeXRef   = useRef(0);
-  const memoRef     = useRef(false);
   const SWIPE_OPEN  = -140;
 
   const tTags   = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
@@ -31,7 +30,6 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
   const hasMemo = !!task.memo;
 
   const setSwipe = v => { swipeXRef.current = v; setSwipeX(v); };
-  const setMemo  = v => { memoRef.current = v; setMemoOpen(v); };
   const closeSwipe = () => setSwipe(0);
 
   const onTouchStart = e => {
@@ -64,7 +62,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
       if (e.target?.closest?.("[data-cb]")) return;
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) { closeSwipe(); }
-      else if (hasMemo) { setMemo(!memoRef.current); }
+      else if (hasMemo) { setMemoOpen(v => !v); }
     } else if (wasSwiping) {
       setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
     }
@@ -93,7 +91,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
         }}>
         <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
         <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
-          onClick={hasMemo ? e=>{e.stopPropagation();setMemo(!memoRef.current);} : undefined}>
+          onClick={hasMemo ? e=>{e.stopPropagation();setMemoOpen(v=>!v);} : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
