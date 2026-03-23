@@ -32,6 +32,7 @@ export default function App() {
   const [view, setView]               = useState("list");
   const [showForm, setShowForm]       = useState(false);
   const [editTask, setEditTask]       = useState(null);
+  const [isDuplicate, setIsDuplicate] = useState(false); // 複製フォームかどうか
   const [addChildTo, setAddChildTo]   = useState(null);
   const [filters, setFilters]         = useState({tag: "", search: "", hideCompleted: true});
   const [dragTask, setDragTask]       = useState(null);
@@ -198,6 +199,11 @@ export default function App() {
     setTasks(updTreeLocal(tasks, id, t => ({...t, sessions: [...(t.sessions || []), session]})));
   };
 
+  // 時間枠を1つ削除（sessionのidで特定）
+  const handleRemoveSession = (taskId, sessionId) => {
+    setTasks(updTreeLocal(tasks, taskId, t => ({...t, sessions: (t.sessions || []).filter(s => s.id !== sessionId)})));
+  };
+
   const handleMemoToggle = (id, idx) => {
     const next = updTreeLocal(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
     setTasksRaw(next);
@@ -205,13 +211,14 @@ export default function App() {
     window._memoSaveTimer = setTimeout(() => save2DB(next, tags, templates), 800);
   };
 
-  const handleEdit = t => { setEditTask(t); setShowForm(true); };
+  const handleEdit = t => { setEditTask(t); setIsDuplicate(false); setShowForm(true); };
 
   const handleDuplicate = t => {
     const dupChildren = cs => (cs || []).map(c => ({...c, id: "task_" + Date.now() + Math.random(), done: false, children: dupChildren(c.children)}));
     const dup = {...t, id: "task_" + Date.now(), done: false, children: dupChildren(t.children)};
     delete dup._pt; delete dup._pid;
     setEditTask(dup);
+    setIsDuplicate(true);
     setShowForm(true);
   };
 
@@ -337,8 +344,8 @@ export default function App() {
             </div>
             {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit}/>}
             {view === "list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid => { setAddChildTo(pid); setShowForm(true); }} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
-            {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view === "gantt"     && <GanttView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} hideCompleted={filters.hideCompleted} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view === "report"    && <ReportView tasks={tasks} tags={tags}/>}
             {view === "templates" && <TemplatesView templates={templates} setTemplates={setTemplates} onUse={handleUseTemplate} tags={tags}/>}
@@ -350,10 +357,10 @@ export default function App() {
 
       {showForm && (
         <TaskForm
-          task={editTask} tags={tags} isChild={!!addChildTo}
+          task={editTask} tags={tags} isChild={!!addChildTo} isDuplicate={isDuplicate}
           parentTags={addChildTo ? (flatten(tasks).find(t => t.id === addChildTo)?.tags || []) : null}
           onSave={handleSave} defDate={defDate} defTime={defTime}
-          onClose={() => { setShowForm(false); setEditTask(null); setAddChildTo(null); setDefDate(null); setDefTime(null); }}
+          onClose={() => { setShowForm(false); setEditTask(null); setIsDuplicate(false); setAddChildTo(null); setDefDate(null); setDefTime(null); }}
         />
       )}
       {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={() => setShowNotifModal(false)}/>}
