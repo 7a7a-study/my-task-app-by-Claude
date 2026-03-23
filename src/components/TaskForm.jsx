@@ -205,11 +205,36 @@ export const RepeatEditor = ({value, onChange}) => {
 };
 
 // ── タスクフォーム ─────────────────────────────────────────────────
-export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags}) => {
+export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags,isDuplicate}) => {
   const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false,notifyStart:0,notifyDeadline:null,sessions:[]};
   const initTags = isChild && parentTags ? parentTags : (task?.tags || []);
-  const [f, setF] = useState(task ? {...task, tags:initTags} : {...blank, tags:initTags});
+
+  // _sessions の初期値を組み立てる
+  const buildInitSessions = (src) => {
+    const s0 = {id:"s_main", date: src.startDate||defDate||"", startTime: src.startTime||defTime||"", endTime: src.endTime||""};
+    const rest = (src.sessions||[]).map((s,i) => ({id:s.id||"s_"+i, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""}));
+    return [s0, ...rest];
+  };
+
+  const initSrc = task ? {...task, tags:initTags} : {...blank, tags:initTags};
+  const [f, setF] = useState({...initSrc, _sessions: buildInitSessions(initSrc)});
   const u = (k,v) => setF(p => ({...p,[k]:v}));
+
+  // _sessions 更新ヘルパー
+  const updateSession = (idx, field, val) => {
+    setF(p => {
+      const ns = p._sessions.map((s,i) => i===idx ? {...s,[field]:val} : s);
+      // 1枠目が変わった場合は startDate/startTime/endTime にも同期
+      if (idx === 0) {
+        return {...p, _sessions:ns,
+          startDate: field==="date" ? val : p.startDate,
+          startTime: field==="startTime" ? val : p.startTime,
+          endTime:   field==="endTime"   ? val : p.endTime,
+        };
+      }
+      return {...p, _sessions:ns};
+    });
+  };
 
   const togTag = tid => {
     if (isChild && parentTags?.length > 0) return;
@@ -227,16 +252,16 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
     return () => window.removeEventListener("keydown", handler);
   }, [f, onSave, onClose]);
 
-  const hSt  = v => { u("startTime",v); if(f.duration&&v) u("endTime",addDur(v,Number(f.duration))); else if(f.endTime&&v){const d=durFrom(v,f.endTime);if(d)u("duration",String(d));} };
-  const hEt  = v => { u("endTime",v);   if(f.startTime&&v){const d=durFrom(f.startTime,v);if(d)u("duration",String(d));} };
-  const hDur = v => { u("duration",v);  if(f.startTime&&v) u("endTime",addDur(f.startTime,Number(v))); };
+  const hSt  = v => { updateSession(0,"startTime",v); if(f.duration&&v) u("endTime",addDur(v,Number(f.duration))); else if(f.endTime&&v){const d=durFrom(v,f.endTime);if(d)u("duration",String(d));} };
+  const hEt  = v => { updateSession(0,"endTime",v);   if(f.startTime&&v){const d=durFrom(f.startTime,v);if(d)u("duration",String(d));} };
+  const hDur = v => { u("duration",v);  if(f.startTime&&v) { const et=addDur(f.startTime,Number(v)); u("endTime",et); updateSession(0,"endTime",et); } };
 
   const pt = tags.filter(t => !t.parentId && !t.archived);
   const ct = pid => tags.filter(t => t.parentId===pid && !t.archived);
   const tagLocked = isChild && parentTags && parentTags.length > 0;
 
   return (
-    <Modal title={task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide noBackdropClose>
+    <Modal title={isDuplicate?"タスクを複製":task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide noBackdropClose>
       <Inp label="タスク名 *" value={f.title} onChange={v=>u("title",v)} placeholder="タスク名..."/>
       <div style={{marginBottom:9}}>
         <div style={{fontSize:9,color:C.textMuted,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>
@@ -263,26 +288,48 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
           </div>
         )}
       </div>
+
+      {/* ── 時間枠（開始日時統合） ── */}
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:7}}>
-          <Inp label="📅 開始日" value={f.startDate} onChange={v=>u("startDate",v)} type="date"/>
-          <Inp label="開始時刻" value={f.startTime} onChange={hSt} type="time"/>
-          <div style={{marginBottom:7}}>
-            <div style={{fontSize:9,color:C.accent,marginBottom:3,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>⏱ 所要(分)</div>
-            <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
-              style={{width:"100%",background:C.surface,color:C.text,padding:"6px 9px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12}}/>
-          </div>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.4}}>📅 日程・時間枠</div>
+          <Btn v="accent" style={{padding:"2px 9px",fontSize:9}} onClick={()=>{ u("_sessions",[...(f._sessions||[]),{id:"s_"+Date.now(),date:"",startTime:"",endTime:""}]); }}>＋ 枠を追加</Btn>
         </div>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr 1fr",gap:7}}>
-          <Inp label="⏹ 終了日" value={f.endDate} onChange={v=>u("endDate",v)} type="date"/>
-          <Inp label="終了時刻" value={f.endTime} onChange={hEt} type="time"/>
+        {(f._sessions||[]).map((s,i)=>(
+          <div key={s.id||i} style={{marginBottom:5}}>
+            <div style={{display:"grid", gridTemplateColumns: i===0 ? "1fr 80px 80px 60px" : "1fr 80px 80px 28px", gap:4, alignItems:"center", background:i===0?C.surface:C.bg, borderRadius:6, padding:"5px 7px", border:`1px solid ${i===0?C.accent+"44":C.border}`}}>
+              <input type="date" value={s.date}
+                onChange={e=>{ updateSession(i,"date",e.target.value); if(i===0) u("startDate",e.target.value); }}
+                placeholder="開始日"
+                style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+              <input type="time" value={s.startTime}
+                onChange={e=>{ if(i===0){hSt(e.target.value);}else{updateSession(i,"startTime",e.target.value);} }}
+                style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+              <input type="time" value={s.endTime}
+                onChange={e=>{ if(i===0){hEt(e.target.value);}else{updateSession(i,"endTime",e.target.value);} }}
+                style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+              {i===0 ? (
+                <div>
+                  <div style={{fontSize:8,color:C.textMuted,marginBottom:1}}>所要(分)</div>
+                  <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
+                    style={{width:"100%",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                </div>
+              ) : (
+                <button onClick={()=>{ const ns=(f._sessions||[]).filter((_,j)=>j!==i); u("_sessions",ns); }} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+              )}
+            </div>
+            {i===0 && <div style={{fontSize:8,color:C.textMuted,marginTop:2,paddingLeft:2}}>1枠目 = 開始日時　未入力→「あとでやる」へ</div>}
+          </div>
+        ))}
+      </div>
+      {/* ── 締切 ── */}
+      <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:7}}>
           <Inp label="⚠️ 締切日" value={f.deadlineDate} onChange={v=>u("deadlineDate",v)} type="date"/>
           <Inp label="締切時刻" value={f.deadlineTime} onChange={v=>u("deadlineTime",v)} type="time"/>
         </div>
       </div>
-      <div style={{fontSize:9,color:C.textMuted,marginBottom:8,padding:"4px 8px",background:C.accentS,borderRadius:5,border:`1px solid ${C.accent}33`}}>
-        💡 開始日未設定→「あとでやる」リストへ
-      </div>
+      {/* ── 通知 ── */}
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
         <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:7,textTransform:"uppercase",letterSpacing:.4}}>🔔 通知タイミング</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
@@ -316,29 +363,24 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         </div>
       </div>
       <RepeatEditor value={f.repeat} onChange={v=>u("repeat",v)}/>
-      <div style={{marginBottom:8}}>
-        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:5}}>
-          <div style={{fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.4}}>📆 時間枠（複数日またぎ）</div>
-          <Btn v="accent" style={{padding:"2px 9px",fontSize:9}} onClick={()=>{ u("sessions",[...(f.sessions||[]),{id:"s_"+Date.now(),date:"",startTime:"",endTime:""}]); }}>＋ 追加</Btn>
-        </div>
-        {(f.sessions||[]).length>0 && (
-          <div style={{display:"flex",flexDirection:"column",gap:4}}>
-            {(f.sessions||[]).map((s,i)=>(
-              <div key={s.id||i} style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 28px",gap:4,alignItems:"center",background:C.bgSub,borderRadius:6,padding:"5px 7px"}}>
-                <input type="date" value={s.date} onChange={e=>{const ns=[...(f.sessions||[])];ns[i]={...ns[i],date:e.target.value};u("sessions",ns);}} style={{background:C.surface,color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                <input type="time" value={s.startTime} onChange={e=>{const ns=[...(f.sessions||[])];ns[i]={...ns[i],startTime:e.target.value};u("sessions",ns);}} style={{background:C.surface,color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                <input type="time" value={s.endTime} onChange={e=>{const ns=[...(f.sessions||[])];ns[i]={...ns[i],endTime:e.target.value};u("sessions",ns);}} style={{background:C.surface,color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                <button onClick={()=>{const ns=(f.sessions||[]).filter((_,j)=>j!==i);u("sessions",ns);}} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
-              </div>
-            ))}
-          </div>
-        )}
-        {(f.sessions||[]).length===0 && <div style={{fontSize:9,color:C.textMuted,padding:"3px 0"}}>追加なし（通常のstartDate/endTimeを使用）</div>}
-      </div>
       <MemoEditor value={f.memo} onChange={v=>u("memo",v)}/>
       <div style={{display:"flex",gap:7,justifyContent:"flex-end"}}>
         <Btn onClick={onClose}>キャンセル</Btn>
-        <Btn v="accent" onClick={()=>{if(f.title.trim()){onSave({...f,isLater:isLaterTask(f)});onClose();}}}>保存</Btn>
+        <Btn v="accent" onClick={()=>{
+          if(!f.title.trim()) return;
+          const s0 = (f._sessions||[])[0] || {};
+          const rest = (f._sessions||[]).slice(1).filter(s=>s.date||s.startTime);
+          onSave({
+            ...f,
+            startDate: s0.date||"",
+            startTime: s0.startTime||"",
+            endTime:   s0.endTime||"",
+            sessions: rest,
+            _sessions: undefined,
+            isLater: isLaterTask({...f, startDate: s0.date||""}),
+          });
+          onClose();
+        }}>保存</Btn>
       </div>
     </Modal>
   );

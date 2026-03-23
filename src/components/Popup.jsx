@@ -3,7 +3,7 @@ import { C } from "../constants";
 import { localDate, fdt, renderMemo, parseRepeat, repeatLabel } from "../utils";
 import { CB, Btn, Pill, ConfirmDialog } from "./ui";
 
-export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,onAddSession,anchor,viewDate}) => {
+export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,anchor,viewDate}) => {
   const tTags = tags.filter(t => task.tags?.includes(t.id) && t.parentId);
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
@@ -106,7 +106,7 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
           <Btn v="success" onClick={()=>{onDuplicate(task._overrideKey ? {...task,id:task._overrideId} : task);onClose();}} style={{padding:"5px 8px",fontSize:10}} title="複製して編集">⧉</Btn>
           <Btn v="danger" onClick={()=>setConfirmDel(true)} style={{padding:"5px 8px",fontSize:10}} title="削除">✕</Btn>
         </div>
-        {confirmDel && <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{onDelete(task._overrideId||task.id);onClose();}} onCancel={()=>setConfirmDel(false)}/>}
+        {confirmDel && <ConfirmDialog title={task._sessionOnly?"時間枠を削除":"タスクを削除"} message={task._sessionOnly?`「${task.title}」のこの時間枠を削除しますか？`:`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{ if(task._sessionOnly && onRemoveSession){ onRemoveSession(task.id, task._sessionId); }else{ onDelete(task._overrideId||task.id); } onClose(); }} onCancel={()=>setConfirmDel(false)}/>}
       </div>
     </div>
   );
