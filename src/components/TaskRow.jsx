@@ -1,19 +1,13 @@
-import { useState, useRef, useEffect } from "react";
-import { C, IS_TOUCH, SORTS } from "../constants";
+import { useState, useRef } from "react";
+import { C } from "../constants";
 import { localDate, fdt, isLaterTask, parseRepeat, repeatLabel, renderMemo } from "../utils";
 import { CB, Pill, ConfirmDialog } from "./ui";
 
-export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle}) => {
+export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,isTouch=false,memoOpen=false,onMemoOpen}) => {
   const [exp, setExp]               = useState(true);
-  const [memoOpen, setMemoOpen]     = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [swipeX, setSwipeX]         = useState(0);
   const [swiping, setSwiping]       = useState(false);
-  const [isTouch, setIsTouch]       = useState(true); // 安全側デフォルト=true、useEffectで上書き
-  useEffect(() => {
-    // ontouchstart が存在すればタッチデバイス確定（Android Chromeで最も信頼性が高い）
-    setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
-  }, []);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const swipeXRef   = useRef(0);
@@ -60,7 +54,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
       if (e.target?.closest?.("[data-cb]")) return;
       e.preventDefault();
       if (swipeXRef.current <= SWIPE_OPEN / 2) { closeSwipe(); }
-      else if (hasMemo) { setMemoOpen(v => !v); }
+      else if (hasMemo) { onMemoOpen?.(); }
     } else if (wasSwiping) {
       setSwipe(swipeXRef.current < SWIPE_OPEN / 2 ? SWIPE_OPEN : 0);
     }
@@ -89,7 +83,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
         }}>
         <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
         <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
-          onClick={hasMemo ? e=>{e.stopPropagation();if(e.target?.closest?.("[data-cb]"))return;setMemoOpen(v=>!v);} : undefined}>
+          onClick={hasMemo ? e=>{e.stopPropagation();if(e.target?.closest?.("[data-cb]"))return;onMemoOpen?.();} : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
