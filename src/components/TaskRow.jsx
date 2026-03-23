@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { C, IS_TOUCH, SORTS } from "../constants";
 import { localDate, fdt, isLaterTask, parseRepeat, repeatLabel, renderMemo } from "../utils";
 import { CB, Pill, ConfirmDialog } from "./ui";
@@ -9,6 +9,13 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
   const [confirmDel, setConfirmDel] = useState(false);
   const [swipeX, setSwipeX]         = useState(0);
   const [swiping, setSwiping]       = useState(false);
+  const [isTouch, setIsTouch]       = useState(IS_TOUCH);
+  useEffect(() => {
+    setIsTouch(
+      !window.matchMedia("(hover:hover) and (pointer:fine)").matches &&
+      (window.matchMedia("(pointer:coarse)").matches || "ontouchstart" in window)
+    );
+  }, []);
   const touchStartX = useRef(null);
   const touchStartY = useRef(null);
   const swipeXRef   = useRef(0);
@@ -84,7 +91,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           transition:swiping?"none":"transform .2s ease",
           position:"relative",zIndex:1,
         }}>
-        <div data-cb="1" style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
+        <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{paddingTop:1,flexShrink:0}}><CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/></div>
         <div style={{flex:1,minWidth:0,cursor:hasMemo?"pointer":"default"}}
           onClick={hasMemo ? e=>{e.stopPropagation();setMemo(!memoRef.current);} : undefined}>
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
@@ -104,7 +111,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
-        {!IS_TOUCH && !task.done && (
+        {!isTouch && !task.done && (
           <div className="ta" style={{display:"flex",gap:3,flexShrink:0,alignSelf:"flex-start",paddingTop:3}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
