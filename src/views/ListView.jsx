@@ -74,7 +74,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
                   {directItems.length + childGroups.reduce((s,g)=>s+g.items.length,0)}
                 </span>
               </div>
-              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)}
               {childGroups.map(({tag:ct, items:ci}) => (
                 <div key={ct.id} style={{marginLeft:12,marginBottom:6}}>
                   <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:3}}>
@@ -82,7 +82,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
                     <span style={{fontSize:9,fontWeight:700,color:ct.color}}>{ct.name}</span>
                     <span style={{fontSize:8,color:C.textMuted}}>{ci.length}</span>
                   </div>
-                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)}
                 </div>
               ))}
             </div>
@@ -95,7 +95,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
               <span style={{fontSize:10,fontWeight:700,color:C.textMuted}}>タグなし</span>
               <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>{noTagItems.length}</span>
             </div>
-            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)}
           </div>
         )}
       </div>
@@ -111,17 +111,22 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
       </div>
       {sortOrder==="タググループ順"
         ? <TagGroupView items={items}/>
-        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)
+        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/)
       }
     </div>
   );
 
   const [isPC, setIsPC] = useState(window.innerWidth >= 768);
+  const [isTouch, setIsTouch] = useState(true);
+  const [memoOpenMap, setMemoOpenMap] = useState({});
   useEffect(() => {
+    setIsPC(window.innerWidth >= 768);
+    setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
     const fn = () => setIsPC(window.innerWidth >= 768);
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
   }, []);
+  const toggleMemo = (id) => setMemoOpenMap(m => ({...m, [id]: !m[id]}));
 
   const sortBar = (
     <div style={{display:"flex",alignItems:"center",gap:4,marginBottom:11,flexWrap:"wrap"}}>
