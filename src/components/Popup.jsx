@@ -106,7 +106,23 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
           <Btn v="success" onClick={()=>{onDuplicate(task._overrideKey ? {...task,id:task._overrideId} : task);onClose();}} style={{padding:"5px 8px",fontSize:10}} title="複製して編集">⧉</Btn>
           <Btn v="danger" onClick={()=>setConfirmDel(true)} style={{padding:"5px 8px",fontSize:10}} title="削除">✕</Btn>
         </div>
-        {confirmDel && <ConfirmDialog title={task._sessionOnly?"時間枠を削除":"タスクを削除"} message={task._sessionOnly?`「${task.title}」のこの時間枠を削除しますか？`:`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{ if(task._sessionOnly && onRemoveSession){ onRemoveSession(task.id, task._sessionId); }else{ onDelete(task._overrideId||task.id); } onClose(); }} onCancel={()=>setConfirmDel(false)}/>}
+        {confirmDel && task._sessionOnly ? (
+          <div style={{background:C.surface,borderRadius:9,padding:12,marginTop:8,border:`1px solid ${C.danger}44`}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.danger,marginBottom:6}}>🗑 削除方法を選択</div>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:10}}>「{task.title}」のこの時間枠をどうしますか？</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              <Btn v="warn" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onRemoveSession(task.id, task._sessionId); onClose(); }}>
+                📅 この時間枠だけ削除
+              </Btn>
+              <Btn v="danger" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onDelete(task._overrideId||task.id); onClose(); }}>
+                🗑 タスクごと削除
+              </Btn>
+              <Btn style={{fontSize:10,padding:"5px 8px"}} onClick={()=>setConfirmDel(false)}>キャンセル</Btn>
+            </div>
+          </div>
+        ) : confirmDel ? (
+          <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{ onDelete(task._overrideId||task.id); onClose(); }} onCancel={()=>setConfirmDel(false)}/>
+        ) : null}
       </div>
     </div>
   );
