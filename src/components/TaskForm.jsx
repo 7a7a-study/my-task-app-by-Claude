@@ -144,6 +144,7 @@ export const RepeatEditor = ({value, onChange}) => {
     else if (type === "平日のみ") onChange("平日のみ");
     else if (type === "毎週")   onChange({type:"毎週",  weekDays:[]});
     else if (type === "毎月")   onChange({type:"毎月",  monthDays:[]});
+    else if (type === "月末")   onChange({type:"月末"});
     else if (type === "毎年")   onChange({type:"毎年",  yearDate:""});
     else if (type === "カスタム") onChange({type:"カスタム", customDates:[]});
   };
