@@ -95,14 +95,19 @@ export default function App() {
   // 自分の書き込みによるonSnapshot反応を無視するフラグ
   const isSavingRef = useRef(false);
 
+  const savingCountRef = useRef(0);
   const save2DB = async (t, tg, tp) => {
     if (!user) return;
-    setSaving(true);
+    savingCountRef.current += 1;
     isSavingRef.current = true;
+    setSaving(true);
     try { await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: new Date().toISOString()}); }
     catch(e) { console.error(e); }
-    setTimeout(() => { isSavingRef.current = false; }, 1500);
-    setSaving(false);
+    savingCountRef.current -= 1;
+    if (savingCountRef.current === 0) {
+      setTimeout(() => { isSavingRef.current = false; }, 800);
+      setSaving(false);
+    }
   };
 
   const setTasks = t => { setTasksRaw(t); save2DB(t, tags, templates); };
