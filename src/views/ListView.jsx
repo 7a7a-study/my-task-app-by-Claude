@@ -4,28 +4,46 @@ import { parseRepeat, isLaterTask, localDate } from "../utils";
 import { TaskRow } from "../components/TaskRow";
 
 // ── タイムラインチップ（日/週ビューで使う時間軸上のタスクブロック）──
-// DayView/WeekViewからimportして使う。ListViewとは別用途。
-export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,onToggle,onUpdate,onRSStart}) => {
-  const top  = (startMin - dayStartMin) * ppm;                  // タイムライン上の縦位置（px）
-  const h    = Math.max(22, (endMin - startMin) * ppm);         // ブロックの高さ（最小22px）
+// col/totalCols: overlap時の横分割位置（デフォルト0/1=全幅）
+// isDone: 繰り返しタスクの当日done判定（通常タスクはtask.doneをそのまま使う）
+export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,onToggle,onUpdate,onRSStart,col=0,totalCols=1,isDone}) => {
+  const top  = (startMin - dayStartMin) * ppm;
+  const h    = Math.max(22, (endMin - startMin) * ppm);
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
+  const done = isDone !== undefined ? isDone : task.done;
+  const colW = `${100 / totalCols}%`;
+  const colL = `${col * 100 / totalCols}%`;
   return (
     <div className="drag" draggable
       onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
       onClick={e=>{e.stopPropagation();onPopup(e,task);}}
-      style={{position:"absolute",top,left:1,right:1,height:h,background:task.done?C.border+"38":color+"22",borderLeft:`3px solid ${task.done?C.textMuted:color}`,borderRadius:"0 5px 5px 0",overflow:"hidden",display:"flex",flexDirection:"column",justifyContent:"space-between",zIndex:2,userSelect:"none",cursor:"grab",opacity:task.done?.5:1}}>
-      <div style={{padding:"2px 5px 0",flex:1,minHeight:0,overflow:"hidden"}}>
-        <div style={{display:"flex",alignItems:"center",gap:3}}>
-          <div onClick={e=>{e.stopPropagation();onToggle(task.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${task.done?C.textMuted:color}`,background:task.done?color:"transparent",flexShrink:0,cursor:"pointer"}}/>
-          <span style={{fontSize:10,fontWeight:600,color:task.done?C.textMuted:color,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",textDecoration:task.done?"line-through":"none"}}>
-            {task.startTime} {task.title}
+      style={{position:"absolute",top,left:`calc(${colL} + 1px)`,width:`calc(${colW} - 2px)`,height:h,
+        background:done?C.border+"38":color+"22",
+        borderLeft:`3px solid ${done?C.textMuted:color}`,
+        borderRadius:"0 5px 5px 0",overflow:"hidden",display:"flex",flexDirection:"column",
+        justifyContent:"space-between",zIndex:2,userSelect:"none",cursor:"grab",opacity:done?.5:1}}>
+      <div style={{padding:"2px 4px 0",flex:1,minHeight:0,overflow:"hidden"}}>
+        {/* 1行目: 時間 */}
+        <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:1}}>
+          <div onClick={e=>{e.stopPropagation();onToggle(task.id);}}
+            style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${done?C.textMuted:color}`,
+              background:done?color:"transparent",flexShrink:0,cursor:"pointer",
+              display:"flex",alignItems:"center",justifyContent:"center"}}>
+            {done && <span style={{color:"#fff",fontSize:5,fontWeight:900,lineHeight:1}}>✓</span>}
+          </div>
+          <span style={{fontSize:9,color:done?C.textMuted:color,opacity:.9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+            {task.startTime}{task.endTime?`〜${task.endTime}`:""}
           </span>
           {over && <span style={{fontSize:7,color:C.danger,flexShrink:0}}>⚠</span>}
         </div>
-        {h > 34 && task.endTime && <div style={{fontSize:8,color:color,paddingLeft:11,opacity:.8}}>〜{task.endTime}（{task.duration}分）</div>}
-        {h > 48 && task._pt    && <div style={{fontSize:7,color:C.textMuted,paddingLeft:11}}>📁{task._pt}</div>}
+        {/* 2行目: タイトル */}
+        <div style={{fontSize:10,fontWeight:600,color:done?C.textMuted:color,
+          overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis",
+          textDecoration:done?"line-through":"none",paddingLeft:10}}>
+          {task.title}
+        </div>
+        {h > 52 && task._pt && <div style={{fontSize:7,color:C.textMuted,paddingLeft:10}}>📁{task._pt}</div>}
       </div>
-      {/* 下端ドラッグで終了時刻を変更するリサイズハンドル */}
       <div className="rh" onMouseDown={e=>onRSStart(e,task)} onTouchStart={e=>onRSStart(e,task)} onClick={e=>e.stopPropagation()}
         style={{height:7,background:color+"30",borderTop:`1px dashed ${color}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
         <div style={{width:14,height:1.5,borderRadius:1,background:color+"88"}}/>

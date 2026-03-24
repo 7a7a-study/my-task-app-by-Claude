@@ -174,13 +174,27 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:`${C.border}08`}}/>
                 </div>
               ))}
-              {dayTasks.map(t => {
-                const c  = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-                const sm = t2m(t.startTime)||0;
-                const dur = Number(t.duration)||60;
-                const em = t.endTime ? t2m(t.endTime) : sm+dur;
-                return <TimelineChip key={t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={onToggle} onUpdate={onUpdate} onRSStart={onRSStart}/>;
-              })}
+              {(() => {
+                const chips = dayTasks.map(t => {
+                  const c  = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+                  const sm = t2m(t.startTime)||0;
+                  const dur = Number(t.duration)||60;
+                  const em = t.endTime ? t2m(t.endTime) : sm+dur;
+                  const isDone = t.repeat && parseRepeat(t.repeat).type !== "なし"
+                    ? (t.doneDates||[]).includes(d)
+                    : t.done;
+                  return {t, c, sm, em, isDone};
+                });
+                const assigned = chips.map((chip, i) => {
+                  const group = chips.map((_,j) => j).filter(j => chips[j].sm < chip.em && chips[j].em > chip.sm);
+                  const totalCols = group.length;
+                  const col = group.indexOf(i);
+                  return {...chip, col, totalCols};
+                });
+                return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => (
+                  <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
+                ));
+              })()}
             </div>
           );
         })}
