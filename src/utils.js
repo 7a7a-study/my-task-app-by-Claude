@@ -69,6 +69,12 @@ export const matchesRepeat = (task, date) => {
       : (task.startDate ? [new Date(task.startDate).getDate()] : []);
     return days.includes(new Date(date).getDate());
   }
+  if (r.type === "月末") {
+    // その月の最終日かどうか
+    const d = new Date(date);
+    const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+    return d.getDate() === lastDay;
+  }
   if (r.type === "毎年") {
     const ref = r.yearDate || task.startDate;
     if (!ref) return false;
@@ -115,6 +121,7 @@ export const repeatLabel = r => {
     if (!p.monthDays || p.monthDays.length === 0) return "毎月";
     return "毎月" + p.monthDays.join("・") + "日";
   }
+  if (p.type === "月末")   return "月末";
   if (p.type === "毎年") {
     const ref = p.yearDate;
     return ref ? "毎年" + ref.slice(5).replace("-","/") : "毎年";
