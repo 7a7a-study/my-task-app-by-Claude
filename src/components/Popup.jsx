@@ -106,7 +106,7 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
           <Btn v="success" onClick={()=>{onDuplicate(task._overrideKey ? {...task,id:task._overrideId} : task);onClose();}} style={{padding:"5px 8px",fontSize:10}} title="複製して編集">⧉</Btn>
           <Btn v="danger" onClick={()=>setConfirmDel(true)} style={{padding:"5px 8px",fontSize:10}} title="削除">✕</Btn>
         </div>
-        {confirmDel && task._sessionOnly ? (
+        {confirmDel && (task._sessionOnly || task._sessionId) ? (
           <div style={{background:C.surface,borderRadius:9,padding:12,marginTop:8,border:`1px solid ${C.danger}44`}}>
             <div style={{fontSize:11,fontWeight:700,color:C.danger,marginBottom:6}}>🗑 削除方法を選択</div>
             <div style={{fontSize:10,color:C.textMuted,marginBottom:10}}>「{task.title}」のこの時間枠をどうしますか？</div>
