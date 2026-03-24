@@ -7,7 +7,7 @@ import { CB, Pill, ConfirmDialog } from "./ui";
 // depth: 子タスクのネスト深さ（0=親, 1=子, ...）
 // isTouch: ListView側でマウント後に判定してpropsで渡す（タッチ/PC切り替え用）
 // memoOpen/onMemoOpen: メモ開閉状態もListView側で管理（tasks更新時に閉じないようにするため）
-export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,isTouch=false,memoOpen=false,onMemoOpen}) => {
+export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,isTouch=false,memoOpen=false,onMemoOpen,isDoneForDate}) => {
 
   // ── ローカルstate ───────────────────────────────────────────────
   const [exp, setExp]               = useState(true);   // 子タスク展開/折りたたみ
@@ -24,10 +24,12 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
   // ── タスクの状態フラグ ───────────────────────────────────────────
   const tTags   = tags.filter(t => task.tags?.includes(t.id) && t.parentId); // 子タグのみ表示
   const today   = localDate();
-  const over    = task.deadlineDate && !task.done && task.deadlineDate < today;   // 期限超過
-  const urgent  = task.deadlineDate && !task.done && task.deadlineDate === today;  // 今日締切
-  const later   = task.isLater || isLaterTask(task); // あとでやる
-  const tc      = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;  // タスクの代表色
+  // 繰り返しタスクは isDoneForDate（当日完了状態）を優先、通常タスクは task.done
+  const done    = isDoneForDate !== undefined ? isDoneForDate : task.done;
+  const over    = task.deadlineDate && !done && task.deadlineDate < today;
+  const urgent  = task.deadlineDate && !done && task.deadlineDate === today;
+  const later   = task.isLater || isLaterTask(task);
+  const tc      = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const hasMemo = !!task.memo;
 
   // ── スワイプ操作ヘルパー ─────────────────────────────────────────
@@ -44,10 +46,10 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if (!swiping && Math.abs(dx) <= 8) return;           // 微小な動きは無視
-    if (!swiping && Math.abs(dy) >= Math.abs(dx)) return; // 縦スクロールはスワイプ扱いしない
+    if (!swiping && Math.abs(dx) <= 12) return;          // 微小な動きは無視（12pxに引き上げ）
+    if (!swiping && Math.abs(dy) >= Math.abs(dx) * 0.7) return; // 縦スクロールはスワイプ扱いしない
     setSwiping(true);
-    e.preventDefault(); // スクロールと競合しないようにする
+    e.preventDefault();
     const base = swipeXRef.current <= SWIPE_OPEN / 2 ? SWIPE_OPEN : 0;
     setSwipe(Math.max(SWIPE_OPEN, Math.min(0, base + dx)));
   };
@@ -59,7 +61,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
     touchStartY.current = null;
     setSwiping(false);
 
-    if (!wasSwiping && Math.abs(dx) < 8 && Math.abs(dy) < 8) {
+    if (!wasSwiping && Math.abs(dx) < 12 && Math.abs(dy) < 12) {
       // ── タップ判定 ───────────────────────────────────────────────
       const tag = e.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;
@@ -95,7 +97,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           background:depth===0?C.surface:C.bgSub,
           border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,
           borderLeft:depth>0?`3px solid ${tc}55`:undefined, // 子タスクは左ボーダーで親色を示す
-          opacity:task.done?.45:1,
+          opacity:done?.45:1,
           transform:`translateX(${swipeX}px)`,
           transition:swiping?"none":"transform .2s ease",
           position:"relative",zIndex:1,
@@ -103,7 +105,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
 
         {/* チェックボックス（data-cbでタッチイベントのバブリングを止める） */}
         <div data-cb="1" onClick={e=>e.stopPropagation()} onTouchEnd={e=>e.stopPropagation()} style={{flexShrink:0,alignSelf:"center"}}>
-          <CB checked={task.done} onChange={()=>onToggle(task.id)} color={tc}/>
+          <CB checked={done} onChange={()=>onToggle(task.id)} color={tc}/>
         </div>
 
         {/* タスク情報エリア（タップでメモ開閉） */}
@@ -113,7 +115,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           {/* 1行目：タイトル・バッジ類 */}
           <div style={{display:"flex",alignItems:"center",gap:4,flexWrap:"wrap",marginBottom:1}}>
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
-            <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text}}>{task.title}</span>
+            <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:done?"line-through":"none",color:done?C.textMuted:C.text}}>{task.title}</span>
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{repeatLabel(task.repeat)}</span>}
             {(()=>{const total=(task.sessions||[]).length+(task.startDate?1:0);return total>=1?<span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.accentS,color:C.accent,fontWeight:600}}>📆{total}枠</span>:null;})()}
             {later  && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>📌</span>}
@@ -132,7 +134,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
         </div>
 
         {/* PCホバー時のアクションボタン群（.tr:hover .ta で表示、タッチ時は非表示） */}
-        {!isTouch && !task.done && (
+        {!isTouch && !done && (
           <div className="ta" style={{gap:3,flexShrink:0}}>
             <button onClick={()=>onAddChild(task.id)} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center"}}>+</button>
             <button onClick={()=>onDuplicate(task)}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>⧉</button>
