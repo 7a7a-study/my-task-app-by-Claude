@@ -18,7 +18,7 @@ export const TAG_PRESETS = [
   {id:"t5",name:"健康",  color:"#b8c4b0",parentId:null},
 ];
 
-export const REPEAT_TYPES = ["なし","毎日","平日のみ","毎週","毎月","毎年","カスタム"];
+export const REPEAT_TYPES = ["なし","毎日","平日のみ","毎週","毎月","月末","毎年","カスタム"];
 export const DAYS_JP = ["月","火","水","木","金","土","日"];
 export const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 export const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
@@ -45,9 +45,9 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .rh{cursor:ns-resize!important}
 .ew{cursor:ew-resize!important}
 .tr .ta{display:none!important}
-.swipe-actions{display:flex!important}
+.swipe-actions{display:none!important}
 @media(hover:hover) and (pointer:fine){.tr:hover .ta{display:flex!important}.swipe-actions{display:none!important}}
-@media(pointer:coarse){.tr .ta{display:none!important}.swipe-actions{display:flex!important}}
+@media not all and (hover:hover) and (pointer:fine){.tr .ta{display:none!important}.swipe-actions{display:flex!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
 @media(min-width:768px){body{font-size:14px}}
