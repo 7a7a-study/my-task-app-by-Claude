@@ -97,7 +97,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           background:depth===0?C.surface:C.bgSub,
           border:`1px solid ${over?C.danger+"55":depth===0?C.border:"transparent"}`,
           borderLeft:depth>0?`3px solid ${tc}55`:undefined, // 子タスクは左ボーダーで親色を示す
-          opacity:done?.45:1,
+          opacity:done ? 0.45 : 1,
           transform:`translateX(${swipeX}px)`,
           transition:swiping?"none":"transform .2s ease",
           position:"relative",zIndex:1,
@@ -161,7 +161,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
       )}
 
       {/* 子タスクを再帰レンダリング（expがtrueのとき展開） */}
-      {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle}/>)}
+      {exp && task.children?.map(c=><TaskRow key={c.id} task={c} tags={tags} depth={depth+1} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={false} isDoneForDate={c.repeat && c.repeat !== "なし" ? ((c.doneDates||[]).includes(today) ? true : false) : undefined}/>)}
     </div>
   );
 };
