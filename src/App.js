@@ -81,19 +81,25 @@ export default function App() {
   useEffect(() => { scheduleNotifications(tasks, notifSettings); }, [notifHash, notifSettings]);
 
   // tasksとnotifSettingsをrefで追跡（stale closure防止）
-  const tasksRef = useRef(tasks);
   const notifRef = useRef(notifSettings);
-  useEffect(() => { tasksRef.current = tasks; }, [tasks]);
   useEffect(() => { notifRef.current = notifSettings; }, [notifSettings]);
 
   // フォアグラウンド通知チェック
   useEffect(() => {
-    const stop = startForegroundCheck(() => tasksRef.current, () => notifRef.current, null);
+    const stop = startForegroundCheck(() => tasksLatest.current, () => notifRef.current, null);
     return stop;
   }, []);
 
   // 自分の書き込みによるonSnapshot反応を無視するフラグ
   const isSavingRef = useRef(false);
+
+  // 最新値をrefで追跡（stale closure防止のため save2DB 呼び出し時に参照する）
+  const tasksLatest     = useRef(tasks);
+  const tagsLatest      = useRef(tags);
+  const templatesLatest = useRef(templates);
+  useEffect(() => { tasksLatest.current = tasks; }, [tasks]);
+  useEffect(() => { tagsLatest.current = tags; }, [tags]);
+  useEffect(() => { templatesLatest.current = templates; }, [templates]);
 
   const savingCountRef = useRef(0);
   const save2DB = async (t, tg, tp) => {
@@ -110,15 +116,9 @@ export default function App() {
     }
   };
 
-  const setTasks = t => { setTasksRaw(t); save2DB(t, tags, templates); };
-  const setTags  = tg => {
-    setTagsRaw(prev => {
-      const next = typeof tg === "function" ? tg(prev) : tg;
-      save2DB(tasks, next, templates);
-      return next;
-    });
-  };
-  const setTemplates = tp => { setTemplatesRaw(tp); save2DB(tasks, tags, tp); };
+  const setTasks     = t  => { setTasksRaw(t);  save2DB(t, tagsLatest.current, templatesLatest.current); };
+  const setTags      = tg => { setTagsRaw(tg);  save2DB(tasksLatest.current, tg, templatesLatest.current); };
+  const setTemplates = tp => { setTemplatesRaw(tp); save2DB(tasksLatest.current, tagsLatest.current, tp); };
 
   const handleLogin = async () => {
     setLoginLoading(true);
@@ -162,18 +162,12 @@ export default function App() {
     const isRepeat = target.repeat && parseRepeat(target.repeat).type !== "なし";
     if (isRepeat) {
       const date = forDate || localDate();
-      const skipDates = [...(target.skipDates || [])];
       const doneDates = [...(target.doneDates || [])];
       const alreadyDone = doneDates.includes(date);
-      let newSkip, newDone;
-      if (alreadyDone) {
-        newSkip = skipDates.filter(d => d !== date);
-        newDone = doneDates.filter(d => d !== date);
-      } else {
-        newSkip = skipDates.includes(date) ? skipDates : [...skipDates, date];
-        newDone = [...doneDates, date];
-      }
-      setTasks(syncDone(updTreeLocal(tasks, id, t => ({...t, skipDates: newSkip, doneDates: newDone}))));
+      const newDone = alreadyDone
+        ? doneDates.filter(d => d !== date)
+        : [...doneDates, date];
+      setTasks(syncDone(updTreeLocal(tasks, id, t => ({...t, doneDates: newDone}))));
       return;
     }
     if (!target.done && (target.children || []).length > 0) {
@@ -347,7 +341,7 @@ export default function App() {
                 <Btn v="accent" onClick={() => { setDefDate(null); setDefTime(null); setEditTask(null); setAddChildTo(null); setShowForm(true); }}>＋ 追加</Btn>
               )}
             </div>
-            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit}/>}
+            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle}/>}
             {view === "list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid => { setAddChildTo(pid); setShowForm(true); }} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
             {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
