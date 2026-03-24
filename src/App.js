@@ -52,14 +52,19 @@ export default function App() {
   useEffect(() => { const u = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); }); return u; }, []);
 
   // Firestore同期
+  // Firestore同期: 自分の書き込みによるonSnapshot反応をSetで識別してスキップ
   useEffect(() => {
     if (!user) return;
     const u = onSnapshot(doc(db, "users", user.uid), snap => {
-      if (isSavingRef.current) return;
       if (snap.exists()) {
         const d = snap.data();
-        if (d.tasks) setTasksRaw(d.tasks);
-        if (d.tags) setTagsRaw(d.tags);
+        // 自分が書いたupdatedAtならスキップ（Setから削除して次回の別デバイス書き込みは通す）
+        if (d.updatedAt && myWritesRef.current.has(d.updatedAt)) {
+          myWritesRef.current.delete(d.updatedAt);
+          return;
+        }
+        if (d.tasks)     setTasksRaw(d.tasks);
+        if (d.tags)      setTagsRaw(d.tags);
         if (d.templates) setTemplatesRaw(d.templates);
       }
     });
@@ -90,8 +95,9 @@ export default function App() {
     return stop;
   }, []);
 
-  // 自分の書き込みによるonSnapshot反応を無視するフラグ
-  const isSavingRef = useRef(false);
+  // 自分の書き込みによるonSnapshot反応を無視するためのSet
+  // 連続保存でも対応できるよう「発行済みupdatedAt」を全件追跡する
+  const myWritesRef = useRef(new Set());
 
   // 最新値をrefで追跡（stale closure防止のため save2DB 呼び出し時に参照する）
   const tasksLatest     = useRef(tasks);
@@ -105,15 +111,13 @@ export default function App() {
   const save2DB = async (t, tg, tp) => {
     if (!user) return;
     savingCountRef.current += 1;
-    isSavingRef.current = true;
     setSaving(true);
-    try { await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: new Date().toISOString()}); }
-    catch(e) { console.error(e); }
+    const ts = new Date().toISOString() + Math.random().toString(36).slice(2);
+    myWritesRef.current.add(ts);  // 自分の書き込みとして登録
+    try { await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: ts}); }
+    catch(e) { console.error(e); myWritesRef.current.delete(ts); }
     savingCountRef.current -= 1;
-    if (savingCountRef.current === 0) {
-      setTimeout(() => { isSavingRef.current = false; }, 800);
-      setSaving(false);
-    }
+    if (savingCountRef.current === 0) { setSaving(false); }
   };
 
   const setTasks     = t  => { setTasksRaw(t);  save2DB(t, tagsLatest.current, templatesLatest.current); };
