@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, SORTS } from "../constants";
-import { parseRepeat, isLaterTask, localDate } from "../utils";
+import { parseRepeat, isLaterTask, localDate, matchesRepeat } from "../utils";
 import { TaskRow } from "../components/TaskRow";
 
 // ── タイムラインチップ（日/週ビューで使う時間軸上のタスクブロック）──
@@ -98,7 +98,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
                   {directItems.length + childGroups.reduce((s,g)=>s+g.items.length,0)}
                 </span>
               </div>
-              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)}
+              {directItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)} isDoneForDate={isDoneForDate(t)}/>)}
               {/* 子タグのグループ */}
               {childGroups.map(({tag:ct, items:ci}) => (
                 <div key={ct.id} style={{marginLeft:12,marginBottom:6}}>
@@ -107,7 +107,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
                     <span style={{fontSize:9,fontWeight:700,color:ct.color}}>{ct.name}</span>
                     <span style={{fontSize:8,color:C.textMuted}}>{ci.length}</span>
                   </div>
-                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)}
+                  {ci.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)} isDoneForDate={isDoneForDate(t)}/>)}
                 </div>
               ))}
             </div>
@@ -121,7 +121,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
               <span style={{fontSize:10,fontWeight:700,color:C.textMuted}}>タグなし</span>
               <span style={{fontSize:9,color:C.textMuted,background:C.surfHov,padding:"0 5px",borderRadius:6}}>{noTagItems.length}</span>
             </div>
-            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)}
+            {noTagItems.map(t => <TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)} isDoneForDate={isDoneForDate(t)}/>)}
           </div>
         )}
       </div>
@@ -138,7 +138,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
       </div>
       {sortOrder==="タググループ順"
         ? <TagGroupView items={items}/>
-        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)}/>)
+        : items.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onAddChild={onAddChild} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle} isTouch={isTouch} memoOpen={!!memoOpenMap[t.id]} onMemoOpen={()=>toggleMemo(t.id)} isDoneForDate={isDoneForDate(t)}/>)
       }
     </div>
   );
@@ -147,6 +147,7 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
   const [isPC, setIsPC]       = useState(window.innerWidth >= 768);
   const [isTouch, setIsTouch] = useState(true); // 安全側デフォルト=true（スマホ扱い）
   const [memoOpenMap, setMemoOpenMap] = useState({}); // { taskId: bool } でメモ開閉を管理
+  const today = localDate();
   useEffect(() => {
     setIsPC(window.innerWidth >= 768);
     // ontouchstart の有無でタッチデバイスを判定（matchMediaより確実）
@@ -156,6 +157,12 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
     return () => window.removeEventListener("resize", fn);
   }, []);
   const toggleMemo = (id) => setMemoOpenMap(m => ({...m, [id]: !m[id]}));
+
+  // 繰り返しタスクの当日done判定
+  const isDoneForDate = (t) => {
+    if (!t.repeat || parseRepeat(t.repeat).type === "なし") return undefined;
+    return (t.doneDates || []).includes(today);
+  };
 
   // ── 並び替えボタンバー ───────────────────────────────────────────
   const sortBar = (
