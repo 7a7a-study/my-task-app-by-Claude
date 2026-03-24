@@ -165,18 +165,20 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
     </div>
   );
 
-  // ── PC表示：2カラムレイアウト（タスク列 / あとでやる列）────────────
+  // ── PC表示：4カラムレイアウト（左2列: タスク+繰り返し / 右2列: あとでやる）──
   if (isPC) {
     return (
       <div>
         {sortBar}
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:16,alignItems:"start"}}>
-          <div>
+        <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:16,alignItems:"start"}}>
+          {/* 左2列: タスク + 習慣 */}
+          <div style={{gridColumn:"1 / 3"}}>
             <Sec title="タスク"         items={regular} color={C.accent}  icon="📋"/>
             <Sec title="習慣・繰り返し" items={habits}  color={C.success} icon="🔄"/>
             {regular.length===0 && habits.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>タスクなし 🎉</div>}
           </div>
-          <div>
+          {/* 右2列: あとでやる */}
+          <div style={{gridColumn:"3 / 5",borderLeft:`1px solid ${C.border}`,paddingLeft:16}}>
             <Sec title="あとでやる" items={later} color={C.warn} icon="📌"/>
             {later.length===0 && <div style={{textAlign:"center",padding:"24px 0",color:C.textMuted,fontSize:12}}>あとでやるなし</div>}
           </div>
