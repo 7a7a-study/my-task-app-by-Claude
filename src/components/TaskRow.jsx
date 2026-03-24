@@ -80,8 +80,8 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
       onTouchStart={e=>{if(e.target?.closest?.("[data-memo-panel]")){touchStartX.current=null;touchStartY.current=null;}}}
       style={{marginLeft:depth*16, position:"relative", overflow:"hidden", display:"block", borderRadius:memoOpen?"7px 7px 0 0":7, marginBottom:memoOpen?0:2}}>
 
-      {/* スワイプで現れるアクションボタン群（スマホ専用・タスク行の高さのみ） */}
-      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,bottom:0,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
+      {/* スワイプで現れるアクションボタン群（タスク行と同じ高さに収める） */}
+      <div className="swipe-actions" style={{position:"absolute",right:0,top:0,height:"100%",maxHeight:44,display:"flex",alignItems:"center",gap:2,paddingRight:6,background:C.bgSub,zIndex:0}}>
         <button onClick={()=>{onAddChild(task.id);closeSwipe();}} style={{background:C.accentS,color:C.accent,border:"none",borderRadius:6,width:28,height:28,fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>+</button>
         <button onClick={()=>{onDuplicate(task);closeSwipe();}}   style={{background:C.successS,color:C.success,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>⧉</button>
         <button onClick={()=>{onEdit(task);closeSwipe();}}         style={{background:C.surfHov,color:C.textSub,border:"none",borderRadius:6,width:28,height:28,fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✎</button>

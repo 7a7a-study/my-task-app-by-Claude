@@ -301,59 +301,42 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         {(f._sessions||[]).map((s,i)=>(
           <div key={s.id||i} style={{marginBottom:5}}>
             {i===0 ? (
-              /* 1枠目: PC=1行 / スマホ=3段 */
+              /* 1枠目（削除不可・アクセントボーダー） */
               <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
-                {isTouch ? (
-                  /* スマホ: 2段（行1=日付+開始〜終了 / 行2=所要分） */
-                  <>
-                    <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
-                      <input type="date" value={s.date}
-                        onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
-                        style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"3px 4px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:10}}/>
-                      <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
-                        style={{flex:"0 0 72px",background:"transparent",color:C.text,padding:"3px 4px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:10}}/>
-                      <span style={{fontSize:8,color:C.textMuted}}>〜</span>
-                      <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
-                        style={{flex:"0 0 72px",background:"transparent",color:C.text,padding:"4px 4px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:10}}/>
-                    </div>
-                    <div style={{display:"flex",alignItems:"center",gap:6}}>
-                      <div style={{fontSize:9,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 所要(分)</div>
-                      <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
-                        style={{width:70,background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                      <div style={{fontSize:8,color:C.textMuted}}>未入力→「あとでやる」へ</div>
-                    </div>
-                  </>
-                ) : (
-                  /* PC: 1行（日付・開始〜終了・所要分） */
-                  <div style={{display:"flex",alignItems:"center",gap:5,flexWrap:"nowrap"}}>
-                    <input type="date" value={s.date}
-                      onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
-                      style={{flex:"0 0 130px",background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                    <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
-                      style={{flex:"0 0 88px",background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                    <span style={{fontSize:9,color:C.textMuted}}>〜</span>
-                    <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
-                      style={{flex:"0 0 88px",background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                    <span style={{fontSize:9,color:C.textMuted,whiteSpace:"nowrap"}}>⏱</span>
-                    <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="分"
-                      style={{flex:"0 0 56px",background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                    <span style={{fontSize:8,color:C.textMuted,whiteSpace:"nowrap"}}>分</span>
-                  </div>
-                )}
+                <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
+                  <input type="date" value={s.date}
+                    onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
+                    style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
+                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <span style={{fontSize:9,color:C.textMuted}}>〜</span>
+                  <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
+                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                </div>
+                <div style={{display:"flex",alignItems:"center",gap:6}}>
+                  <div style={{fontSize:9,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 所要(分)</div>
+                  <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
+                    style={{width:70,background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <div style={{fontSize:9,color:C.textMuted}}>未入力→「あとでやる」へ</div>
+                </div>
               </div>
             ) : (
-              /* 2枠目以降 */
-              <div style={{display:"grid",gridTemplateColumns:"1fr 80px 80px 28px",gap:4,alignItems:"center",background:C.bg,borderRadius:6,padding:"5px 7px",border:`1px solid ${C.border}`}}>
-                <input type="date" value={s.date}
-                  onChange={e=>updateSession(i,"date",e.target.value)}
-                  style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                <input type="time" value={s.startTime}
-                  onChange={e=>updateSession(i,"startTime",e.target.value)}
-                  style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                <input type="time" value={s.endTime}
-                  onChange={e=>updateSession(i,"endTime",e.target.value)}
-                  style={{background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                <button onClick={()=>{ const ns=(f._sessions||[]).filter((_,j)=>j!==i); u("_sessions",ns); }} style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"}}>✕</button>
+              /* 2枠目以降（同じ1行レイアウト＋削除ボタン） */
+              <div style={{background:C.bg,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.border}`}}>
+                <div style={{display:"flex",alignItems:"center",gap:3}}>
+                  <input type="date" value={s.date}
+                    onChange={e=>updateSession(i,"date",e.target.value)}
+                    style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <input type="time" value={s.startTime}
+                    onChange={e=>updateSession(i,"startTime",e.target.value)}
+                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <span style={{fontSize:9,color:C.textMuted}}>〜</span>
+                  <input type="time" value={s.endTime}
+                    onChange={e=>updateSession(i,"endTime",e.target.value)}
+                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  <button onClick={()=>{ const ns=(f._sessions||[]).filter((_,j)=>j!==i); u("_sessions",ns); }}
+                    style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+                </div>
               </div>
             )}
           </div>
