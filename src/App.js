@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, setDoc, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
 import { registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
 
 import { C, G, TAG_PRESETS, ALLOWED } from "./constants";
@@ -51,22 +51,25 @@ export default function App() {
   // 認証
   useEffect(() => { const u = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); }); return u; }, []);
 
-  // Firestore同期
+  // Firestore リアルタイム同期
+  // hasPendingWrites=true の間はローカル書き込み中なのでスキップ
   useEffect(() => {
     if (!user) return;
-    const u = onSnapshot(doc(db, "users", user.uid), snap => {
-      if (snap.exists()) {
-        const d = snap.data();
-        if (d.updatedAt && myWriteTokensRef.current.has(d.updatedAt)) {
-          myWriteTokensRef.current.delete(d.updatedAt);
-          return;
+    const unsub = onSnapshot(
+      doc(db, "users", user.uid),
+      { includeMetadataChanges: true },
+      snap => {
+        // ローカルキャッシュからの即時反応（自分の書き込み中）は無視
+        if (snap.metadata.hasPendingWrites) return;
+        if (snap.exists()) {
+          const d = snap.data();
+          if (d.tasks)     setTasksRaw(d.tasks);
+          if (d.tags)      setTagsRaw(d.tags);
+          if (d.templates) setTemplatesRaw(d.templates);
         }
-        if (d.tasks) setTasksRaw(d.tasks);
-        if (d.tags) setTagsRaw(d.tags);
-        if (d.templates) setTemplatesRaw(d.templates);
       }
-    });
-    return u;
+    );
+    return unsub;
   }, [user]);
 
   // 今年・来年の祝日プリフェッチ
@@ -93,9 +96,6 @@ export default function App() {
     return stop;
   }, []);
 
-  // 自分の書き込みによるonSnapshot反応を無視するためのトークン管理
-  const myWriteTokensRef = useRef(new Set());
-
   // 最新値をrefで追跡（stale closure防止のため save2DB 呼び出し時に参照する）
   const tasksLatest     = useRef(tasks);
   const tagsLatest      = useRef(tags);
@@ -104,19 +104,14 @@ export default function App() {
   useEffect(() => { tagsLatest.current = tags; }, [tags]);
   useEffect(() => { templatesLatest.current = templates; }, [templates]);
 
-  const savingCountRef = useRef(0);
   const save2DB = async (t, tg, tp) => {
     if (!user) return;
-    savingCountRef.current += 1;
-    const token = Date.now() + "_" + Math.random();
-    myWriteTokensRef.current.add(token);
     setSaving(true);
-    try { await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: token}); }
-    catch(e) { console.error(e); myWriteTokensRef.current.delete(token); }
-    savingCountRef.current -= 1;
-    if (savingCountRef.current === 0) { setSaving(false); }
-    // トークンは onSnapshot 側で受信後に削除するが、念のため5秒後にクリア
-    setTimeout(() => { myWriteTokensRef.current.delete(token); }, 5000);
+    try {
+      await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: new Date().toISOString()});
+    }
+    catch(e) { console.error("保存失敗", e); }
+    setSaving(false);
   };
 
   const setTasks     = t  => { setTasksRaw(t);  save2DB(t, tagsLatest.current, templatesLatest.current); };
