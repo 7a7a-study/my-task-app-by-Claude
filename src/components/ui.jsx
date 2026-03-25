@@ -15,6 +15,7 @@ export const Btn = ({children,onClick,v="ghost",style={},disabled,title}) => {
     accent: {bg:`linear-gradient(135deg,${C.accent},${C.info})`,col:"#1a1e28",brd:"none",sh:"0 2px 10px rgba(139,184,212,.25)"},
     danger: {bg:C.dangerS,col:C.danger,brd:`1px solid ${C.danger}44`,sh:"none"},
     success:{bg:C.successS,col:C.success,brd:`1px solid ${C.success}44`,sh:"none"},
+    warn:   {bg:C.warnS,  col:C.warn,  brd:`1px solid ${C.warn}44`,  sh:"none"},
     subtle: {bg:C.surfHov,col:C.textSub,brd:`1px solid ${C.border}`,sh:"none"},
   };
   const s = vs[v];
