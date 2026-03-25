@@ -397,7 +397,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
             startTime: s0.startTime||"",
             endTime:   s0.endTime||"",
             sessions: rest,
-            _sessions: undefined,
+
             isLater: isLaterTask({...f, startDate: s0.date||""}),
           });
           onClose();
