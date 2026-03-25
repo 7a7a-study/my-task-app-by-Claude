@@ -70,10 +70,19 @@ export const matchesRepeat = (task, date) => {
     return days.includes(new Date(date).getDate());
   }
   if (r.type === "月末") {
-    // その月の最終日かどうか
     const d = new Date(date);
     const lastDay = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
     return d.getDate() === lastDay;
+  }
+  if (r.type === "月末平日") {
+    // その月の最終平日（土曜→金曜、日曜→金曜）
+    const d = new Date(date);
+    const lastD = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    const dow = lastD.getDay();
+    const offset = dow === 0 ? 2 : dow === 6 ? 1 : 0;
+    const lastWeekday = new Date(lastD);
+    lastWeekday.setDate(lastD.getDate() - offset);
+    return d.getDate() === lastWeekday.getDate();
   }
   if (r.type === "毎年") {
     const ref = r.yearDate || task.startDate;
@@ -122,6 +131,7 @@ export const repeatLabel = r => {
     return "毎月" + p.monthDays.join("・") + "日";
   }
   if (p.type === "月末")   return "月末";
+  if (p.type === "月末平日") return "月末平日";
   if (p.type === "毎年") {
     const ref = p.yearDate;
     return ref ? "毎年" + ref.slice(5).replace("-","/") : "毎年";

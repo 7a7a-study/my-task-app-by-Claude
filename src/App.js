@@ -198,7 +198,21 @@ export default function App() {
 
   // 時間枠を1つ削除（sessionのidで特定）
   const handleRemoveSession = (taskId, sessionId) => {
-    setTasks(updTreeLocal(tasks, taskId, t => ({...t, sessions: (t.sessions || []).filter(s => s.id !== sessionId)})));
+    if (!sessionId) {
+      // sessionIdなし＝メイン時間枠をクリア
+      setTasks(updTreeLocal(tasks, taskId, t => ({...t, startDate:"", startTime:"", endTime:"", duration:"", sessions:[], isLater:true})));
+    } else {
+      setTasks(updTreeLocal(tasks, taskId, t => ({...t, sessions: (t.sessions || []).filter(s => s.id !== sessionId)})));
+    }
+  };
+
+  // 時間枠クリア（タスクは残す・日程だけ消す）
+  const handleClearSchedule = id => {
+    setTasks(updTreeLocal(tasks, id, t => ({
+      ...t,
+      startDate: "", startTime: "", endTime: "", duration: "",
+      sessions: [], isLater: true,
+    })));
   };
 
   const handleMemoToggle = (id, idx) => {

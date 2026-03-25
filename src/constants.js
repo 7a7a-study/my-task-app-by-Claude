@@ -18,7 +18,7 @@ export const TAG_PRESETS = [
   {id:"t5",name:"健康",  color:"#b8c4b0",parentId:null},
 ];
 
-export const REPEAT_TYPES = ["なし","毎日","平日のみ","毎週","毎月","月末","毎年","カスタム"];
+export const REPEAT_TYPES = ["なし","毎日","平日のみ","毎週","毎月","月末","月末平日","毎年","カスタム"];
 export const DAYS_JP = ["月","火","水","木","金","土","日"];
 export const ALLOWED = ["w1HtaWxdSnMCV1miEm3yNF7g08J2","mszdWzOojoURpcIQdYdA3FRpQiG2"];
 export const SORTS   = ["デフォルト","開始日順","締切日順","タググループ順","完了を最後に"];
