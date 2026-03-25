@@ -21,19 +21,32 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
-  const todayT = [
+  // 通常タスク（startDate一致）
+  const startTasks = [
     ...all.filter(t => {
       if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, viewDate);
-      return sameDay(t.startDate,viewDate) || sameDay(t.deadlineDate,viewDate);
+      return sameDay(t.startDate, viewDate);
     }),
-    ...expandOverrides(tasks).filter(t => sameDay(t.startDate,viewDate) || sameDay(t.deadlineDate,viewDate)),
+    ...expandOverrides(tasks).filter(t => sameDay(t.startDate, viewDate)),
     ...all.filter(t=>(t.sessions||[]).some(s=>s.date===viewDate)).map(t=>{
       const ss=(t.sessions||[]).filter(s=>s.date===viewDate);
       return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
     }).flat(),
   ];
+  // 締切タスク（deadlineDate一致 かつ startDate不一致）→ 締切時刻で別表示
+  const deadlineTasks = all.filter(t =>
+    sameDay(t.deadlineDate, viewDate) &&
+    !sameDay(t.startDate, viewDate) &&
+    !(t.repeat && parseRepeat(t.repeat).type !== "なし")
+  ).map(t => ({...t, _isDeadline: true}));
+
+  const todayT = startTasks;
   const timed   = todayT.filter(t =>  t.startTime && !(t.isLater||isLaterTask(t)));
-  const untimed = todayT.filter(t => !t.startTime && !(t.isLater||isLaterTask(t)));
+  const untimed = [
+    ...todayT.filter(t => !t.startTime && !(t.isLater||isLaterTask(t))),
+    ...deadlineTasks.filter(t => !t.deadlineTime),
+  ];
+  const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||viewDate}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
@@ -183,6 +196,23 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
               <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={hToggle} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
             ));
           })()}
+          {/* 締切チップ（deadlineTimeあり） */}
+          {timedDeadlines.map(t => {
+            const dm = t2m(t.deadlineTime);
+            if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
+            const top = (dm - dayStartMin) * PPM;
+            const c = tags.find(tg=>t.tags?.includes(tg.id))?.color || C.danger;
+            return (
+              <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();hp(e,t);}}
+                style={{position:"absolute",top:top-1,left:0,right:0,height:3,background:C.danger,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
+                title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
+                <div style={{position:"absolute",right:2,top:-8,background:C.danger,color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:8,whiteSpace:"nowrap",pointerEvents:"none"}}>
+                  ⚠ {t.deadlineTime} {t.title}
+                </div>
+                <div style={{width:"100%",height:3,background:`linear-gradient(90deg,${C.danger}00,${C.danger},${C.danger}00)`}}/>
+              </div>
+            );
+          })}
         </div>
       </div>
       {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onRemoveSession={onRemoveSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
