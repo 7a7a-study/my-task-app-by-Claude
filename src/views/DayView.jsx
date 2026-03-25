@@ -125,25 +125,50 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
         </button>
       </div>
       </div>
-      {untimed.length>0 && (
-        <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:8}}>
-          <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
-          {untimed.map(t => {
-            const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-            return (
-              <div key={t.id} draggable className="drag"
-                onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);}}
-                onDragEnd={()=>setDragTask(null)}
-                onClick={e=>hp(e,t)}
-                style={{display:"flex",alignItems:"center",gap:6,padding:"3px 6px",borderLeft:`3px solid ${c}`,borderRadius:"0 5px 5px 0",marginBottom:2,background:c+"18",cursor:"grab"}}>
-                <div onClick={e=>{e.stopPropagation();hToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${t.done?C.textMuted:c}`,background:t.done?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
-                <span style={{fontSize:10,fontWeight:600,color:t.done?C.textMuted:c,textDecoration:t.done?"line-through":"none"}}>{t.title}</span>
-                {t.deadlineDate && <span style={{fontSize:8,color:C.warn,marginLeft:"auto"}}>⚠{fd(t.deadlineDate)}</span>}
+      {(() => {
+        const normalUntimed = untimed.filter(t => !t._isDeadline);
+        const deadlineUntimed = untimed.filter(t => t._isDeadline);
+        return (
+          <>
+            {normalUntimed.length > 0 && (
+              <div style={{padding:"6px 9px",background:C.surface,borderRadius:8,border:`1px solid ${C.border}`,marginBottom:4}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
+                {normalUntimed.map(t => {
+                  const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+                  const isDone = t.repeat && parseRepeat(t.repeat).type !== "なし" ? (t.doneDates||[]).includes(viewDate) : t.done;
+                  return (
+                    <div key={t.id} draggable className="drag"
+                      onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);}}
+                      onDragEnd={()=>setDragTask(null)}
+                      onClick={e=>hp(e,t)}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"3px 6px",borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 5px 5px 0",marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"grab",opacity:isDone?.5:1}}>
+                      <div onClick={e=>{e.stopPropagation();hToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                      <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,textDecoration:isDone?"line-through":"none"}}>{t.title}</span>
+                      {t.deadlineDate && <span style={{fontSize:8,color:C.warn,marginLeft:"auto"}}>⚠{fd(t.deadlineDate)}</span>}
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
-        </div>
-      )}
+            )}
+            {deadlineUntimed.length > 0 && (
+              <div style={{padding:"6px 9px",background:C.danger+"12",borderRadius:8,border:`1px solid ${C.danger}44`,marginBottom:4}}>
+                <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4,letterSpacing:.4}}>⚠ 締切</div>
+                {deadlineUntimed.map(t => {
+                  const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+                  return (
+                    <div key={"dl_"+t.id}
+                      onClick={e=>hp(e,t)}
+                      style={{display:"flex",alignItems:"center",gap:6,padding:"3px 6px",borderLeft:`3px solid ${t.done?C.textMuted:C.danger}`,borderRadius:"0 5px 5px 0",marginBottom:2,background:C.danger+(t.done?"0a":"22"),cursor:"pointer",opacity:t.done?.4:1}}>
+                      <span style={{fontSize:10,fontWeight:700,color:t.done?C.textMuted:C.danger,textDecoration:t.done?"line-through":"none"}}>⚠ {t.title}</span>
+                      <span style={{fontSize:8,color:t.done?C.textMuted:C.danger,marginLeft:"auto"}}>{fd(t.deadlineDate)}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        );
+      })()}
 
       <div style={{display:"grid",gridTemplateColumns:"40px 1fr"}}>
         <div style={{position:"relative",height:totalH}}>

@@ -100,20 +100,26 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
       </div>
       {/* 時間未定タスク（最上部） */}
       {(() => {
-        const rows = wd.map(d => ({d, ts:[...getDay(d).filter(t=>!t.startTime), ...getDeadlineDay(d).filter(t=>!t.deadlineTime && !getDay(d).some(s=>s.id===t.id))]}));
-        if (!rows.some(r=>r.ts.length>0)) return null;
+        const normalRows = wd.map(d => ({d, ts: getDay(d).filter(t=>!t.startTime)}));
+        const deadlineRows = wd.map(d => ({d, ts: getDeadlineDay(d).filter(t=>!t.deadlineTime && !getDay(d).some(s=>s.id===t.id))}));
+        const hasNormal = normalRows.some(r=>r.ts.length>0);
+        const hasDeadline = deadlineRows.some(r=>r.ts.length>0);
+        if (!hasNormal && !hasDeadline) return null;
         return (
+          <>
+          {hasNormal && (
           <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.surface,borderRadius:"8px 8px 0 0",border:`1px solid ${C.border}`}}>
             <div style={{fontSize:7,color:C.textMuted,padding:"6px 3px 4px",textAlign:"right",borderRight:`1px solid ${C.border}20`}}>未定</div>
-            {rows.map(({d,ts}) => {
+            {normalRows.map(({d,ts}) => {
               const isSat=new Date(d).getDay()===6, isR=isRed(d);
               return (
                 <div key={d} style={{padding:"3px 2px",minHeight:22,borderLeft:`1px solid ${C.border}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}>
                   {ts.map(t => {
+                    const isDone = t.repeat && parseRepeat(t.repeat).type!=="なし" ? (t.doneDates||[]).includes(d) : t.done;
                     const c=tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
                     return (
                       <div key={t.id}
-                        style={{display:"flex",alignItems:"center",gap:3,padding:"2px 3px",borderLeft:`2px solid ${c}`,marginBottom:1,background:c+"15",borderRadius:"0 3px 3px 0",overflow:"hidden"}}>
+                        style={{display:"flex",alignItems:"center",gap:3,padding:"2px 3px",borderLeft:`2px solid ${isDone?C.textMuted:c}`,marginBottom:1,background:(isDone?C.textMuted:c)+"15",borderRadius:"0 3px 3px 0",overflow:"hidden",opacity:isDone?.5:1}}>
                         <div draggable className="drag"
                           onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",t.id);setDragTask(t);e.stopPropagation();}}
                           onDragEnd={()=>setDragTask(null)}
@@ -129,6 +135,26 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
               );
             })}
           </div>
+          )}
+          {hasDeadline && (
+          <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.danger+"10",borderRadius:8,border:`1px solid ${C.danger}33`}}>
+            <div style={{fontSize:7,color:C.danger,fontWeight:700,padding:"6px 3px 4px",textAlign:"right",borderRight:`1px solid ${C.danger}22`}}>⚠締切</div>
+            {deadlineRows.map(({d,ts}) => {
+              const isSat=new Date(d).getDay()===6, isR=isRed(d);
+              return (
+                <div key={d} style={{padding:"3px 2px",minHeight:22,borderLeft:`1px solid ${C.danger}20`,background:isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}>
+                  {ts.map(t => (
+                    <div key={"dl_"+t.id} onClick={e=>hp(e,t,d)}
+                      style={{display:"flex",alignItems:"center",gap:3,padding:"2px 3px",borderLeft:`2px solid ${t.done?C.textMuted:C.danger}`,marginBottom:1,background:C.danger+(t.done?"08":"20"),borderRadius:"0 3px 3px 0",overflow:"hidden",cursor:"pointer",opacity:t.done?.4:1}}>
+                      <span style={{fontSize:8,fontWeight:700,color:t.done?C.textMuted:C.danger,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",textDecoration:t.done?"line-through":"none"}}>⚠ {t.title}</span>
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
+          </div>
+          )}
+          </>
         );
       })()}
 
