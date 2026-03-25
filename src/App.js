@@ -107,10 +107,16 @@ export default function App() {
   const save2DB = async (t, tg, tp) => {
     if (!user) return;
     setSaving(true);
+    const ts = new Date().toISOString();
+    console.log("▶ save2DB 開始", ts, "tasks=", t?.length);
     try {
-      await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: new Date().toISOString()});
+      await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: ts});
+      console.log("✅ save2DB 成功", ts, "tasks=", t?.length);
     }
-    catch(e) { console.error("保存失敗", e); }
+    catch(e) {
+      console.error("❌ save2DB 失敗!", e);
+      alert("保存失敗！\n" + e.message);
+    }
     setSaving(false);
   };
 
