@@ -74,6 +74,12 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
         )}
         {onAddSession && !showOverride && (
           <div style={{marginBottom:8}}>
+            {!showAddSession && task.startDate && !task._sessionOnly && onRemoveSession && (
+              <button onClick={()=>{ onRemoveSession(task.id, null); onClose(); }}
+                style={{width:"100%",padding:"4px 6px",borderRadius:6,border:`1px solid ${C.warn}44`,background:C.warnS,color:C.warn,fontSize:9,cursor:"pointer",fontWeight:600,marginBottom:4}}>
+                📅 この時間枠を削除（タスクは残す）
+              </button>
+            )}
             {!showAddSession ? (
               <button onClick={()=>setShowAddSession(true)}
                 style={{width:"100%",padding:"4px 6px",borderRadius:6,border:`1px solid ${C.success}44`,background:C.successS,color:C.success,fontSize:9,cursor:"pointer",fontWeight:600}}>
@@ -106,31 +112,36 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
           <Btn v="success" onClick={()=>{onDuplicate(task._overrideKey ? {...task,id:task._overrideId} : task);onClose();}} style={{padding:"5px 8px",fontSize:10}} title="複製して編集">⧉</Btn>
           <Btn v="danger" onClick={()=>setConfirmDel(true)} style={{padding:"5px 8px",fontSize:10}} title="削除">✕</Btn>
         </div>
-        {confirmDel ? (
-          (task._sessionOnly || task._sessionId || task.startDate) ? (
-            <div style={{background:C.surface,borderRadius:9,padding:12,marginTop:8,border:`1px solid ${C.danger}44`}}>
-              <div style={{fontSize:11,fontWeight:700,color:C.danger,marginBottom:6}}>🗑 削除方法を選択</div>
-              <div style={{fontSize:10,color:C.textMuted,marginBottom:10}}>「{task.title}」を削除しますか？</div>
-              <div style={{display:"flex",flexDirection:"column",gap:5}}>
-                {(task._sessionOnly || task._sessionId) && onRemoveSession && (
-                  <Btn v="warn" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onRemoveSession(task.id, task._sessionId); onClose(); }}>
-                    📅 この時間枠だけ削除
-                  </Btn>
-                )}
-                {task.startDate && !task._sessionOnly && (
-                  <Btn v="warn" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onRemoveSession && onRemoveSession(task.id, task._sessionId || task.startTime); onClose(); }}>
-                    📅 この時間枠だけ削除（日程をクリア）
-                  </Btn>
-                )}
-                <Btn v="danger" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onDelete(task._overrideId||task.id); onClose(); }}>
-                  🗑 タスクごと削除
-                </Btn>
-                <Btn style={{fontSize:10,padding:"5px 8px"}} onClick={()=>setConfirmDel(false)}>キャンセル</Btn>
-              </div>
+        {confirmDel && (task._sessionOnly || task._sessionId) ? (
+          <div style={{background:C.surface,borderRadius:9,padding:12,marginTop:8,border:`1px solid ${C.danger}44`}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.danger,marginBottom:6}}>🗑 削除方法を選択</div>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:10}}>「{task.title}」のこの時間枠をどうしますか？</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              <Btn v="warn" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onRemoveSession(task.id, task._sessionId); onClose(); }}>
+                📅 この時間枠だけ削除
+              </Btn>
+              <Btn v="danger" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onDelete(task._overrideId||task.id); onClose(); }}>
+                🗑 タスクごと削除
+              </Btn>
+              <Btn style={{fontSize:10,padding:"5px 8px"}} onClick={()=>setConfirmDel(false)}>キャンセル</Btn>
             </div>
-          ) : (
-            <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{ onDelete(task._overrideId||task.id); onClose(); }} onCancel={()=>setConfirmDel(false)}/>
-          )
+          </div>
+        ) : confirmDel && task.startDate && onRemoveSession ? (
+          <div style={{background:C.surface,borderRadius:9,padding:12,marginTop:8,border:`1px solid ${C.danger}44`}}>
+            <div style={{fontSize:11,fontWeight:700,color:C.danger,marginBottom:6}}>🗑 削除方法を選択</div>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:10}}>「{task.title}」をどうしますか？</div>
+            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+              <Btn v="warn" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onRemoveSession(task.id, null); onClose(); }}>
+                📅 日程だけ削除（タスクは残す）
+              </Btn>
+              <Btn v="danger" style={{fontSize:10,padding:"5px 8px",textAlign:"left"}} onClick={()=>{ onDelete(task._overrideId||task.id); onClose(); }}>
+                🗑 タスクごと削除
+              </Btn>
+              <Btn style={{fontSize:10,padding:"5px 8px"}} onClick={()=>setConfirmDel(false)}>キャンセル</Btn>
+            </div>
+          </div>
+        ) : confirmDel ? (
+          <ConfirmDialog title="タスクを削除" message={`「${task.title}」を削除しますか？\n子タスクも一緒に削除されます。`} onConfirm={()=>{ onDelete(task._overrideId||task.id); onClose(); }} onCancel={()=>setConfirmDel(false)}/>
         ) : null}
       </div>
     </div>
