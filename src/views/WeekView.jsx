@@ -33,14 +33,22 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
   const getDay = date => [
     ...all.filter(t => {
       if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, date);
-      return sameDay(t.startDate,date)||sameDay(t.deadlineDate,date);
+      return sameDay(t.startDate, date);
     }),
-    ...expandOverrides(tasks).filter(t => sameDay(t.startDate,date)||sameDay(t.deadlineDate,date)),
+    ...expandOverrides(tasks).filter(t => sameDay(t.startDate, date)),
     ...all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>{
       const ss=(t.sessions||[]).filter(s=>s.date===date);
       return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
     }).flat(),
-  ].filter(t => !(t.isLater||isLaterTask(t)));
+  ];
+  // ① isLaterフィルタ除去: 繰り返しタスクは時間未定でも表示
+
+  // ⑦ 締切タスク取得
+  const getDeadlineDay = date => all.filter(t => {
+    if (!(t.deadlineDate && sameDay(t.deadlineDate, date))) return false;
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
+    return true;
+  }).map(t => ({...t, _isDeadline: true}));
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
@@ -92,7 +100,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
       </div>
       {/* 時間未定タスク（最上部） */}
       {(() => {
-        const rows = wd.map(d => ({d, ts:getDay(d).filter(t=>!t.startTime)}));
+        const rows = wd.map(d => ({d, ts:[...getDay(d).filter(t=>!t.startTime), ...getDeadlineDay(d).filter(t=>!t.deadlineTime && !getDay(d).some(s=>s.id===t.id))]}));
         if (!rows.some(r=>r.ts.length>0)) return null;
         return (
           <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:C.surface,borderRadius:"8px 8px 0 0",border:`1px solid ${C.border}`}}>
@@ -143,7 +151,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
           ))}
         </div>
         {wd.map(d => {
-          const dayTasks = getDay(d).filter(t => !!t.startTime);
+          const dayTasks = getDay(d).filter(t => !!t.startTime);  // timed only
           const isSat=new Date(d).getDay()===6, isR=isRed(d);
           return (
             <div key={d} style={{position:"relative",height:totalH,borderLeft:`1px solid ${C.border}20`,background:d===today?"rgba(139,184,212,.06)":isSat?"rgba(119,216,255,.04)":isR?"rgba(255,136,153,.04)":"transparent"}}
@@ -195,6 +203,20 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
                 ));
               })()}
+              {/* 締切ライン */}
+              {getDeadlineDay(d).filter(t=>t.deadlineTime).map(t => {
+                const dm = t2m(t.deadlineTime);
+                if (dm===null||dm<dayStartMin||dm>DAY_END*60) return null;
+                return (
+                  <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();hp(e,t,d);}}
+                    style={{position:"absolute",top:(dm-dayStartMin)*PPM-1,left:0,right:0,height:3,background:C.danger,zIndex:4,cursor:"pointer"}}
+                    title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
+                    <div style={{position:"absolute",right:1,top:-8,background:C.danger,color:"#fff",fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:6,whiteSpace:"nowrap",overflow:"hidden",maxWidth:80,textOverflow:"ellipsis"}}>
+                      ⚠ {t.title}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           );
         })}

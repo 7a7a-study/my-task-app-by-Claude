@@ -21,7 +21,7 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
-  // 通常タスク（startDate一致）
+  // 通常タスク（startDate一致 or 繰り返し一致）
   const startTasks = [
     ...all.filter(t => {
       if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, viewDate);
@@ -33,19 +33,23 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
       return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
     }).flat(),
   ];
-  // 締切タスク（deadlineDate一致 かつ startDate不一致）→ 締切時刻で別表示
-  const deadlineTasks = all.filter(t =>
-    sameDay(t.deadlineDate, viewDate) &&
-    !sameDay(t.startDate, viewDate) &&
-    !(t.repeat && parseRepeat(t.repeat).type !== "なし")
-  ).map(t => ({...t, _isDeadline: true}));
+  // 締切タスク（deadlineDate一致）→ 締切時刻で赤ラインで別表示
+  // startDate一致のタスクも含める（両方の日に関係するため）
+  const deadlineTasks = all.filter(t => {
+    if (!(t.deadlineDate && sameDay(t.deadlineDate, viewDate))) return false;
+    // 繰り返しタスクはstartTasksで表示済みなのでスキップ
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
+    return true;
+  }).map(t => ({...t, _isDeadline: true}));
 
   const todayT = startTasks;
-  const timed   = todayT.filter(t =>  t.startTime && !(t.isLater||isLaterTask(t)));
+  // ① 繰り返し・通常タスク：startTimeなしでも「時間未定」欄に表示
+  const timed   = todayT.filter(t => t.startTime);
   const untimed = [
-    ...todayT.filter(t => !t.startTime && !(t.isLater||isLaterTask(t))),
-    ...deadlineTasks.filter(t => !t.deadlineTime),
+    ...todayT.filter(t => !t.startTime),
+    ...deadlineTasks.filter(t => !t.deadlineTime && !startTasks.some(s => s.id === t.id)),
   ];
+  // ⑦ 締切ライン：deadlineTimeあり
   const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||viewDate}); };
