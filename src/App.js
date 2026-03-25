@@ -199,10 +199,18 @@ export default function App() {
   // 時間枠を1つ削除（sessionのidで特定）
   const handleRemoveSession = (taskId, sessionId) => {
     if (!sessionId) {
-      // sessionIdなし＝メイン時間枠をクリア
-      setTasks(updTreeLocal(tasks, taskId, t => ({...t, startDate:"", startTime:"", endTime:"", duration:"", sessions:[], isLater:true})));
+      // sessionIdなし＝メイン時間枠（startDate/Time）だけクリア。追加枠(sessions)は残す
+      setTasks(updTreeLocal(tasks, taskId, t => ({
+        ...t,
+        startDate: "", startTime: "", endTime: "", duration: "",
+        isLater: (t.sessions||[]).length === 0,
+      })));
     } else {
-      setTasks(updTreeLocal(tasks, taskId, t => ({...t, sessions: (t.sessions || []).filter(s => s.id !== sessionId)})));
+      // 特定の追加枠だけ削除
+      setTasks(updTreeLocal(tasks, taskId, t => ({
+        ...t,
+        sessions: (t.sessions || []).filter(s => s.id !== sessionId),
+      })));
     }
   };
 
