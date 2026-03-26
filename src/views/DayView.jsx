@@ -37,8 +37,8 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
   // startDate一致のタスクも含める（両方の日に関係するため）
   const deadlineTasks = all.filter(t => {
     if (!(t.deadlineDate && sameDay(t.deadlineDate, viewDate))) return false;
-    // 繰り返しタスクはstartTasksで表示済みなのでスキップ
     if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
+    if (t.done) return false; // 完了タスクは非表示
     return true;
   }).map(t => ({...t, _isDeadline: true}));
 
@@ -225,15 +225,14 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
               <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={hToggle} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
             ));
           })()}
-          {/* 締切チップ（deadlineTimeあり） */}
+          {/* 締切ライン（完了済みは除外済み） */}
           {timedDeadlines.map(t => {
             const dm = t2m(t.deadlineTime);
             if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
             const top = (dm - dayStartMin) * PPM;
-            const c = tags.find(tg=>t.tags?.includes(tg.id))?.color || C.danger;
             return (
               <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();hp(e,t);}}
-                style={{position:"absolute",top:top-1,left:0,right:0,height:3,background:C.danger,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
+                style={{position:"absolute",top:top-1,left:0,right:0,height:3,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
                 title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
                 <div style={{position:"absolute",right:2,top:-8,background:C.danger,color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:8,whiteSpace:"nowrap",pointerEvents:"none"}}>
                   ⚠ {t.deadlineTime} {t.title}

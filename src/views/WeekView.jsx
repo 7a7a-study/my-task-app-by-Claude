@@ -47,6 +47,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
   const getDeadlineDay = date => all.filter(t => {
     if (!(t.deadlineDate && sameDay(t.deadlineDate, date))) return false;
     if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
+    if (t.done) return false; // 完了タスクは非表示
     return true;
   }).map(t => ({...t, _isDeadline: true}));
 
@@ -229,17 +230,16 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
                 ));
               })()}
-              {/* 締切ライン（完了なら薄表示） */}
+              {/* 締切ライン（完了済みは除外済み） */}
               {getDeadlineDay(d).filter(t=>t.deadlineTime).map(t => {
                 const dm = t2m(t.deadlineTime);
                 if (dm===null||dm<dayStartMin||dm>DAY_END*60) return null;
-                const col = t.done ? C.textMuted : C.danger;
                 return (
                   <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();hp(e,t,d);}}
-                    style={{position:"absolute",top:(dm-dayStartMin)*PPM-1,left:0,right:0,height:t.done?1:3,background:col,zIndex:4,cursor:"pointer",opacity:t.done?.3:1}}
+                    style={{position:"absolute",top:(dm-dayStartMin)*PPM-1,left:0,right:0,height:3,background:C.danger,zIndex:4,cursor:"pointer"}}
                     title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
-                    <div style={{position:"absolute",right:1,top:-8,background:col,color:"#fff",fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:6,whiteSpace:"nowrap",overflow:"hidden",maxWidth:80,textOverflow:"ellipsis"}}>
-                      {t.done?"✓":""} ⚠ {t.title}
+                    <div style={{position:"absolute",right:1,top:-8,background:C.danger,color:"#fff",fontSize:7,fontWeight:700,padding:"1px 4px",borderRadius:6,whiteSpace:"nowrap",overflow:"hidden",maxWidth:80,textOverflow:"ellipsis"}}>
+                      ⚠ {t.title}
                     </div>
                   </div>
                 );
