@@ -46,7 +46,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
     if (touchStartX.current === null) return;
     const dx = e.touches[0].clientX - touchStartX.current;
     const dy = e.touches[0].clientY - touchStartY.current;
-    if (!swiping && Math.abs(dx) <= 12) return;          // 微小な動きは無視（12pxに引き上げ）
+    if (!swiping && Math.abs(dx) <= 18) return;          // 微小な動きは無視（18pxに引き上げ：強めタップ誤作動防止）
     if (!swiping && Math.abs(dy) >= Math.abs(dx) * 0.7) return; // 縦スクロールはスワイプ扱いしない
     setSwiping(true);
     e.preventDefault();
@@ -61,7 +61,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
     touchStartY.current = null;
     setSwiping(false);
 
-    if (!wasSwiping && Math.abs(dx) < 12 && Math.abs(dy) < 12) {
+    if (!wasSwiping && Math.abs(dx) < 18 && Math.abs(dy) < 18) {
       // ── タップ判定 ───────────────────────────────────────────────
       const tag = e.target?.tagName?.toLowerCase();
       if (tag === "input" || tag === "button" || tag === "select" || tag === "textarea") return;

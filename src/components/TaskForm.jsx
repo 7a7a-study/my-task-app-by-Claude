@@ -391,15 +391,16 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         <Btn v="accent" onClick={()=>{
           if(!f.title.trim()) return;
           const s0 = (f._sessions||[])[0] || {};
-          const rest = (f._sessions||[]).slice(1).filter(s=>s.date||s.startTime);
+          const rest = (f._sessions||[]).slice(1).filter(s=>s.date||s.startTime)
+            .map(s => ({id:s.id, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""}));
+          const {_sessions, ...fClean} = f;
           onSave({
-            ...f,
+            ...fClean,
             startDate: s0.date||"",
             startTime: s0.startTime||"",
             endTime:   s0.endTime||"",
             sessions: rest,
-
-            isLater: isLaterTask({...f, startDate: s0.date||""}),
+            isLater: isLaterTask({...fClean, startDate: s0.date||""}),
           });
           onClose();
         }}>保存</Btn>
