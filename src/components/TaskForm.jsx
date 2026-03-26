@@ -304,19 +304,23 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
           <div key={s.id||i} style={{marginBottom:5}}>
             {i===0 ? (
               /* 1枠目（削除不可・アクセントボーダー） */
-              <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
-                <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
-                  <input type="date" value={s.date}
-                    onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
-                    style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
-                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <span style={{fontSize:9,color:C.textMuted}}>〜</span>
-                  <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
-                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+              <>
+                <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
+                  <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
+                    <input type="date" value={s.date}
+                      onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
+                      style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                    <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
+                      style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                    <span style={{fontSize:9,color:C.textMuted}}>〜</span>
+                    <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
+                      style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  </div>
                 </div>
-
-              </div>
+                <div style={{fontSize:9,color:C.textMuted,marginTop:3,paddingLeft:2}}>
+                  日付・時間が未入力の場合は「あとでやる」に分類されます
+                </div>
+              </>
             ) : (
               /* 2枠目以降（同じ1行レイアウト＋削除ボタン） */
               <div style={{background:C.bg,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.border}`}}>
@@ -344,7 +348,6 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         <div style={{fontSize:9,fontWeight:700,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 見積もり所要時間（分）</div>
         <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
           style={{width:80,background:C.surface,color:C.text,padding:"5px 7px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:12}}/>
-        <div style={{fontSize:9,color:C.textMuted}}>未入力→「あとでやる」へ</div>
       </div>
       {/* ── 締切 ── */}
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
@@ -402,7 +405,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
             startTime: s0.startTime||"",
             endTime:   s0.endTime||"",
             sessions: rest,
-            isLater: isLaterTask({...fClean, startDate: s0.date||""}),
+            isLater: isLaterTask({...fClean, startDate: s0.date||"", startTime: s0.startTime||"", sessions: rest}),
           });
           onClose();
         }}>保存</Btn>
