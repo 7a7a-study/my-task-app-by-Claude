@@ -7,7 +7,9 @@ import { CB, Pill, ConfirmDialog } from "./ui";
 // depth: 子タスクのネスト深さ（0=親, 1=子, ...）
 // isTouch: ListView側でマウント後に判定してpropsで渡す（タッチ/PC切り替え用）
 // memoOpen/onMemoOpen: メモ開閉状態もListView側で管理（tasks更新時に閉じないようにするため）
-export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,isTouch=false,memoOpen=false,onMemoOpen,isDoneForDate}) => {
+export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,onDuplicate,onMemoToggle,isTouch:isTouchProp,memoOpen=false,onMemoOpen,isDoneForDate}) => {
+  // isTouch: propが渡されたらそちらを使う。なければ自前でmatchMedia判定（CSS基準と統一）
+  const isTouch = isTouchProp !== undefined ? isTouchProp : !window.matchMedia("(hover:hover) and (pointer:fine)").matches;
 
   // ── ローカルstate ───────────────────────────────────────────────
   const [exp, setExp]               = useState(true);   // 子タスク展開/折りたたみ
