@@ -145,13 +145,13 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
 
   // ── デバイス判定・メモ開閉状態（ここで管理することでtasks更新時に閉じない）──
   const [isPC, setIsPC]       = useState(window.innerWidth >= 768);
-  const [isTouch, setIsTouch] = useState(true); // 安全側デフォルト=true（スマホ扱い）
+  const [isTouch, setIsTouch] = useState(() => !window.matchMedia("(hover:hover) and (pointer:fine)").matches);
   const [memoOpenMap, setMemoOpenMap] = useState({}); // { taskId: bool } でメモ開閉を管理
   const today = localDate();
   useEffect(() => {
     setIsPC(window.innerWidth >= 768);
-    // ontouchstart の有無でタッチデバイスを判定（matchMediaより確実）
-    setIsTouch("ontouchstart" in window || navigator.maxTouchPoints > 0);
+    // CSSの (hover:hover) and (pointer:fine) と同じ判定でPC/タッチを区別
+    setIsTouch(!window.matchMedia("(hover:hover) and (pointer:fine)").matches);
     const fn = () => setIsPC(window.innerWidth >= 768);
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
