@@ -29,7 +29,7 @@ export default function App() {
   const [tasks, setTasksRaw]          = useState([]);
   const [tags, setTagsRaw]            = useState(TAG_PRESETS);
   const [templates, setTemplatesRaw]  = useState([]);
-  const [view, setView]               = useState("list");
+  const [view, setView]               = useState("dashboard");
   const [showForm, setShowForm]       = useState(false);
   const [editTask, setEditTask]       = useState(null);
   const [isDuplicate, setIsDuplicate] = useState(false); // 複製フォームかどうか
@@ -368,7 +368,7 @@ export default function App() {
                 <Btn v="accent" onClick={() => { setDefDate(null); setDefTime(null); setEditTask(null); setAddChildTo(null); setShowForm(true); }}>＋ 追加</Btn>
               )}
             </div>
-            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle}/>}
+            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle} onAdd={handleAdd}/>}
             {view === "list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid => { setAddChildTo(pid); setShowForm(true); }} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
             {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}

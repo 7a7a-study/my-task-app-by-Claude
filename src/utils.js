@@ -20,7 +20,11 @@ export const t2m  = t => { if(!t) return null; const[h,m]=t.split(":").map(Numbe
 export const m2t  = m => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,"0")}:${String(Math.max(0,m)%60).padStart(2,"0")}`;
 export const durFrom = (a,b) => { if(!a||!b) return null; const d=t2m(b)-t2m(a); return d>0?d:null; };
 export const addDur  = (a,d) => (!a||!d) ? "" : m2t(t2m(a)+Number(d));
-export const isLaterTask = t => !t.startDate && !t.startTime && !(t.sessions||[]).length;
+export const isLaterTask = t => {
+  const hasDate = !!t.startDate;
+  const hasTime = !!t.startTime || (t.sessions||[]).some(s => s.startTime);
+  return !hasDate && !hasTime;
+};
 
 // ── ツリー操作 ────────────────────────────────────────────────────
 export const flatten = (ts, res=[], pt=null, pid=null) => {
