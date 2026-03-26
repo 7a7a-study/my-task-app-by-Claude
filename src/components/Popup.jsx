@@ -116,22 +116,23 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
         )}
         {confirmDel && (
           <div onClick={e=>e.stopPropagation()} style={{background:C.bg,borderRadius:9,padding:12,marginTop:8,border:`1px solid ${C.danger}44`}}>
-            <div style={{fontSize:10,fontWeight:700,color:C.danger,marginBottom:8}}>
-              {task._sessionOnly ? "この時間枠をどうしますか？" : "削除方法を選択"}
+            <div style={{fontSize:10,fontWeight:700,color:C.danger,marginBottom:10}}>
+              {task._sessionOnly ? "⚠️ この時間枠をどうしますか？" : "⚠️ 削除方法を選択"}
             </div>
-            <div style={{display:"flex",flexDirection:"column",gap:5}}>
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
               {task._sessionOnly && onRemoveSession && (
-                <Btn v="warn" style={{fontSize:10,padding:"6px 8px",textAlign:"left"}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, task._sessionId); onClose();}}>
+                <Btn v="warn" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, task._sessionId); onClose();}}>
                   📅 この時間枠だけ削除
                 </Btn>
               )}
               {!task._sessionOnly && task.startDate && onRemoveSession && (
-                <Btn v="warn" style={{fontSize:10,padding:"6px 8px",textAlign:"left"}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, null); onClose();}}>
+                <Btn v="warn" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, null); onClose();}}>
                   📅 日程だけ削除（タスクは残す）
                 </Btn>
               )}
-              <Btn v="danger" style={{fontSize:10,padding:"6px 8px",textAlign:"left"}} onClick={e=>{e.stopPropagation(); onDelete(task._overrideId||task.id); onClose();}}>
-                🗑 タスクごと削除
+              <div style={{borderTop:`1px solid ${C.border}`,margin:"2px 0"}}/>
+              <Btn v="danger" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onDelete(task._overrideId||task.id); onClose();}}>
+                🗑 タスクごと完全に削除
               </Btn>
               <Btn style={{fontSize:10,padding:"6px 8px"}} onClick={e=>{e.stopPropagation();setConfirmDel(false);}}>キャンセル</Btn>
             </div>
