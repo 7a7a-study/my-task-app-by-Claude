@@ -133,7 +133,8 @@ export default function App() {
   const addChild      = (ts, pid, c) => ts.map(t => t.id === pid ? {...t, children: [...(t.children || []), c]} : {...t, children: addChild(t.children || [], pid, c)});
 
   const handleSave = f => {
-    const fw = {...f, isLater: isLaterTask(f)};
+    const {_sessions, ...fStripped} = f;
+    const fw = {...fStripped, isLater: isLaterTask(fStripped)};
     let nt;
     const isExisting = editTask && flatten(tasks).some(t => t.id === editTask.id);
     if (isExisting)      nt = updTreeLocal(tasks, f.id, () => fw);
