@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { C } from "../constants";
-import { localDate, fdt, isLaterTask, parseRepeat, repeatLabel, renderMemo } from "../utils";
+import { localDate, fdt, isLaterTask, parseRepeat, repeatLabel, renderMemo, durFrom } from "../utils";
 import { CB, Pill, ConfirmDialog } from "./ui";
 
 // ── タスク1行分のコンポーネント ──────────────────────────────────────
@@ -130,7 +130,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tTags.map(t=><Pill key={t.id} tag={t}/>)}
             {task.startDate    && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.startDate,task.startTime)}</span>}
-            {task.duration     && <span style={{fontSize:9,color:C.accent}}>⏱{task.duration}分</span>}
+            {(()=>{ const d0=durFrom(task.startTime,task.endTime)||(task.duration?Number(task.duration):0); const dExtra=(task.sessions||[]).reduce((s,x)=>s+(durFrom(x.startTime,x.endTime)||0),0); const total=d0+dExtra; return total>0?<span style={{fontSize:9,color:C.accent}}>⏱{total}分</span>:null; })()}
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>
