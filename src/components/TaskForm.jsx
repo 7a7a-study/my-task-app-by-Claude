@@ -267,7 +267,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
 
   return (
     <Modal title={isDuplicate?"タスクを複製":task?"タスクを編集":isChild?"子タスクを追加":"タスクを追加"} onClose={onClose} wide noBackdropClose>
-      <Inp label="タスク名 *" value={f.title} onChange={v=>u("title",v)} placeholder="タスク名..."/>
+      <Inp label="タスク名 *" value={f.title} onChange={v=>u("title",v)} placeholder="タスク名..." autoFocus/>
       <div style={{marginBottom:9}}>
         <div style={{fontSize:9,color:C.textMuted,marginBottom:5,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>
           タグ（1つのみ選択）{tagLocked && <span style={{color:C.warn,marginLeft:5,fontWeight:400,textTransform:"none"}}>※親タスクのタグで固定</span>}
@@ -315,12 +315,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
                   <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
                     style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                 </div>
-                <div style={{display:"flex",alignItems:"center",gap:6}}>
-                  <div style={{fontSize:9,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 所要(分)</div>
-                  <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
-                    style={{width:70,background:"transparent",color:C.text,padding:"4px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <div style={{fontSize:9,color:C.textMuted}}>未入力→「あとでやる」へ</div>
-                </div>
+
               </div>
             ) : (
               /* 2枠目以降（同じ1行レイアウト＋削除ボタン） */
@@ -343,6 +338,13 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
             )}
           </div>
         ))}
+      </div>
+      {/* ── 見積もり所要時間 ── */}
+      <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
+        <div style={{fontSize:9,fontWeight:700,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 見積もり所要時間（分）</div>
+        <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
+          style={{width:80,background:C.surface,color:C.text,padding:"5px 7px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:12}}/>
+        <div style={{fontSize:9,color:C.textMuted}}>未入力→「あとでやる」へ</div>
       </div>
       {/* ── 締切 ── */}
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>

@@ -42,10 +42,10 @@ export const Modal = ({title,children,onClose,wide,noBackdropClose}) => (
   </div>
 );
 
-export const Inp = ({label,value,onChange,type="text",placeholder=""}) => (
+export const Inp = ({label,value,onChange,type="text",placeholder="",autoFocus=false}) => (
   <div style={{marginBottom:7}}>
     {label && <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>{label}</div>}
-    <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} autoFocus={autoFocus}
       style={{width:"100%",background:C.bgSub,color:C.text,padding:"6px 9px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:12,transition:"border .15s"}}
       onFocus={e=>e.target.style.borderColor=C.accent} onBlur={e=>e.target.style.borderColor=C.border}/>
   </div>
