@@ -3,7 +3,7 @@ import { C } from "../constants";
 import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m } from "../utils";
 import { Popup } from "../components/Popup";
 
-export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle}) => {
+export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd}) => {
   const [isPC, setIsPC] = useState(window.innerWidth >= 768);
   const [popup, setPopup] = useState(null);
   useEffect(() => {
@@ -225,28 +225,46 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   if (isPC) {
     return (
       <>
-      <div style={{display:"grid",gridTemplateColumns:"2fr 2fr 3fr",gap:14,
-        height:"calc(100vh - 120px)",minHeight:400}}>
-        {/* 左: 今日（タイムライン） */}
-        <div style={{...cardStyle(C.success),overflow:"hidden"}}>
-          <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
-          <div style={{marginBottom:10,flexShrink:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-              <span style={{fontSize:10,color:C.textMuted}}>今日の進捗</span>
-              <span style={{fontSize:11,fontWeight:700,color:C.success}}>
-                {todayTasks.length?Math.round(todayDone/todayTasks.length*100):0}%
-              </span>
-            </div>
-            <ProgressBar value={todayTasks.length?Math.round(todayDone/todayTasks.length*100):0} color={C.success} height={6}/>
+      {/* ── 追加ボタン ── */}
+      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+        <button onClick={()=>onAdd&&onAdd()}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",borderRadius:8,
+            background:C.accent,color:"#fff",border:"none",cursor:"pointer",
+            fontSize:12,fontWeight:700,boxShadow:`0 2px 8px ${C.accent}44`}}>
+          ＋ タスクを追加
+        </button>
+      </div>
+      {/* ── 上段: 進捗サマリー ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14}}>
+        {/* 全体進捗 */}
+        <div style={{background:C.surface,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.accent}33`,display:"flex",alignItems:"center",gap:14}}>
+          <div style={{fontSize:32,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1,flexShrink:0}}>
+            {pct}<span style={{fontSize:14}}>%</span>
           </div>
-          {todayTasks.length===0
-            ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今日のタスクなし 🎉</div>
-            : <PCTimeline/>}
-          {tagStats.length>0&&(
-            <div style={{borderTop:`1px solid ${C.border}33`,paddingTop:10,marginTop:4,flexShrink:0}}>
-              <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:7}}>🏷 タグ別進捗</div>
-              {tagStats.map(tag=>(
-                <div key={tag.id} style={{marginBottom:7}}>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:5}}>📊 全体進捗</div>
+            <ProgressBar value={pct} color={C.accent} height={5}/>
+            <div style={{fontSize:9,color:C.textMuted,marginTop:3}}>{doneCnt} / {totalCnt} 完了</div>
+          </div>
+        </div>
+        {/* 今日の進捗 */}
+        <div style={{background:C.surface,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.success}33`,display:"flex",alignItems:"center",gap:14}}>
+          <div style={{fontSize:32,fontWeight:800,color:C.success,fontFamily:"'Playfair Display',serif",lineHeight:1,flexShrink:0}}>
+            {todayTasks.length?Math.round(todayDone/todayTasks.length*100):0}<span style={{fontSize:14}}>%</span>
+          </div>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:10,color:C.textMuted,marginBottom:5}}>📅 今日の進捗</div>
+            <ProgressBar value={todayTasks.length?Math.round(todayDone/todayTasks.length*100):0} color={C.success} height={5}/>
+            <div style={{fontSize:9,color:C.textMuted,marginTop:3}}>{todayDone} / {todayTasks.length} 完了</div>
+          </div>
+        </div>
+        {/* タグ別進捗 */}
+        <div style={{background:C.surface,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`,overflow:"hidden"}}>
+          <div style={{fontSize:10,color:C.textMuted,fontWeight:700,marginBottom:7}}>🏷 タグ別進捗</div>
+          {tagStats.length===0
+            ? <div style={{fontSize:11,color:C.textMuted}}>タグなし</div>
+            : tagStats.map(tag=>(
+                <div key={tag.id} style={{marginBottom:6}}>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:2}}>
                     <span style={{color:tag.color,fontWeight:700}}>{tag.name}</span>
                     <span style={{color:C.textMuted}}>{tag.pct}%</span>
@@ -254,24 +272,23 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                   <ProgressBar value={tag.pct} color={tag.color} height={4}/>
                 </div>
               ))}
-            </div>
-          )}
-          <div style={{borderTop:`1px solid ${C.border}33`,paddingTop:10,marginTop:4,flexShrink:0}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
-              <span style={{fontSize:10,color:C.textMuted}}>📊 全体進捗</span>
-              <span style={{fontSize:13,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif"}}>
-                {pct}<span style={{fontSize:10}}>%</span>
-              </span>
-            </div>
-            <ProgressBar value={pct} color={C.accent} height={5}/>
-            <div style={{fontSize:9,color:C.textMuted,marginTop:3}}>{doneCnt} / {totalCnt} 完了</div>
-          </div>
         </div>
-        {/* 中: 今後7日 */}
+      </div>
+      {/* ── 下段: タスク一覧 ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,
+        height:"calc(100vh - 230px)",minHeight:300}}>
+        {/* 今日（タイムライン） */}
+        <div style={{...cardStyle(C.success),overflow:"hidden"}}>
+          <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
+          {todayTasks.length===0
+            ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今日のタスクなし 🎉</div>
+            : <PCTimeline/>}
+        </div>
+        {/* 今後7日 */}
         <div style={{...cardStyle(C.warn),overflow:"hidden"}}>
           <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
           {overdue.length>0&&(
-            <div style={{background:C.dangerS,borderRadius:7,padding:"6px 9px",marginBottom:10,border:`1px solid ${C.danger}33`,flexShrink:0}}>
+            <div style={{background:C.dangerS,borderRadius:7,padding:"6px 9px",marginBottom:8,border:`1px solid ${C.danger}33`,flexShrink:0}}>
               <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4}}>⚠ 期限超過 ({overdue.length})</div>
               {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
             </div>
@@ -281,14 +298,14 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今後7日の予定なし 🎉</div>
               : <>{upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
                   {startingIn7.length>0&&(<div style={{marginTop:8}}>
-                    <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5}}>開始予定</div>
+                    <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5,paddingTop:4,borderTop:`1px solid ${C.border}33`}}>開始予定</div>
                     {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
                   </div>)}</>}
           </div>
         </div>
-        {/* 右: あとでやる */}
-        <div style={{...cardStyle(C.warn),overflow:"hidden"}}>
-          <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.warn}/>
+        {/* あとでやる */}
+        <div style={{...cardStyle(C.textMuted),overflow:"hidden"}}>
+          <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
           <div style={{flex:1,overflowY:"auto"}}>
             {laterTasks.length===0
               ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>あとでやるなし</div>
@@ -305,6 +322,14 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   return (
     <>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
+      <div style={{display:"flex",justifyContent:"flex-end"}}>
+        <button onClick={()=>onAdd&&onAdd()}
+          style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",borderRadius:8,
+            background:C.accent,color:"#fff",border:"none",cursor:"pointer",
+            fontSize:12,fontWeight:700}}>
+          ＋ タスクを追加
+        </button>
+      </div>
       <div style={cardStyle(C.accent)}>
         <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
           <span style={{fontSize:28,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1}}>
