@@ -47,7 +47,6 @@ button{cursor:pointer;font-family:'Noto Sans JP',sans-serif;border:none;outline:
 .tr .ta{display:none!important}
 .swipe-actions{display:none!important}
 @media(hover:hover) and (pointer:fine){.tr:hover .ta{display:flex!important}.swipe-actions{display:none!important}}
-@media not all and (hover:hover){.tr .ta{display:none!important}}
 @media not all and (hover:hover) and (pointer:fine){.tr .ta{display:none!important}.swipe-actions{display:flex!important}}
 @keyframes fi{from{opacity:0}to{opacity:1}}
 @keyframes su{from{transform:translateY(8px) scale(.97);opacity:0}to{transform:none;opacity:1}}
