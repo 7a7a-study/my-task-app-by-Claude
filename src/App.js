@@ -231,7 +231,13 @@ export default function App() {
     window._memoSaveTimer = setTimeout(() => save2DB(next, tags, templates), 800);
   };
 
-  const handleEdit = t => { setEditTask(t); setIsDuplicate(false); setShowForm(true); };
+  const handleEdit = t => {
+    // _sessionOnly チップから来た場合、startDate/startTime/endTime が枠の値に上書きされているので元タスクを引き直す
+    const original = flatten(tasks).find(x => x.id === t.id);
+    setEditTask(original || t);
+    setIsDuplicate(false);
+    setShowForm(true);
+  };
 
   const handleDuplicate = t => {
     const dupChildren = cs => (cs || []).map(c => ({...c, id: "task_" + Date.now() + Math.random(), done: false, children: dupChildren(c.children)}));
