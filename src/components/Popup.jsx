@@ -8,14 +8,15 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
   const tc = tags.find(t => task.tags?.includes(t.id))?.color || C.accent;
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
   const isRepeat = (task.repeat && parseRepeat(task.repeat).type !== "なし") || !!task._overrideKey;
-  const origDate = task._overrideKey || viewDate || task.startDate || task.deadlineDate || "";
+  const s0 = task.sessions?.[0] || {};
+  const origDate = task._overrideKey || viewDate || s0.date || task.deadlineDate || "";
   const [showOverride, setShowOverride] = useState(false);
   const [confirmDel, setConfirmDel]   = useState(false);
   const [showAddSession, setShowAddSession] = useState(false);
   const [newSession, setNewSession] = useState({date: viewDate||"", startTime:"", endTime:""});
   const [ov, setOv] = useState({
-    startDate: task.startDate||"", startTime: task.startTime||"",
-    endDate: task.endDate||"",     endTime: task.endTime||"",
+    startDate: s0.date||"", startTime: s0.startTime||"",
+    endDate: task.endDate||"",     endTime: s0.endTime||"",
     deadlineDate: task.deadlineDate||"", deadlineTime: task.deadlineTime||"",
   });
   const ovInp = (k,v) => setOv(p=>({...p,[k]:v}));
@@ -33,9 +34,9 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
             {tTags.length>0 && <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>{tTags.map(t=><Pill key={t.id} tag={t}/>)}</div>}
           </div>
         </div>
-        {(task.startDate||task.duration||task.deadlineDate||task.repeat!=="なし") && (
+        {((task.sessions||[]).length > 0 || task.duration || task.deadlineDate || task.repeat !== "なし") && (
           <div style={{background:C.bg,borderRadius:7,padding:"6px 8px",marginBottom:8,fontSize:11,display:"flex",flexDirection:"column",gap:3}}>
-            {task.startDate && <div style={{color:C.textSub,display:"flex",gap:4}}><span style={{color:C.accent}}>▶</span>{fdt(task.startDate,task.startTime)}{task.endDate&&<><span style={{color:C.textMuted}}>→</span>{fdt(task.endDate,task.endTime)}</>}</div>}
+            {s0.date && <div style={{color:C.textSub,display:"flex",gap:4}}><span style={{color:C.accent}}>▶</span>{fdt(s0.date,s0.startTime)}{task.endDate&&<><span style={{color:C.textMuted}}>→</span>{fdt(task.endDate,"")}</>}</div>}
             {task.duration && <div style={{color:C.accent}}>⏱ {task.duration}分</div>}
             {task.deadlineDate && <div style={{color:over?C.danger:C.warn}}>⚠ {fdt(task.deadlineDate,task.deadlineTime)}</div>}
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <div style={{color:C.success}}>↻ {repeatLabel(task.repeat)}</div>}
@@ -74,8 +75,8 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
         )}
         {onAddSession && !showOverride && (
           <div style={{marginBottom:8}}>
-            {!showAddSession && task.startDate && !task._sessionOnly && onRemoveSession && (
-              <button onClick={()=>{ onRemoveSession(task.id, null); onClose(); }}
+            {!showAddSession && s0.date && !task._sessionOnly && onRemoveSession && (task.sessions||[]).length > 0 && (
+              <button onClick={()=>{ onRemoveSession(task.id, (task.sessions||[])[0]?.id || "s_main"); onClose(); }}
                 style={{width:"100%",padding:"4px 6px",borderRadius:6,border:`1px solid ${C.warn}44`,background:C.warnS,color:C.warn,fontSize:9,cursor:"pointer",fontWeight:600,marginBottom:4}}>
                 📅 この時間枠を削除（タスクは残す）
               </button>

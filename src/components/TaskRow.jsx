@@ -119,7 +119,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
             {task.children?.length>0 && <span onClick={e=>{e.stopPropagation();setExp(!exp);}} style={{cursor:"pointer",fontSize:8,color:C.textMuted,transform:exp?"rotate(90deg)":"",transition:"transform .15s",display:"inline-block"}}>▶</span>}
             <span style={{fontSize:12,fontWeight:depth===0?600:400,textDecoration:done?"line-through":"none",color:done?C.textMuted:C.text}}>{task.title}</span>
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.successS,color:C.success,fontWeight:600}}>↻{repeatLabel(task.repeat)}</span>}
-            {(()=>{const total=(task.sessions||[]).length+(task.startDate?1:0);return total>=1?<span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.accentS,color:C.accent,fontWeight:600}}>📆{total}枠</span>:null;})()}
+            {(()=>{const total=(task.sessions||[]).length;return total>=1?<span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.accentS,color:C.accent,fontWeight:600}}>📆{total}枠</span>:null;})()}
             {later  && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>📌</span>}
             {over   && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.dangerS,color:C.danger,fontWeight:600}}>⚠超過</span>}
             {urgent && <span style={{fontSize:8,padding:"1px 4px",borderRadius:6,background:C.warnS,color:C.warn,fontWeight:600}}>🔥今日</span>}
@@ -129,8 +129,8 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           {/* 2行目：タグ・日時・所要時間 */}
           <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tTags.map(t=><Pill key={t.id} tag={t}/>)}
-            {task.startDate    && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.startDate,task.startTime)}</span>}
-            {(()=>{ const d0=durFrom(task.startTime,task.endTime)||(task.duration?Number(task.duration):0); const dExtra=(task.sessions||[]).reduce((s,x)=>s+(durFrom(x.startTime,x.endTime)||0),0); const total=d0+dExtra; return total>0?<span style={{fontSize:9,color:C.accent}}>⏱{total}分</span>:null; })()}
+            {task.sessions?.[0]?.date && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.sessions[0].date,task.sessions[0].startTime)}</span>}
+            {(()=>{ const total=(task.sessions||[]).reduce((s,x)=>s+(durFrom(x.startTime,x.endTime)||0),0)||(task.duration?Number(task.duration):0); return total>0?<span style={{fontSize:9,color:C.accent}}>⏱{total}分</span>:null; })()}
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>
         </div>

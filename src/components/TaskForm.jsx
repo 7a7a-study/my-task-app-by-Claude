@@ -208,18 +208,17 @@ export const RepeatEditor = ({value, onChange}) => {
 
 // ── タスクフォーム ─────────────────────────────────────────────────
 export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,parentTags,isDuplicate}) => {
-  const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:defDate||"",startTime:defTime||"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false,notifyStart:0,notifyDeadline:null,sessions:[]};
+  const blank = {id:"task_"+Date.now(),title:"",done:false,tags:[],memo:"",startDate:"",startTime:"",endDate:"",endTime:"",deadlineDate:"",deadlineTime:"",repeat:"なし",duration:"",children:[],isLater:false,notifyStart:0,notifyDeadline:null,sessions:[]};
   const initTags = isChild && parentTags ? parentTags : (task?.tags || []);
 
-  // _sessions の初期値を組み立てる
-  const buildInitSessions = (src) => {
-    const s0 = {id:"s_main", date: src.startDate||defDate||"", startTime: src.startTime||defTime||"", endTime: src.endTime||""};
-    const rest = (src.sessions||[]).map((s,i) => ({id:s.id||"s_"+i, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""}));
-    return [s0, ...rest];
+  // _sessions の初期値：sessions があればそのまま使う、なければ空の1枠目を作る
+  const initSessions = (src) => {
+    if ((src.sessions||[]).length > 0) return src.sessions.map((s,i) => ({id:s.id||"s_"+i, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""}));
+    return [{id:"s_main", date:defDate||"", startTime:defTime||"", endTime:""}];
   };
 
   const initSrc = task ? {...task, tags:initTags} : {...blank, tags:initTags};
-  const [f, setF] = useState({...initSrc, _sessions: buildInitSessions(initSrc)});
+  const [f, setF] = useState({...initSrc, _sessions: initSessions(initSrc)});
   const u = (k,v) => setF(p => ({...p,[k]:v}));
 
   // PC / スマホ判定（レイアウト切り替え用）
@@ -229,14 +228,6 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
   const updateSession = (idx, field, val) => {
     setF(p => {
       const ns = p._sessions.map((s,i) => i===idx ? {...s,[field]:val} : s);
-      // 1枠目が変わった場合は startDate/startTime/endTime にも同期
-      if (idx === 0) {
-        return {...p, _sessions:ns,
-          startDate: field==="date" ? val : p.startDate,
-          startTime: field==="startTime" ? val : p.startTime,
-          endTime:   field==="endTime"   ? val : p.endTime,
-        };
-      }
       return {...p, _sessions:ns};
     });
   };
@@ -257,9 +248,9 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
     return () => window.removeEventListener("keydown", handler);
   }, [f, onSave, onClose]);
 
-  const hSt  = v => { updateSession(0,"startTime",v); if(f.duration&&v) u("endTime",addDur(v,Number(f.duration))); else if(f.endTime&&v){const d=durFrom(v,f.endTime);if(d)u("duration",String(d));} };
-  const hEt  = v => { updateSession(0,"endTime",v);   if(f.startTime&&v){const d=durFrom(f.startTime,v);if(d)u("duration",String(d));} };
-  const hDur = v => { u("duration",v);  if(f.startTime&&v) { const et=addDur(f.startTime,Number(v)); u("endTime",et); updateSession(0,"endTime",et); } };
+  const hSt  = v => { updateSession(0,"startTime",v); if(f.duration&&v) updateSession(0,"endTime",addDur(v,Number(f.duration))); else { const s0=(f._sessions||[])[0]||{}; if(s0.endTime&&v){const d=durFrom(v,s0.endTime);if(d)u("duration",String(d));} } };
+  const hEt  = v => { const s0=(f._sessions||[])[0]||{}; updateSession(0,"endTime",v); if(s0.startTime&&v){const d=durFrom(s0.startTime,v);if(d)u("duration",String(d));} };
+  const hDur = v => { u("duration",v); const s0=(f._sessions||[])[0]||{}; if(s0.startTime&&v){const et=addDur(s0.startTime,Number(v)); updateSession(0,"endTime",et);} };
 
   const pt = tags.filter(t => !t.parentId && !t.archived);
   const ct = pid => tags.filter(t => t.parentId===pid && !t.archived);
@@ -308,7 +299,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
                 <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
                   <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
                     <input type="date" value={s.date}
-                      onChange={e=>{ updateSession(0,"date",e.target.value); u("startDate",e.target.value); }}
+                      onChange={e=>updateSession(0,"date",e.target.value)}
                       style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
@@ -361,10 +352,10 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:7,textTransform:"uppercase",letterSpacing:.4}}>🔔 通知タイミング</div>
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
           <div>
-            <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:600}}>開始時刻{f.startTime?"":" (時刻なしは非通知)"}</div>
+            <div style={{fontSize:9,color:C.textMuted,marginBottom:3,fontWeight:600}}>開始時刻{(f._sessions||[])[0]?.startTime?"":" (時刻なしは非通知)"}</div>
             <select value={f.notifyStart??0} onChange={e=>u("notifyStart",Number(e.target.value))}
-              disabled={!f.startTime}
-              style={{width:"100%",background:f.startTime?C.surface:C.bg,color:f.startTime?C.text:C.textMuted,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11,opacity:f.startTime?1:0.5}}>
+              disabled={!(f._sessions||[])[0]?.startTime}
+              style={{width:"100%",background:(f._sessions||[])[0]?.startTime?C.surface:C.bg,color:(f._sessions||[])[0]?.startTime?C.text:C.textMuted,padding:"5px 8px",borderRadius:6,border:`1px solid ${C.border}`,fontSize:11,opacity:(f._sessions||[])[0]?.startTime?1:0.5}}>
               <option value={0}>定刻に通知</option>
               <option value={5}>5分前</option>
               <option value={10}>10分前</option>
@@ -395,17 +386,15 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         <Btn onClick={onClose}>キャンセル</Btn>
         <Btn v="accent" onClick={()=>{
           if(!f.title.trim()) return;
-          const s0 = (f._sessions||[])[0] || {};
-          const rest = (f._sessions||[]).slice(1).filter(s=>s.date||s.startTime)
-            .map(s => ({id:s.id, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""}));
           const {_sessions, ...fClean} = f;
           onSave({
             ...fClean,
-            startDate: s0.date||"",
-            startTime: s0.startTime||"",
-            endTime:   s0.endTime||"",
-            sessions: rest,
-            isLater: isLaterTask({...fClean, startDate: s0.date||"", startTime: s0.startTime||"", sessions: rest}),
+            startDate: "",
+            startTime: "",
+            endTime: "",
+            sessions: (_sessions||[]).filter(s=>s.date||s.startTime)
+              .map(s=>({id:s.id, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""})),
+            isLater: isLaterTask({...fClean, sessions: _sessions||[]}),
           });
           onClose();
         }}>保存</Btn>
