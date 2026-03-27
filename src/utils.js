@@ -100,7 +100,7 @@ export const matchesRepeat = (task, date) => {
 export const expandOverrides = (tasks) => {
   const extras = [];
   flatten(tasks).forEach(t => {
-    if (!t.overrideDates) return;
+    if (!t.overrideDates || Object.keys(t.overrideDates).length === 0) return;
     Object.entries(t.overrideDates).forEach(([origDate, ov]) => {
       const s0 = t.sessions?.[0] || {};
       extras.push({
