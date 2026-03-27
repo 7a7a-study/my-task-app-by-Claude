@@ -72,7 +72,12 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
       if (!rsRef.current) return;
       const y = ev.clientY||(ev.touches?.[0]?.clientY)||0;
       const nd = Math.max(15,Math.round((rsDur.current+(y-rsY.current)/PPM)/15)*15);
-      onUpdate({...rsTask.current, duration:String(nd), endTime:rsTask.current.startTime?addDur(rsTask.current.startTime,nd):""});
+      const t = rsTask.current;
+      const newEnd = t.startTime ? addDur(t.startTime, nd) : "";
+      const newSessions = (t.sessions||[]).length > 0
+        ? t.sessions.map((s,i) => i===0 ? {...s, endTime:newEnd} : s)
+        : t.sessions;
+      onUpdate({...t, duration:String(nd), endTime:newEnd, sessions:newSessions});
     };
     const up = () => { rsRef.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); document.removeEventListener("touchmove",mv); document.removeEventListener("touchend",up); };
     document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
