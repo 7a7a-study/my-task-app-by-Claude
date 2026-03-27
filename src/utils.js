@@ -21,9 +21,8 @@ export const m2t  = m => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,"
 export const durFrom = (a,b) => { if(!a||!b) return null; const d=t2m(b)-t2m(a); return d>0?d:null; };
 export const addDur  = (a,d) => (!a||!d) ? "" : m2t(t2m(a)+Number(d));
 export const isLaterTask = t => {
-  const hasDate = !!t.startDate;
-  const hasTime = !!t.startTime || (t.sessions||[]).some(s => s.startTime);
-  return !hasDate && !hasTime;
+  const sessions = t.sessions || [];
+  return !sessions.some(s => s.date || s.startTime);
 };
 
 // ── ツリー操作 ────────────────────────────────────────────────────
@@ -64,13 +63,13 @@ export const matchesRepeat = (task, date) => {
   if (r.type === "毎週") {
     const days = r.weekDays && r.weekDays.length > 0
       ? r.weekDays
-      : (task.startDate ? [new Date(task.startDate).getDay()] : []);
+      : (task.sessions?.[0]?.date ? [new Date(task.sessions[0].date).getDay()] : []);
     return days.includes(new Date(date).getDay());
   }
   if (r.type === "毎月") {
     const days = r.monthDays && r.monthDays.length > 0
       ? r.monthDays
-      : (task.startDate ? [new Date(task.startDate).getDate()] : []);
+      : (task.sessions?.[0]?.date ? [new Date(task.sessions[0].date).getDate()] : []);
     return days.includes(new Date(date).getDate());
   }
   if (r.type === "月末") {
@@ -89,7 +88,7 @@ export const matchesRepeat = (task, date) => {
     return d.getDate() === lastWeekday.getDate();
   }
   if (r.type === "毎年") {
-    const ref = r.yearDate || task.startDate;
+    const ref = r.yearDate || task.sessions?.[0]?.date;
     if (!ref) return false;
     return date.slice(5) === ref.slice(5);
   }
@@ -102,12 +101,19 @@ export const expandOverrides = (tasks) => {
   flatten(tasks).forEach(t => {
     if (!t.overrideDates) return;
     Object.entries(t.overrideDates).forEach(([origDate, ov]) => {
+      const s0 = t.sessions?.[0] || {};
       extras.push({
         ...t,
-        startDate:    ov.startDate    ?? t.startDate,
-        startTime:    ov.startTime    ?? t.startTime,
+        sessions: [{
+          ...s0,
+          date:      ov.startDate    ?? s0.date,
+          startTime: ov.startTime    ?? s0.startTime,
+          endTime:   ov.endTime      ?? s0.endTime,
+        }, ...(t.sessions||[]).slice(1)],
+        startDate: "",
+        startTime: "",
+        endTime: "",
         endDate:      ov.endDate      ?? t.endDate,
-        endTime:      ov.endTime      ?? t.endTime,
         deadlineDate: ov.deadlineDate ?? t.deadlineDate,
         deadlineTime: ov.deadlineTime ?? t.deadlineTime,
         _overrideKey: origDate,

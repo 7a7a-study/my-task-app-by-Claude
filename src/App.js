@@ -18,6 +18,33 @@ import { ReportView } from "./views/ReportView";
 import { TagsView } from "./views/TagsView";
 import { TemplatesView } from "./views/TemplatesView";
 
+// ── 既存タスクのマイグレーション（startDate/startTime/endTime → sessions[0]）──
+const migrateTask = (t) => {
+  // すでに移行済み（startDateが空でsessionsに枠がある）はスキップ
+  if (!t.startDate && (t.sessions||[]).length > 0) return t;
+  // startDateもsessionsも空 → あとでやるタスク、変換不要
+  if (!t.startDate) return t;
+  const mainSession = {
+    id: "s_main",
+    date: t.startDate || "",
+    startTime: t.startTime || "",
+    endTime: t.endTime || "",
+  };
+  const existingSessions = (t.sessions || []);
+  const alreadyHasMain = existingSessions.some(s => s.id === "s_main");
+  return {
+    ...t,
+    startDate: "",
+    startTime: "",
+    endTime: "",
+    sessions: alreadyHasMain ? existingSessions : [mainSession, ...existingSessions],
+  };
+};
+const migrateTasks = (tasks) => tasks.map(t => ({
+  ...migrateTask(t),
+  children: migrateTasks(t.children || []),
+}));
+
 export default function App() {
   const [sideOpen, setSideOpen]       = useState(true);
   const [sortOrder, setSortOrder]     = useState("デフォルト");
@@ -63,7 +90,15 @@ export default function App() {
         if (snap.metadata.hasPendingWrites) return;
         if (snap.exists()) {
           const d = snap.data();
-          if (d.tasks)     setTasksRaw(d.tasks);
+          if (d.tasks) {
+            const migrated = migrateTasks(d.tasks);
+            const needsSave = JSON.stringify(migrated) !== JSON.stringify(d.tasks);
+            setTasksRaw(migrated);
+            if (needsSave) {
+              // 移行が必要なタスクがあれば即保存して永続化
+              save2DB(migrated, d.tags || TAG_PRESETS, d.templates || []);
+            }
+          }
           if (d.tags)      setTagsRaw(d.tags);
           if (d.templates) setTemplatesRaw(d.templates);
         }
@@ -134,7 +169,13 @@ export default function App() {
 
   const handleSave = f => {
     const {_sessions, ...fStripped} = f;
-    const fw = {...fStripped, isLater: isLaterTask(fStripped)};
+    const fw = {
+      ...fStripped,
+      startDate: "",
+      startTime: "",
+      endTime: "",
+      isLater: isLaterTask(fStripped),
+    };
     let nt;
     const isExisting = editTask && flatten(tasks).some(t => t.id === editTask.id);
     if (isExisting)      nt = updTreeLocal(tasks, f.id, () => fw);
@@ -199,23 +240,14 @@ export default function App() {
 
   // 時間枠を1つ削除（sessionのidで特定）
   const handleRemoveSession = (taskId, sessionId) => {
-    if (!sessionId) {
-      // sessionIdなし＝メイン時間枠（startDate/Time）だけクリア。追加枠(sessions)は残す
-      setTasks(updTreeLocal(tasks, taskId, t => {
-        const remainingSessions = t.sessions || [];
-        return {
-          ...t,
-          startDate: "", startTime: "", endTime: "", duration: "",
-          isLater: !remainingSessions.some(s => s.startTime) && !remainingSessions.some(s => s.date),
-        };
-      }));
-    } else {
-      // 特定の追加枠だけ削除
-      setTasks(updTreeLocal(tasks, taskId, t => ({
+    setTasks(updTreeLocal(tasks, taskId, t => {
+      const sessions = (t.sessions || []).filter(s => s.id !== sessionId);
+      return {
         ...t,
-        sessions: (t.sessions || []).filter(s => s.id !== sessionId),
-      })));
-    }
+        sessions,
+        isLater: isLaterTask({...t, sessions}),
+      };
+    }));
   };
 
   // 時間枠クリア（タスクは残す・日程だけ消す）
