@@ -5,7 +5,8 @@ import { Pill } from "./ui";
 
 export const LaterPanel = ({tasks,tags,dragTask,setDragTask,onEdit}) => {
   const later = flatten(tasks).filter(t => t.isLater || isLaterTask(t));
-  const [open, setOpen] = useState(true);
+  const isMobile = window.innerWidth < 768;
+  const [open, setOpen] = useState(!isMobile);
   return (
     <div style={{width:open?168:28,flexShrink:0,background:C.surface,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden",transition:"width .2s"}}>
       <div style={{padding:"8px 8px 4px",flexShrink:0,borderBottom:`1px solid ${C.border}`,display:"flex",alignItems:"center",justifyContent:"space-between",minWidth:0}}>
