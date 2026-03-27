@@ -26,7 +26,8 @@ export const isLaterTask = t => {
 };
 
 // ── ツリー操作 ────────────────────────────────────────────────────
-export const flatten = (ts, res=[], pt=null, pid=null) => {
+export const flatten = (ts, res=null, pt=null, pid=null) => {
+  if (res === null) res = [];
   ts.forEach(t => {
     res.push({...t, _pt:pt, _pid:pid});
     if (t.children?.length) flatten(t.children, res, t.title, t.id);
