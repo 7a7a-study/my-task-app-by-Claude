@@ -22,12 +22,24 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
   // 全タスクを sessions[] のみで表示（重複なし）
-  const startTasks = [
-    // 繰り返しタスク
-    ...all.filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, viewDate)),
-    // 今回だけ変更（overrideDates展開）
+  const startTasksRaw = [
+    // ① 繰り返しタスク：sessions[0] の時間を反映
+    ...all
+      .filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, viewDate))
+      .map(t => {
+        const s0 = t.sessions?.[0] || {};
+        return {
+          ...t,
+          startTime: s0.startTime || "",
+          endTime:   s0.endTime   || "",
+          duration:  s0.startTime && s0.endTime
+            ? String(t2m(s0.endTime) - t2m(s0.startTime))
+            : t.duration || "",
+        };
+      }),
+    // ② 今回だけ変更（overrideDates展開）
     ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, viewDate)),
-    // 通常タスク：sessions を展開
+    // ③ 通常タスク：sessions を展開
     ...all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
       .flatMap(t => (t.sessions||[])
         .filter(s => sameDay(s.date, viewDate))
@@ -39,6 +51,14 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
         }))
       ),
   ];
+  // 重複除去（②と③に同じタスクが入る場合に対応）
+  const seen = new Set();
+  const startTasks = startTasksRaw.filter(t => {
+    const key = t._sessionId || t.id;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
   // 締切タスク（deadlineDate一致）→ 締切時刻で赤ラインで別表示
   // startDate一致のタスクも含める（両方の日に関係するため）
   const deadlineTasks = all.filter(t => {
@@ -72,7 +92,12 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
       if (!rsRef.current) return;
       const y = ev.clientY||(ev.touches?.[0]?.clientY)||0;
       const nd = Math.max(15, Math.round((rsDur.current+(y-rsY.current)/PPM)/15)*15);
-      onUpdate({...rsTask.current, duration:String(nd), endTime:rsTask.current.startTime?addDur(rsTask.current.startTime,nd):""});
+      const t = rsTask.current;
+      const newEnd = t.startTime ? addDur(t.startTime, nd) : "";
+      const newSessions = (t.sessions||[]).length > 0
+        ? t.sessions.map((s,i) => i===0 ? {...s, endTime:newEnd} : s)
+        : t.sessions;
+      onUpdate({...t, duration:String(nd), endTime:newEnd, sessions:newSessions});
     };
     const up = () => { rsRef.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); document.removeEventListener("touchmove",mv); document.removeEventListener("touchend",up); };
     document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
