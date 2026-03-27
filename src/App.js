@@ -201,11 +201,14 @@ export default function App() {
   const handleRemoveSession = (taskId, sessionId) => {
     if (!sessionId) {
       // sessionIdなし＝メイン時間枠（startDate/Time）だけクリア。追加枠(sessions)は残す
-      setTasks(updTreeLocal(tasks, taskId, t => ({
-        ...t,
-        startDate: "", startTime: "", endTime: "", duration: "",
-        isLater: (t.sessions||[]).length === 0,
-      })));
+      setTasks(updTreeLocal(tasks, taskId, t => {
+        const remainingSessions = t.sessions || [];
+        return {
+          ...t,
+          startDate: "", startTime: "", endTime: "", duration: "",
+          isLater: !remainingSessions.some(s => s.startTime) && !remainingSessions.some(s => s.date),
+        };
+      }));
     } else {
       // 特定の追加枠だけ削除
       setTasks(updTreeLocal(tasks, taskId, t => ({
