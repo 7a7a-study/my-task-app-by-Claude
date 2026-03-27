@@ -21,23 +21,23 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
-  // 通常タスク（startDate一致 or 繰り返し一致）
-  // sessions に当日枠があるタスクのIDセット（メイン枠との重複除外用）
-  const tasksWithSessionOnDay = new Set(
-    all.filter(t=>(t.sessions||[]).some(s=>s.date===viewDate)).map(t=>t.id)
-  );
+  // 全タスクを sessions[] のみで表示（重複なし）
   const startTasks = [
-    ...all.filter(t => {
-      if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, viewDate);
-      // sessions に同日枠があるタスクはメイン枠側では表示しない（重複防止）
-      if (tasksWithSessionOnDay.has(t.id)) return false;
-      return sameDay(t.startDate, viewDate);
-    }),
-    ...expandOverrides(tasks).filter(t => sameDay(t.startDate, viewDate)),
-    ...all.filter(t=>(t.sessions||[]).some(s=>s.date===viewDate)).map(t=>{
-      const ss=(t.sessions||[]).filter(s=>s.date===viewDate);
-      return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
-    }).flat(),
+    // 繰り返しタスク
+    ...all.filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, viewDate)),
+    // 今回だけ変更（overrideDates展開）
+    ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, viewDate)),
+    // 通常タスク：sessions を展開
+    ...all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
+      .flatMap(t => (t.sessions||[])
+        .filter(s => sameDay(s.date, viewDate))
+        .map(s => ({
+          ...t,
+          startDate: s.date, startTime: s.startTime, endTime: s.endTime,
+          duration: s.startTime&&s.endTime ? String(t2m(s.endTime)-t2m(s.startTime)) : "",
+          _sessionId: s.id, _sessionOnly: (t.sessions||[]).indexOf(s) > 0,
+        }))
+      ),
   ];
   // 締切タスク（deadlineDate一致）→ 締切時刻で赤ラインで別表示
   // startDate一致のタスクも含める（両方の日に関係するため）
@@ -90,7 +90,11 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
     const tid = e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
     const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
     if (!t) return;
-    onUpdate({...t, startDate:viewDate, startTime:st, endTime:t.duration?addDur(st,Number(t.duration)):"", isLater:false});
+    const et = t.duration ? addDur(st, Number(t.duration)) : "";
+    const newSessions = (t.sessions||[]).length > 0
+      ? t.sessions.map((s,i) => i===0 ? {...s, date:viewDate, startTime:st, endTime:et} : s)
+      : [{id:"s_main", date:viewDate, startTime:st, endTime:et}];
+    onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
     setDragTask(null);
   };
 

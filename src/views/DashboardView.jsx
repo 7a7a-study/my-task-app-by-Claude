@@ -17,7 +17,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   const todayTasks = all.filter(t => {
     if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, today);
-    return sameDay(t.startDate, today) || sameDay(t.deadlineDate, today);
+    return (t.sessions||[]).some(s => sameDay(s.date, today)) || sameDay(t.deadlineDate, today);
   }).filter(t => !(t.isLater || isLaterTask(t)));
   const todayDone = todayTasks.filter(t => {
     if (t.repeat && parseRepeat(t.repeat).type !== "なし") return (t.doneDates||[]).includes(today);
@@ -29,9 +29,10 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
   const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
-  const startingIn7 = nonRep.filter(t =>
-    t.startDate && t.startDate > today && t.startDate <= in7 && !t.done && !t.deadlineDate
-  ).sort((a,b) => a.startDate.localeCompare(b.startDate));
+  const startingIn7 = nonRep.filter(t => {
+    const d = t.sessions?.[0]?.date;
+    return d && d > today && d <= in7 && !t.done && !t.deadlineDate;
+  }).sort((a,b) => (a.sessions?.[0]?.date||"").localeCompare(b.sessions?.[0]?.date||""));
   const week7 = [...overdue, ...upcoming, ...startingIn7];
 
   const laterTasks = all.filter(t => (t.isLater || isLaterTask(t)) && !t.done);
@@ -120,8 +121,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           <span style={{fontSize:9,color:isOver?C.danger:C.warn,flexShrink:0,fontWeight:isOver?700:400}}>
             {isOver?"⚠ ":""}{fd(task.deadlineDate)}
           </span>}
-        {showDate && !task.deadlineDate && task.startDate &&
-          <span style={{fontSize:9,color:C.accent,flexShrink:0}}>{fd(task.startDate)}〜</span>}
+        {showDate && !task.deadlineDate && task.sessions?.[0]?.date &&
+          <span style={{fontSize:9,color:C.accent,flexShrink:0}}>{fd(task.sessions[0].date)}〜</span>}
       </div>
     );
   };

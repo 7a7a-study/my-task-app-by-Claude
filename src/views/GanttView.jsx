@@ -16,7 +16,7 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
   const DW  = 30;
   const RH  = 28;
   const all = flatten(tasks);
-  const vis = all.filter(t => (t.startDate||t.endDate||t.deadlineDate||(t.sessions||[]).length>0) && !(t.isLater||isLaterTask(t)) && !(hideCompleted&&t.done));
+  const vis = all.filter(t => ((t.sessions||[]).some(s=>s.date) || t.endDate || t.deadlineDate) && !(t.isLater||isLaterTask(t)) && !(hideCompleted&&t.done));
 
   useEffect(() => { fetchHolidays(vy).then(()=>setHolReady(true)); }, [vy]);
 
@@ -28,11 +28,12 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
       g[pid].push(t);
     });
     return g;
-  }, [vis.map(t=>t.id+t.done+t.startDate+t.endDate+t.deadlineDate).join(), tags.map(t=>t.id).join()]);
+  }, [vis.map(t=>t.id+t.done+(t.sessions?.[0]?.date||"")+t.endDate+t.deadlineDate).join(), tags.map(t=>t.id).join()]);
 
   const getBar = task => {
-    const s = task.startDate ? new Date(task.startDate) : null;
-    const e = task.endDate   ? new Date(task.endDate)   : s;
+    const sd = task.sessions?.[0]?.date;
+    const s = sd ? new Date(sd) : null;
+    const e = task.endDate ? new Date(task.endDate) : s;
     if (!s) return null;
     const ms=new Date(vy,vm,1), me=new Date(vy,vm,D);
     if (e<ms||s>me) return null;
@@ -59,7 +60,7 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
   const MN = ["1月","2月","3月","4月","5月","6月","7月","8月","9月","10月","11月","12月"];
   const todD = today.startsWith(`${vy}-${String(vm+1).padStart(2,"0")}`) ? parseInt(today.slice(8)) : null;
 
-  const hp = (e,task,vd) => { e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||task.startDate||today}); };
+  const hp = (e,task,vd) => { e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||task.sessions?.[0]?.date||today}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
 
   const hDrop = (e,n) => {
@@ -67,13 +68,22 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
     if (dragDL) { onUpdate({...dragDL,deadlineDate:ds(n)}); setDragDL(null); return; }
     if (dragBar) {
       const diff=n-dragBar.startDay, t=dragBar.task;
-      const sh = x => { if(!x)return x; const dt=new Date(x); dt.setDate(dt.getDate()+diff); return localDate(dt); };
-      onUpdate({...t,startDate:sh(t.startDate),endDate:sh(t.endDate),isLater:false});
+      const shSessions = (sessions) => sessions.map((s,i) => {
+        if (i !== 0 || !s.date) return s;
+        const dt=new Date(s.date); dt.setDate(dt.getDate()+diff); return {...s,date:localDate(dt)};
+      });
+      onUpdate({...t, sessions:shSessions(t.sessions||[]), endDate: t.endDate?(()=>{const dt=new Date(t.endDate);dt.setDate(dt.getDate()+diff);return localDate(dt);})():t.endDate, isLater:false});
       setDragBar(null); return;
     }
     const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
     const t=tid?all.find(x=>x.id===tid)||dragTask:dragTask;
-    if (t) { onUpdate({...t,startDate:ds(n),isLater:false}); setDragTask(null); }
+    if (t) {
+      const newSessions = (t.sessions||[]).length > 0
+        ? t.sessions.map((s,i) => i===0 ? {...s, date:ds(n)} : s)
+        : [{id:"s_main", date:ds(n), startTime:"", endTime:""}];
+      onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
+      setDragTask(null);
+    }
   };
 
   const brsRef=useRef(false),brsTask=useRef(null),brsX=useRef(0),brsW=useRef(0);
@@ -84,7 +94,7 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
       if (!brsRef.current) return;
       const x=ev.clientX||(ev.touches?.[0]?.clientX)||0;
       const nw=Math.max(1,brsW.current+Math.round((x-brsX.current)/DW));
-      const t=brsTask.current, sd=t.startDate||t.endDate; if(!sd)return;
+      const t=brsTask.current, sd=t.sessions?.[0]?.date||t.endDate; if(!sd)return;
       const ne=new Date(sd); ne.setDate(ne.getDate()+nw-1);
       onUpdate({...t, endDate:localDate(ne)});
     };

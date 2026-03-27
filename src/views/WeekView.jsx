@@ -31,20 +31,22 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
 
   const all = flatten(tasks);
   const getDay = date => {
-    const tasksWithSessionOnDay = new Set(
-      all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>t.id)
-    );
     return [
-      ...all.filter(t => {
-        if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, date);
-        if (tasksWithSessionOnDay.has(t.id)) return false;
-        return sameDay(t.startDate, date);
-      }),
-      ...expandOverrides(tasks).filter(t => sameDay(t.startDate, date)),
-      ...all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>{
-        const ss=(t.sessions||[]).filter(s=>s.date===date);
-        return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
-      }).flat(),
+      // 繰り返しタスク
+      ...all.filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, date)),
+      // 今回だけ変更
+      ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, date)),
+      // 通常タスク：sessions 展開
+      ...all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
+        .flatMap(t => (t.sessions||[])
+          .filter(s => sameDay(s.date, date))
+          .map(s => ({
+            ...t,
+            startDate: s.date, startTime: s.startTime, endTime: s.endTime,
+            duration: s.startTime&&s.endTime ? String(t2m(s.endTime)-t2m(s.startTime)) : "",
+            _sessionId: s.id, _sessionOnly: (t.sessions||[]).indexOf(s) > 0,
+          }))
+        ),
     ];
   };
   // ① isLaterフィルタ除去: 繰り返しタスクは時間未定でも表示
@@ -201,7 +203,11 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                 const clampMin=Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped));
                 const hh=Math.floor(clampMin/60), mm=clampMin%60;
                 const st=`${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
-                onUpdate({...task,startDate:d,startTime:st,endTime:task.duration?addDur(st,Number(task.duration)):"",isLater:false});
+                const et=task.duration?addDur(st,Number(task.duration)):"";
+                const newSessions=(task.sessions||[]).length>0
+                  ?task.sessions.map((s,i)=>i===0?{...s,date:d,startTime:st,endTime:et}:s)
+                  :[{id:"s_main",date:d,startTime:st,endTime:et}];
+                onUpdate({...task,sessions:newSessions,startDate:"",startTime:"",endTime:"",isLater:false});
                 setDragTask(null);
               }}
               onClick={e=>{
