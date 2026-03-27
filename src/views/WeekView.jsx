@@ -30,17 +30,23 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
   }, [wd.join(",")]);
 
   const all = flatten(tasks);
-  const getDay = date => [
-    ...all.filter(t => {
-      if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, date);
-      return sameDay(t.startDate, date);
-    }),
-    ...expandOverrides(tasks).filter(t => sameDay(t.startDate, date)),
-    ...all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>{
-      const ss=(t.sessions||[]).filter(s=>s.date===date);
-      return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
-    }).flat(),
-  ];
+  const getDay = date => {
+    const tasksWithSessionOnDay = new Set(
+      all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>t.id)
+    );
+    return [
+      ...all.filter(t => {
+        if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, date);
+        if (tasksWithSessionOnDay.has(t.id)) return false;
+        return sameDay(t.startDate, date);
+      }),
+      ...expandOverrides(tasks).filter(t => sameDay(t.startDate, date)),
+      ...all.filter(t=>(t.sessions||[]).some(s=>s.date===date)).map(t=>{
+        const ss=(t.sessions||[]).filter(s=>s.date===date);
+        return ss.map(s=>({...t,startDate:s.date,startTime:s.startTime,endTime:s.endTime,duration:s.startTime&&s.endTime?String(t2m(s.endTime)-t2m(s.startTime)):"",_sessionId:s.id||s.startTime,_sessionOnly:true}));
+      }).flat(),
+    ];
+  };
   // ① isLaterフィルタ除去: 繰り返しタスクは時間未定でも表示
 
   // ⑦ 締切タスク取得

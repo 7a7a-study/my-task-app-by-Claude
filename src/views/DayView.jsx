@@ -22,9 +22,15 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
   // 通常タスク（startDate一致 or 繰り返し一致）
+  // sessions に当日枠があるタスクのIDセット（メイン枠との重複除外用）
+  const tasksWithSessionOnDay = new Set(
+    all.filter(t=>(t.sessions||[]).some(s=>s.date===viewDate)).map(t=>t.id)
+  );
   const startTasks = [
     ...all.filter(t => {
       if (t.repeat && parseRepeat(t.repeat).type !== "なし") return matchesRepeat(t, viewDate);
+      // sessions に同日枠があるタスクはメイン枠側では表示しない（重複防止）
+      if (tasksWithSessionOnDay.has(t.id)) return false;
       return sameDay(t.startDate, viewDate);
     }),
     ...expandOverrides(tasks).filter(t => sameDay(t.startDate, viewDate)),
