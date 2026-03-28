@@ -72,7 +72,7 @@ const migrateTasks = (tasks) => tasks.map(t => ({
 }));
 
 export default function App() {
-  const [sideOpen, setSideOpen]       = useState(true);
+  const [sideOpen, setSideOpen]       = useState(window.innerWidth >= 768);
   const [sortOrder, setSortOrder]     = useState("デフォルト");
   const today = localDate();
   const [user, setUser]               = useState(null);
