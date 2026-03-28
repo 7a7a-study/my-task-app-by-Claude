@@ -59,9 +59,7 @@ export const matchesRepeat = (task, date) => {
   if (r.type === "なし") return false;
   if ((task.skipDates || []).includes(date)) return false;
   if (task.overrideDates && task.overrideDates[date]) return false;
-  // 期間フィルタ：開始日以降、終了日以前のみ表示
-  const startDate = task.sessions?.[0]?.date;
-  if (startDate && date < startDate) return false;
+  // 終了日フィルタのみ（endDateはガントバー用だが繰り返し終了も兼ねる）
   if (task.endDate && date > task.endDate) return false;
   if (r.type === "毎日") return true;
   if (r.type === "平日のみ") { const d = new Date(date).getDay(); return d >= 1 && d <= 5; }
