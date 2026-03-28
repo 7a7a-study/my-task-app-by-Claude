@@ -94,12 +94,6 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
         )}
         {onAddSession && !showOverride && (
           <div style={{marginBottom:8}}>
-            {!showAddSession && (s0.startDate||s0.date) && !task._sessionOnly && onRemoveSession && (task.sessions||[]).length > 0 && (
-              <button onClick={()=>{ onRemoveSession(task.id, (task.sessions||[])[0]?.id || "s_main"); onClose(); }}
-                style={{width:"100%",padding:"4px 6px",borderRadius:6,border:`1px solid ${C.warn}44`,background:C.warnS,color:C.warn,fontSize:9,cursor:"pointer",fontWeight:600,marginBottom:4}}>
-                📅 この時間枠を削除（タスクは残す）
-              </button>
-            )}
             {!showAddSession ? (
               <button onClick={()=>setShowAddSession(true)}
                 style={{width:"100%",padding:"4px 6px",borderRadius:6,border:`1px solid ${C.success}44`,background:C.successS,color:C.success,fontSize:9,cursor:"pointer",fontWeight:600}}>
