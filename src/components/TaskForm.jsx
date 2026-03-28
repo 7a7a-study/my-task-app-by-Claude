@@ -303,16 +303,21 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
               /* 1枠目（削除不可・アクセントボーダー） */
               <>
                 <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
-                  <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
+                  {/* 開始行 */}
+                  <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
+                    <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>開始</span>
                     <input type="date" value={s.startDate}
                       onChange={e=>updateSession(0,"startDate",e.target.value)}
-                      style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                      style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                    <span style={{fontSize:9,color:C.textMuted}}>〜</span>
+                  </div>
+                  {/* 終了行 */}
+                  <div style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>終了</span>
                     <input type="date" value={s.endDate}
                       onChange={e=>updateSession(0,"endDate",e.target.value)}
-                      style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                      style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                   </div>
@@ -324,23 +329,26 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
             ) : (
               /* 2枠目以降（同じ1行レイアウト＋削除ボタン） */
               <div style={{background:C.bg,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.border}`}}>
-                <div style={{display:"flex",alignItems:"center",gap:3}}>
-                  <input type="date" value={s.startDate}
-                    onChange={e=>updateSession(i,"startDate",e.target.value)}
-                    style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <input type="time" value={s.startTime}
-                    onChange={e=>updateSession(i,"startTime",e.target.value)}
-                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <span style={{fontSize:9,color:C.textMuted}}>〜</span>
-                  <input type="date" value={s.endDate}
-                    onChange={e=>updateSession(i,"endDate",e.target.value)}
-                    style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <input type="time" value={s.endTime}
-                    onChange={e=>updateSession(i,"endTime",e.target.value)}
-                    style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
-                  <button onClick={()=>{ const ns=(f._sessions||[]).filter((_,j)=>j!==i); u("_sessions",ns); }}
-                    style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
-                </div>
+                <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
+                    <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>開始</span>
+                    <input type="date" value={s.startDate}
+                      onChange={e=>updateSession(i,"startDate",e.target.value)}
+                      style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                    <input type="time" value={s.startTime}
+                      onChange={e=>updateSession(i,"startTime",e.target.value)}
+                      style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                    <button onClick={()=>{ const ns=(f._sessions||[]).filter((_,j)=>j!==i); u("_sessions",ns); }}
+                      style={{background:C.dangerS,color:C.danger,border:"none",borderRadius:5,width:24,height:24,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>✕</button>
+                  </div>
+                  <div style={{display:"flex",alignItems:"center",gap:3}}>
+                    <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>終了</span>
+                    <input type="date" value={s.endDate}
+                      onChange={e=>updateSession(i,"endDate",e.target.value)}
+                      style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                    <input type="time" value={s.endTime}
+                      onChange={e=>updateSession(i,"endTime",e.target.value)}
+                      style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
+                  </div>
               </div>
             )}
           </div>

@@ -36,7 +36,20 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
         </div>
         {((task.sessions||[]).length > 0 || task.duration || task.deadlineDate || task.repeat !== "なし") && (
           <div style={{background:C.bg,borderRadius:7,padding:"6px 8px",marginBottom:8,fontSize:11,display:"flex",flexDirection:"column",gap:3}}>
-            {s0.date && <div style={{color:C.textSub,display:"flex",gap:4}}><span style={{color:C.accent}}>▶</span>{fdt(s0.date,s0.startTime)}{task.endDate&&<><span style={{color:C.textMuted}}>→</span>{fdt(task.endDate,"")}</>}</div>}
+            {(s0.startDate||s0.date) && (() => {
+              const sd = s0.startDate||s0.date;
+              const ed = s0.endDate||task.endDate||"";
+              const diffDay = ed && ed !== sd;
+              return (
+                <div style={{color:C.textSub,display:"flex",gap:4,flexWrap:"wrap"}}>
+                  <span style={{color:C.accent}}>▶</span>
+                  {fdt(sd, s0.startTime)}
+                  {(diffDay || s0.endTime) && <span style={{color:C.textMuted}}>→</span>}
+                  {diffDay && <span>{fdt(ed, s0.endTime)}</span>}
+                  {!diffDay && s0.endTime && <span>{s0.endTime}</span>}
+                </div>
+              );
+            })()}
             {task.duration && <div style={{color:C.accent}}>⏱ {task.duration}分</div>}
             {task.deadlineDate && <div style={{color:over?C.danger:C.warn}}>⚠ {fdt(task.deadlineDate,task.deadlineTime)}</div>}
             {task.repeat && parseRepeat(task.repeat).type !== "なし" && <div style={{color:C.success}}>↻ {repeatLabel(task.repeat)}</div>}
@@ -58,13 +71,19 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
         {showOverride && (
           <div style={{background:C.bg,borderRadius:8,padding:"8px 9px",marginBottom:8,border:`1px solid ${C.accent}44`}}>
             <div style={{fontSize:9,fontWeight:700,color:C.accent,marginBottom:6}}>📅 今回だけ日程変更</div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:4,marginBottom:4}}>
-              <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始日</div><input type="date" value={ov.startDate} onChange={e=>ovInp("startDate",e.target.value)} style={inpStyle}/></div>
-              <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始時刻</div><input type="time" value={ov.startTime} onChange={e=>ovInp("startTime",e.target.value)} style={inpStyle}/></div>
-              <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了日</div><input type="date" value={ov.endDate} onChange={e=>ovInp("endDate",e.target.value)} style={inpStyle}/></div>
-              <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了時刻</div><input type="time" value={ov.endTime} onChange={e=>ovInp("endTime",e.target.value)} style={inpStyle}/></div>
-              <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>締切日</div><input type="date" value={ov.deadlineDate} onChange={e=>ovInp("deadlineDate",e.target.value)} style={inpStyle}/></div>
-              <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>締切時刻</div><input type="time" value={ov.deadlineTime} onChange={e=>ovInp("deadlineTime",e.target.value)} style={inpStyle}/></div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr",gap:3,marginBottom:4}}>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
+                <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始日</div><input type="date" value={ov.startDate} onChange={e=>ovInp("startDate",e.target.value)} style={inpStyle}/></div>
+                <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始時刻</div><input type="time" value={ov.startTime} onChange={e=>ovInp("startTime",e.target.value)} style={inpStyle}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
+                <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了日</div><input type="date" value={ov.endDate} onChange={e=>ovInp("endDate",e.target.value)} style={inpStyle}/></div>
+                <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了時刻</div><input type="time" value={ov.endTime} onChange={e=>ovInp("endTime",e.target.value)} style={inpStyle}/></div>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3}}>
+                <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>締切日</div><input type="date" value={ov.deadlineDate} onChange={e=>ovInp("deadlineDate",e.target.value)} style={inpStyle}/></div>
+                <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>締切時刻</div><input type="time" value={ov.deadlineTime} onChange={e=>ovInp("deadlineTime",e.target.value)} style={inpStyle}/></div>
+              </div>
             </div>
             <div style={{fontSize:8,color:C.textMuted,marginBottom:6}}>元の日付（キー）: {origDate}</div>
             <div style={{display:"flex",gap:4}}>
