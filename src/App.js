@@ -18,27 +18,53 @@ import { ReportView } from "./views/ReportView";
 import { TagsView } from "./views/TagsView";
 import { TemplatesView } from "./views/TemplatesView";
 
-// ── 既存タスクのマイグレーション（startDate/startTime/endTime → sessions[0]）──
+// ── 既存タスクのマイグレーション ────────────────────────────────────
 const migrateTask = (t) => {
-  // すでに移行済み（startDateが空でsessionsに枠がある）はスキップ
-  if (!t.startDate && (t.sessions||[]).length > 0) return t;
-  // startDateもsessionsも空 → あとでやるタスク、変換不要
-  if (!t.startDate) return t;
-  const mainSession = {
-    id: "s_main",
-    date: t.startDate || "",
-    startTime: t.startTime || "",
-    endTime: t.endTime || "",
-  };
-  const existingSessions = (t.sessions || []);
-  const alreadyHasMain = existingSessions.some(s => s.id === "s_main");
-  return {
-    ...t,
-    startDate: "",
-    startTime: "",
-    endTime: "",
-    sessions: alreadyHasMain ? existingSessions : [mainSession, ...existingSessions],
-  };
+  // sessions[] の各枠を新フィールドに統一（date → startDate）
+  const migrateSessions = (sessions) => sessions.map(s => ({
+    ...s,
+    startDate: s.startDate || s.date || "",  // date は旧フィールド
+    endDate:   s.endDate || "",
+    // date は互換のため残す（読み取り側で両方見る）
+  }));
+
+  let result = {...t, children: undefined};
+
+  // sessions がある場合は枠フィールドを統一
+  if ((t.sessions||[]).length > 0) {
+    result = {...result, sessions: migrateSessions(t.sessions)};
+  }
+
+  // 旧フォーマット：startDate がタスク本体にある場合 sessions[0] に移動
+  if (t.startDate) {
+    const mainSession = {
+      id: "s_main",
+      startDate: t.startDate,
+      date: t.startDate,  // 互換
+      startTime: t.startTime || "",
+      endDate: t.endDate || "",
+      endTime: t.endTime || "",
+    };
+    const existingSessions = migrateSessions(t.sessions || []);
+    const alreadyHasMain = existingSessions.some(s => s.id === "s_main");
+    result = {
+      ...result,
+      startDate: "",
+      startTime: "",
+      endTime: "",
+      sessions: alreadyHasMain ? existingSessions : [mainSession, ...existingSessions],
+    };
+  }
+
+  // task.endDate を sessions[0].endDate に移動（繰り返しタスクの終了日）
+  if (t.endDate && (result.sessions||[]).length > 0 && !result.sessions[0].endDate) {
+    result = {
+      ...result,
+      sessions: result.sessions.map((s, i) => i === 0 ? {...s, endDate: t.endDate} : s),
+    };
+  }
+
+  return result;
 };
 const migrateTasks = (tasks) => tasks.map(t => ({
   ...migrateTask(t),
@@ -175,6 +201,16 @@ export default function App() {
       startTime: "",
       endTime: "",
       isLater: isLaterTask(fStripped),
+      sessions: (_sessions||[])
+        .filter(s => s.startDate || s.date || s.startTime)
+        .map(s => ({
+          id: s.id,
+          startDate: s.startDate || s.date || "",
+          date:      s.startDate || s.date || "",  // 旧フィールド互換
+          startTime: s.startTime || "",
+          endDate:   s.endDate || "",
+          endTime:   s.endTime || "",
+        })),
     };
     let nt;
     const isExisting = editTask && flatten(tasks).some(t => t.id === editTask.id);

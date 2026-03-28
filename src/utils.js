@@ -22,7 +22,7 @@ export const durFrom = (a,b) => { if(!a||!b) return null; const d=t2m(b)-t2m(a);
 export const addDur  = (a,d) => (!a||!d) ? "" : m2t(t2m(a)+Number(d));
 export const isLaterTask = t => {
   const sessions = t.sessions || [];
-  return !sessions.some(s => s.date || s.startTime);
+  return !sessions.some(s => s.startDate || s.date || s.startTime);  // date は旧フィールド互換
 };
 
 // ── ツリー操作 ────────────────────────────────────────────────────
@@ -59,20 +59,25 @@ export const matchesRepeat = (task, date) => {
   if (r.type === "なし") return false;
   if ((task.skipDates || []).includes(date)) return false;
   if (task.overrideDates && task.overrideDates[date]) return false;
-  // 終了日フィルタのみ（endDateはガントバー用だが繰り返し終了も兼ねる）
-  if (task.endDate && date > task.endDate) return false;
+  // 期間フィルタ
+  const s0 = task.sessions?.[0] || {};
+  const startDate = s0.startDate || s0.date  // 旧フィールド互換
+    || task.createdAt?.slice?.(0, 10) || null;
+  const endDate = s0.endDate || task.endDate || null;  // task.endDate は旧フィールド互換
+  if (startDate && date < startDate) return false;
+  if (endDate   && date > endDate)   return false;
   if (r.type === "毎日") return true;
   if (r.type === "平日のみ") { const d = new Date(date).getDay(); return d >= 1 && d <= 5; }
   if (r.type === "毎週") {
     const days = r.weekDays && r.weekDays.length > 0
       ? r.weekDays
-      : (task.sessions?.[0]?.date ? [new Date(task.sessions[0].date).getDay()] : []);
+      : (task.sessions?.[0]?.startDate||task.sessions?.[0]?.date ? [new Date(task.sessions[0].startDate||task.sessions[0].date).getDay()] : []);
     return days.includes(new Date(date).getDay());
   }
   if (r.type === "毎月") {
     const days = r.monthDays && r.monthDays.length > 0
       ? r.monthDays
-      : (task.sessions?.[0]?.date ? [new Date(task.sessions[0].date).getDate()] : []);
+      : (task.sessions?.[0]?.startDate||task.sessions?.[0]?.date ? [new Date(task.sessions[0].startDate||task.sessions[0].date).getDate()] : []);
     return days.includes(new Date(date).getDate());
   }
   if (r.type === "月末") {
@@ -105,22 +110,24 @@ export const expandOverrides = (tasks) => {
     if (!t.overrideDates || Object.keys(t.overrideDates).length === 0) return;
     Object.entries(t.overrideDates).forEach(([origDate, ov]) => {
       const s0 = t.sessions?.[0] || {};
-      // override後の日付・時間（未指定なら元のs0から引き継ぐが、dateだけはovが主）
-      const ovDate      = ov.startDate  ?? origDate;   // 移動先の日付
-      const ovStartTime = ov.startTime  ?? s0.startTime ?? "";
-      const ovEndTime   = ov.endTime    ?? s0.endTime   ?? "";
+      const ovStartDate = ov.startDate ?? origDate;
+      const ovStartTime = ov.startTime ?? s0.startTime ?? "";
+      const ovEndDate   = ov.endDate   ?? (ovStartDate !== (s0.startDate || s0.date) ? ovStartDate : (s0.endDate || ""));
+      const ovEndTime   = ov.endTime   ?? s0.endTime ?? "";
       extras.push({
         ...t,
         sessions: [{
           ...s0,
-          date:      ovDate,
+          startDate: ovStartDate,
           startTime: ovStartTime,
+          endDate:   ovEndDate,
           endTime:   ovEndTime,
+          date: ovStartDate,  // 旧フィールド互換
         }, ...(t.sessions||[]).slice(1)],
         startDate: "",
         startTime: ovStartTime,
         endTime:   ovEndTime,
-        endDate:      ov.endDate      ?? t.endDate,
+        endDate:   ov.endDate ?? t.endDate,
         deadlineDate: ov.deadlineDate ?? t.deadlineDate,
         deadlineTime: ov.deadlineTime ?? t.deadlineTime,
         _overrideKey: origDate,
@@ -247,6 +254,17 @@ export const toggleMemo = (memo, idx) => {
 };
 
 // ── 日付ごとのタスク取得（日ビュー・週ビュー共通） ──────────────────
+// セッションの開始日を取得（新旧フィールド互換）
+const sessionStartDate = s => s.startDate || s.date || "";
+
+// セッションがその日に表示されるか（日またぎ対応）
+const sessionCoversDate = (s, date) => {
+  const sd = sessionStartDate(s);
+  if (!sd) return false;
+  const ed = s.endDate || sd;  // endDateなければ当日のみ
+  return date >= sd && date <= ed;
+};
+
 export const getTasksForDate = (tasks, date) => {
   const all = flatten(tasks);
   const seen = new Set();
@@ -266,18 +284,25 @@ export const getTasksForDate = (tasks, date) => {
         };
       }),
     // ② 今回だけ変更（overrideDates展開）
-    ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, date)),
-    // ③ 通常タスク：sessions を展開
+    ...expandOverrides(tasks).filter(t => {
+      const s0 = t.sessions?.[0] || {};
+      return sessionCoversDate(s0, date);
+    }),
+    // ③ 通常タスク：sessions を展開（日またぎ対応）
     ...all
       .filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
       .flatMap(t => (t.sessions || [])
-        .filter(s => sameDay(s.date, date))
-        .map(s => ({
-          ...t,
-          startDate: s.date, startTime: s.startTime, endTime: s.endTime,
-          duration: s.startTime && s.endTime ? String(t2m(s.endTime) - t2m(s.startTime)) : "",
-          _sessionId: s.id, _sessionOnly: (t.sessions || []).indexOf(s) > 0,
-        }))
+        .filter(s => sessionCoversDate(s, date))
+        .map(s => {
+          const sd = sessionStartDate(s);
+          return {
+            ...t,
+            startDate: sd, startTime: s.startTime, endTime: s.endTime,
+            endDate: s.endDate || sd,
+            duration: s.startTime && s.endTime ? String(t2m(s.endTime) - t2m(s.startTime)) : "",
+            _sessionId: s.id, _sessionOnly: (t.sessions || []).indexOf(s) > 0,
+          };
+        })
       ),
   ];
   // 重複除去
