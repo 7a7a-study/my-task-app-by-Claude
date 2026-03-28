@@ -112,8 +112,8 @@ export const expandOverrides = (tasks) => {
           endTime:   ov.endTime      ?? s0.endTime,
         }, ...(t.sessions||[]).slice(1)],
         startDate: "",
-        startTime: "",
-        endTime: "",
+        startTime: ov.startTime ?? s0.startTime ?? "",
+        endTime:   ov.endTime   ?? s0.endTime   ?? "",
         endDate:      ov.endDate      ?? t.endDate,
         deadlineDate: ov.deadlineDate ?? t.deadlineDate,
         deadlineTime: ov.deadlineTime ?? t.deadlineTime,
@@ -238,6 +238,61 @@ export const toggleMemo = (memo, idx) => {
   const m = lines[idx]?.match(/^- \[(x| )\] (.*)$/);
   if (m) lines[idx] = `- [${m[1]==="x"?" ":"x"}] ${m[2]}`;
   return lines.join("\n");
+};
+
+// ── 日付ごとのタスク取得（日ビュー・週ビュー共通） ──────────────────
+export const getTasksForDate = (tasks, date) => {
+  const all = flatten(tasks);
+  const seen = new Set();
+  const raw = [
+    // ① 繰り返しタスク：sessions[0] の時間を反映
+    ...all
+      .filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, date))
+      .map(t => {
+        const s0 = t.sessions?.[0] || {};
+        return {
+          ...t,
+          startTime: s0.startTime || "",
+          endTime:   s0.endTime   || "",
+          duration:  s0.startTime && s0.endTime
+            ? String(t2m(s0.endTime) - t2m(s0.startTime))
+            : t.duration || "",
+        };
+      }),
+    // ② 今回だけ変更（overrideDates展開）
+    ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, date)),
+    // ③ 通常タスク：sessions を展開
+    ...all
+      .filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
+      .flatMap(t => (t.sessions || [])
+        .filter(s => sameDay(s.date, date))
+        .map(s => ({
+          ...t,
+          startDate: s.date, startTime: s.startTime, endTime: s.endTime,
+          duration: s.startTime && s.endTime ? String(t2m(s.endTime) - t2m(s.startTime)) : "",
+          _sessionId: s.id, _sessionOnly: (t.sessions || []).indexOf(s) > 0,
+        }))
+      ),
+  ];
+  // 重複除去
+  return raw.filter(t => {
+    const isRepeat = t.repeat && parseRepeat(t.repeat).type !== "なし";
+    const key = t._sessionId || (isRepeat ? t.id + "_repeat" : t.id);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+};
+
+// ── 締切タスク取得（日ビュー・週ビュー共通） ────────────────────────
+export const getDeadlineTasksForDate = (tasks, date) => {
+  const all = flatten(tasks);
+  return all.filter(t => {
+    if (!(t.deadlineDate && sameDay(t.deadlineDate, date))) return false;
+    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
+    if (t.done) return false;
+    return true;
+  }).map(t => ({...t, _isDeadline: true}));
 };
 
 // ── 祝日 ────────────────────────────────────────────────────────
