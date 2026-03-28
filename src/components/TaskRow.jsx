@@ -129,7 +129,7 @@ export const TaskRow = ({task,tags,depth=0,onEdit,onDelete,onToggle,onAddChild,o
           {/* 2行目：タグ・日時・所要時間 */}
           <div style={{display:"flex",gap:4,flexWrap:"wrap",alignItems:"center"}}>
             {tTags.map(t=><Pill key={t.id} tag={t}/>)}
-            {task.sessions?.[0]?.date && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.sessions[0].date,task.sessions[0].startTime)}</span>}
+            {(task.sessions?.[0]?.startDate||task.sessions?.[0]?.date) && <span style={{fontSize:9,color:C.textMuted}}>▶{fdt(task.sessions[0].startDate||task.sessions[0].date,task.sessions[0].startTime)}</span>}
             {(()=>{ const total=(task.sessions||[]).reduce((s,x)=>s+(durFrom(x.startTime,x.endTime)||0),0)||(task.duration?Number(task.duration):0); return total>0?<span style={{fontSize:9,color:C.accent}}>⏱{total}分</span>:null; })()}
             {task.deadlineDate && <span style={{fontSize:9,color:over?C.danger:C.warn}}>⚠{fdt(task.deadlineDate,task.deadlineTime)}</span>}
           </div>

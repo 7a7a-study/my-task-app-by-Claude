@@ -213,8 +213,14 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
 
   // _sessions の初期値：sessions があればそのまま使う、なければ空の1枠目を作る
   const initSessions = (src) => {
-    if ((src.sessions||[]).length > 0) return src.sessions.map((s,i) => ({id:s.id||"s_"+i, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""}));
-    return [{id:"s_main", date:defDate||"", startTime:defTime||"", endTime:""}];
+    if ((src.sessions||[]).length > 0) return src.sessions.map((s,i) => ({
+      id: s.id||"s_"+i,
+      startDate: s.startDate || s.date || "",
+      startTime: s.startTime || "",
+      endDate:   s.endDate || "",
+      endTime:   s.endTime || "",
+    }));
+    return [{id:"s_main", startDate:defDate||"", startTime:defTime||"", endDate:"", endTime:""}];
   };
 
   const initSrc = task ? {...task, tags:initTags} : {...blank, tags:initTags};
@@ -289,7 +295,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8}}>
         <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:7}}>
           <div style={{fontSize:9,fontWeight:700,color:C.textMuted,textTransform:"uppercase",letterSpacing:.4}}>📅 日程・時間枠</div>
-          <Btn v="accent" style={{padding:"2px 9px",fontSize:9}} onClick={()=>{ u("_sessions",[...(f._sessions||[]),{id:"s_"+Date.now(),date:"",startTime:"",endTime:""}]); }}>＋ 枠を追加</Btn>
+          <Btn v="accent" style={{padding:"2px 9px",fontSize:9}} onClick={()=>{ u("_sessions",[...(f._sessions||[]),{id:"s_"+Date.now(),startDate:"",startTime:"",endDate:"",endTime:""}]); }}>＋ 枠を追加</Btn>
         </div>
         {(f._sessions||[]).map((s,i)=>(
           <div key={s.id||i} style={{marginBottom:5}}>
@@ -298,12 +304,15 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
               <>
                 <div style={{background:C.surface,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.accent}44`}}>
                   <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:4}}>
-                    <input type="date" value={s.date}
-                      onChange={e=>updateSession(0,"date",e.target.value)}
+                    <input type="date" value={s.startDate}
+                      onChange={e=>updateSession(0,"startDate",e.target.value)}
                       style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <span style={{fontSize:9,color:C.textMuted}}>〜</span>
+                    <input type="date" value={s.endDate}
+                      onChange={e=>updateSession(0,"endDate",e.target.value)}
+                      style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.endTime} onChange={e=>hEt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                   </div>
@@ -316,13 +325,16 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
               /* 2枠目以降（同じ1行レイアウト＋削除ボタン） */
               <div style={{background:C.bg,borderRadius:6,padding:"6px 8px",border:`1px solid ${C.border}`}}>
                 <div style={{display:"flex",alignItems:"center",gap:3}}>
-                  <input type="date" value={s.date}
-                    onChange={e=>updateSession(i,"date",e.target.value)}
+                  <input type="date" value={s.startDate}
+                    onChange={e=>updateSession(i,"startDate",e.target.value)}
                     style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                   <input type="time" value={s.startTime}
                     onChange={e=>updateSession(i,"startTime",e.target.value)}
                     style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                   <span style={{fontSize:9,color:C.textMuted}}>〜</span>
+                  <input type="date" value={s.endDate}
+                    onChange={e=>updateSession(i,"endDate",e.target.value)}
+                    style={{flex:"1 1 0",minWidth:0,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                   <input type="time" value={s.endTime}
                     onChange={e=>updateSession(i,"endTime",e.target.value)}
                     style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
@@ -392,8 +404,8 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
             startDate: "",
             startTime: "",
             endTime: "",
-            sessions: (_sessions||[]).filter(s=>s.date||s.startTime)
-              .map(s=>({id:s.id, date:s.date||"", startTime:s.startTime||"", endTime:s.endTime||""})),
+            sessions: (_sessions||[]).filter(s=>s.startDate||s.date||s.startTime)
+              .map(s=>({id:s.id, startDate:s.startDate||s.date||"", date:s.startDate||s.date||"", startTime:s.startTime||"", endDate:s.endDate||"", endTime:s.endTime||""})),
             isLater: isLaterTask({...fClean, sessions: _sessions||[]}),
           });
           onClose();
