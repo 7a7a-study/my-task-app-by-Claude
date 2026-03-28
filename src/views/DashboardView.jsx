@@ -30,9 +30,9 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
   const startingIn7 = nonRep.filter(t => {
-    const d = t.sessions?.[0]?.date;
+    const d = t.sessions?.[0]?.startDate || t.sessions?.[0]?.date;
     return d && d > today && d <= in7 && !t.done && !t.deadlineDate;
-  }).sort((a,b) => (a.sessions?.[0]?.date||"").localeCompare(b.sessions?.[0]?.date||""));
+  }).sort((a,b) => (a.sessions?.[0]?.startDate||a.sessions?.[0]?.date||"").localeCompare(b.sessions?.[0]?.startDate||b.sessions?.[0]?.date||""));
   const week7 = [...overdue, ...upcoming, ...startingIn7];
 
   const laterTasks = all.filter(t => (t.isLater || isLaterTask(t)) && !t.done);
