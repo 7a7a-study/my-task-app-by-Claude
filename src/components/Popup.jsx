@@ -13,7 +13,7 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
   const [showOverride, setShowOverride] = useState(false);
   const [confirmDel, setConfirmDel]   = useState(false);
   const [showAddSession, setShowAddSession] = useState(false);
-  const [newSession, setNewSession] = useState({date: viewDate||"", startTime:"", endTime:""});
+  const [newSession, setNewSession] = useState({startDate: viewDate||"", startTime:"", endDate: viewDate||"", endTime:""});
   const [ov, setOv] = useState({
     startDate: viewDate||s0.date||"", startTime: s0.startTime||"",
     endDate: task.endDate||"",     endTime: s0.endTime||"",
@@ -108,18 +108,19 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
             ) : (
               <div style={{background:C.bg,borderRadius:8,padding:"8px 9px",border:`1px solid ${C.success}44`}}>
                 <div style={{fontSize:9,fontWeight:700,color:C.success,marginBottom:6}}>📆 時間枠を追加</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:4,marginBottom:6}}>
-                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>日付</div><input type="date" value={newSession.date} onChange={e=>setNewSession(p=>({...p,date:e.target.value}))} style={inpStyle}/></div>
-                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始</div><input type="time" value={newSession.startTime} onChange={e=>setNewSession(p=>({...p,startTime:e.target.value}))} style={inpStyle}/></div>
-                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了</div><input type="time" value={newSession.endTime} onChange={e=>setNewSession(p=>({...p,endTime:e.target.value}))} style={inpStyle}/></div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3,marginBottom:6}}>
+                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始日</div><input type="date" value={newSession.startDate} onChange={e=>setNewSession(p=>({...p,startDate:e.target.value,endDate:p.endDate||e.target.value}))} style={inpStyle}/></div>
+                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始時刻</div><input type="time" value={newSession.startTime} onChange={e=>setNewSession(p=>({...p,startTime:e.target.value}))} style={inpStyle}/></div>
+                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了日</div><input type="date" value={newSession.endDate} onChange={e=>setNewSession(p=>({...p,endDate:e.target.value}))} style={inpStyle}/></div>
+                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了時刻</div><input type="time" value={newSession.endTime} onChange={e=>setNewSession(p=>({...p,endTime:e.target.value}))} style={inpStyle}/></div>
                 </div>
                 <div style={{display:"flex",gap:4}}>
                   <Btn onClick={()=>setShowAddSession(false)} style={{flex:1,padding:"4px",fontSize:9}}>キャンセル</Btn>
                   <Btn v="success" onClick={()=>{
-                    if(!newSession.date||!newSession.startTime) return;
-                    onAddSession(task._overrideId||task.id, {...newSession,id:"s_"+Date.now()});
+                    if(!newSession.startDate) return;
+                    onAddSession(task._overrideId||task.id, {...newSession, date:newSession.startDate, id:"s_"+Date.now()});
                     setShowAddSession(false);
-                    setNewSession({date:viewDate||"",startTime:"",endTime:""});
+                    setNewSession({startDate:viewDate||"",startTime:"",endDate:viewDate||"",endTime:""});
                     onClose();
                   }} style={{flex:1,padding:"4px",fontSize:9}}>追加</Btn>
                 </div>
@@ -145,7 +146,7 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
                   📅 この時間枠だけ削除
                 </Btn>
               )}
-              {!task._sessionOnly && task.startDate && onRemoveSession && (
+              {!task._sessionOnly && (s0.startDate||s0.date) && onRemoveSession && (
                 <Btn v="warn" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, null); onClose();}}>
                   📅 日程だけ削除（タスクは残す）
                 </Btn>

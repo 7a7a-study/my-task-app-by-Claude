@@ -307,7 +307,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
                   <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
                     <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>開始</span>
                     <input type="date" value={s.startDate}
-                      onChange={e=>updateSession(0,"startDate",e.target.value)}
+                      onChange={e=>{updateSession(0,"startDate",e.target.value); const s0=(f._sessions||[])[0]||{}; if(!s0.endDate) updateSession(0,"endDate",e.target.value);}}
                       style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
@@ -332,7 +332,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
                 <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
                     <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>開始</span>
                     <input type="date" value={s.startDate}
-                      onChange={e=>updateSession(i,"startDate",e.target.value)}
+                      onChange={e=>{updateSession(i,"startDate",e.target.value); const si=(f._sessions||[])[i]||{}; if(!si.endDate) updateSession(i,"endDate",e.target.value);}}
                       style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime}
                       onChange={e=>updateSession(i,"startTime",e.target.value)}
