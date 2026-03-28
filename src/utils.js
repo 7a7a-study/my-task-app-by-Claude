@@ -59,6 +59,10 @@ export const matchesRepeat = (task, date) => {
   if (r.type === "なし") return false;
   if ((task.skipDates || []).includes(date)) return false;
   if (task.overrideDates && task.overrideDates[date]) return false;
+  // 期間フィルタ：開始日以降、終了日以前のみ表示
+  const startDate = task.sessions?.[0]?.date;
+  if (startDate && date < startDate) return false;
+  if (task.endDate && date > task.endDate) return false;
   if (r.type === "毎日") return true;
   if (r.type === "平日のみ") { const d = new Date(date).getDay(); return d >= 1 && d <= 5; }
   if (r.type === "毎週") {
@@ -103,17 +107,21 @@ export const expandOverrides = (tasks) => {
     if (!t.overrideDates || Object.keys(t.overrideDates).length === 0) return;
     Object.entries(t.overrideDates).forEach(([origDate, ov]) => {
       const s0 = t.sessions?.[0] || {};
+      // override後の日付・時間（未指定なら元のs0から引き継ぐが、dateだけはovが主）
+      const ovDate      = ov.startDate  ?? origDate;   // 移動先の日付
+      const ovStartTime = ov.startTime  ?? s0.startTime ?? "";
+      const ovEndTime   = ov.endTime    ?? s0.endTime   ?? "";
       extras.push({
         ...t,
         sessions: [{
           ...s0,
-          date:      ov.startDate    ?? s0.date,
-          startTime: ov.startTime    ?? s0.startTime,
-          endTime:   ov.endTime      ?? s0.endTime,
+          date:      ovDate,
+          startTime: ovStartTime,
+          endTime:   ovEndTime,
         }, ...(t.sessions||[]).slice(1)],
         startDate: "",
-        startTime: ov.startTime ?? s0.startTime ?? "",
-        endTime:   ov.endTime   ?? s0.endTime   ?? "",
+        startTime: ovStartTime,
+        endTime:   ovEndTime,
         endDate:      ov.endDate      ?? t.endDate,
         deadlineDate: ov.deadlineDate ?? t.deadlineDate,
         deadlineTime: ov.deadlineTime ?? t.deadlineTime,
