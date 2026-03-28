@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { C } from "../constants";
-import { localDate, flatten, fd, sameDay, t2m, addDur, parseRepeat, matchesRepeat, expandOverrides, isLaterTask, toggleMemo, fetchHolidays, holName, isRed } from "../utils";
+import { localDate, flatten, fd, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed } from "../utils";
 import { Popup } from "../components/Popup";
 import { TimelineChip } from "./ListView";
 
@@ -21,53 +21,8 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
-  // 全タスクを sessions[] のみで表示（重複なし）
-  const startTasksRaw = [
-    // ① 繰り返しタスク：sessions[0] の時間を反映
-    ...all
-      .filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, viewDate))
-      .map(t => {
-        const s0 = t.sessions?.[0] || {};
-        return {
-          ...t,
-          startTime: s0.startTime || "",
-          endTime:   s0.endTime   || "",
-          duration:  s0.startTime && s0.endTime
-            ? String(t2m(s0.endTime) - t2m(s0.startTime))
-            : t.duration || "",
-        };
-      }),
-    // ② 今回だけ変更（overrideDates展開）
-    ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, viewDate)),
-    // ③ 通常タスク：sessions を展開
-    ...all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
-      .flatMap(t => (t.sessions||[])
-        .filter(s => sameDay(s.date, viewDate))
-        .map(s => ({
-          ...t,
-          startDate: s.date, startTime: s.startTime, endTime: s.endTime,
-          duration: s.startTime&&s.endTime ? String(t2m(s.endTime)-t2m(s.startTime)) : "",
-          _sessionId: s.id, _sessionOnly: (t.sessions||[]).indexOf(s) > 0,
-        }))
-      ),
-  ];
-  // 重複除去（②と③に同じタスクが入る場合に対応）
-  const seen = new Set();
-  const startTasks = startTasksRaw.filter(t => {
-    const key = t._sessionId || t.id;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-  // 締切タスク（deadlineDate一致）→ 締切時刻で赤ラインで別表示
-  // startDate一致のタスクも含める（両方の日に関係するため）
-  const deadlineTasks = all.filter(t => {
-    if (!(t.deadlineDate && sameDay(t.deadlineDate, viewDate))) return false;
-    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
-    if (t.done) return false; // 完了タスクは非表示
-    return true;
-  }).map(t => ({...t, _isDeadline: true}));
-
+  const startTasks    = getTasksForDate(tasks, viewDate);
+  const deadlineTasks = getDeadlineTasksForDate(tasks, viewDate);
   const todayT = startTasks;
   // ① 繰り返し・通常タスク：startTimeなしでも「時間未定」欄に表示
   const timed   = todayT.filter(t => t.startTime);

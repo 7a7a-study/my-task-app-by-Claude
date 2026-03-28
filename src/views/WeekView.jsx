@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { C, DAYS_JP } from "../constants";
-import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, matchesRepeat, expandOverrides, isLaterTask, toggleMemo, fetchHolidays, holName, isRed } from "../utils";
+import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed } from "../utils";
 import { Popup } from "../components/Popup";
 import { TimelineChip } from "./ListView";
 
@@ -30,34 +30,8 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
   }, [wd.join(",")]);
 
   const all = flatten(tasks);
-  const getDay = date => {
-    return [
-      // 繰り返しタスク
-      ...all.filter(t => t.repeat && parseRepeat(t.repeat).type !== "なし" && matchesRepeat(t, date)),
-      // 今回だけ変更
-      ...expandOverrides(tasks).filter(t => sameDay(t.sessions?.[0]?.date, date)),
-      // 通常タスク：sessions 展開
-      ...all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし")
-        .flatMap(t => (t.sessions||[])
-          .filter(s => sameDay(s.date, date))
-          .map(s => ({
-            ...t,
-            startDate: s.date, startTime: s.startTime, endTime: s.endTime,
-            duration: s.startTime&&s.endTime ? String(t2m(s.endTime)-t2m(s.startTime)) : "",
-            _sessionId: s.id, _sessionOnly: (t.sessions||[]).indexOf(s) > 0,
-          }))
-        ),
-    ];
-  };
-  // ① isLaterフィルタ除去: 繰り返しタスクは時間未定でも表示
-
-  // ⑦ 締切タスク取得
-  const getDeadlineDay = date => all.filter(t => {
-    if (!(t.deadlineDate && sameDay(t.deadlineDate, date))) return false;
-    if (t.repeat && parseRepeat(t.repeat).type !== "なし") return false;
-    if (t.done) return false; // 完了タスクは非表示
-    return true;
-  }).map(t => ({...t, _isDeadline: true}));
+  const getDay         = date => getTasksForDate(tasks, date);
+  const getDeadlineDay = date => getDeadlineTasksForDate(tasks, date);
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
