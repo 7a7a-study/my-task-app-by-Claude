@@ -15,7 +15,7 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
   const [showAddSession, setShowAddSession] = useState(false);
   const [newSession, setNewSession] = useState({date: viewDate||"", startTime:"", endTime:""});
   const [ov, setOv] = useState({
-    startDate: s0.date||"", startTime: s0.startTime||"",
+    startDate: viewDate||s0.date||"", startTime: s0.startTime||"",
     endDate: task.endDate||"",     endTime: s0.endTime||"",
     deadlineDate: task.deadlineDate||"", deadlineTime: task.deadlineTime||"",
   });
