@@ -7,7 +7,7 @@ export const C = {
   warn:"#c8a96e",   warnS:"rgba(200,169,110,.18)",
   danger:"#c47878", dangerS:"rgba(196,120,120,.18)",
   info:"#b8c4b0",   infoS:"rgba(184,196,176,.15)",
-  text:"#e8e0d0", textSub:"#c4b89a", textMuted:"#8a8070",
+  text:"#f0eadc", textSub:"#d4c8aa", textMuted:"#a89880",
 };
 
 export const TAG_PRESETS = [
