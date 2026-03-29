@@ -247,7 +247,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
     const handler = e => {
       if (e.key === "Escape") { onClose(); }
       if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) {
-        if (f.title.trim()) { onSave({...f, isLater:isLaterTask(f)}); onClose(); }
+        if (f.title.trim()) { onSave(f); onClose(); }  // _sessions付きのままhandleSaveに渡す
       }
     };
     window.addEventListener("keydown", handler);
@@ -406,16 +406,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
         <Btn onClick={onClose}>キャンセル</Btn>
         <Btn v="accent" onClick={()=>{
           if(!f.title.trim()) return;
-          const {_sessions, ...fClean} = f;
-          onSave({
-            ...fClean,
-            startDate: "",
-            startTime: "",
-            endTime: "",
-            sessions: (_sessions||[]).filter(s=>s.startDate||s.date||s.startTime)
-              .map(s=>({id:s.id, startDate:s.startDate||s.date||"", date:s.startDate||s.date||"", startTime:s.startTime||"", endDate:s.endDate||"", endTime:s.endTime||""})),
-            isLater: isLaterTask({...fClean, sessions: _sessions||[]}),
-          });
+          onSave(f);  // _sessions付きのままhandleSaveに渡す（App.jsで処理）
           onClose();
         }}>保存</Btn>
       </div>
