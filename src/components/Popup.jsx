@@ -19,7 +19,23 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
     endDate: task.endDate||"",     endTime: s0.endTime||"",
     deadlineDate: task.deadlineDate||"", deadlineTime: task.deadlineTime||"",
   });
-  const ovInp = (k,v) => setOv(p=>({...p,[k]:v}));
+  const ovInp = (k,v) => {
+    if (k === "startDate") {
+      setOv(p => {
+        const prevStart = p.startDate || "";
+        const prevEnd = p.endDate || "";
+        let newEnd = v;
+        if (prevStart && prevEnd && prevEnd >= prevStart) {
+          const diff = (new Date(prevEnd) - new Date(prevStart)) / 86400000;
+          const d = new Date(v); d.setDate(d.getDate() + Math.round(diff));
+          newEnd = d.toISOString().slice(0,10);
+        }
+        return {...p, startDate:v, endDate:newEnd};
+      });
+    } else {
+      setOv(p=>({...p,[k]:v}));
+    }
+  };
   const inpStyle = {background:C.bgSub,color:C.text,padding:"3px 6px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:10,width:"100%"};
   return (
     <div onClick={onClose} style={{position:"fixed",inset:0,zIndex:500}}>
@@ -103,7 +119,15 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
               <div style={{background:C.bg,borderRadius:8,padding:"8px 9px",border:`1px solid ${C.success}44`}}>
                 <div style={{fontSize:9,fontWeight:700,color:C.success,marginBottom:6}}>📆 時間枠を追加</div>
                 <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:3,marginBottom:6}}>
-                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始日</div><input type="date" value={newSession.startDate} onChange={e=>setNewSession(p=>({...p,startDate:e.target.value,endDate:p.endDate||e.target.value}))} style={inpStyle}/></div>
+                  <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始日</div><input type="date" value={newSession.startDate} onChange={e=>{
+  const nv=e.target.value;
+  setNewSession(p=>{
+    const prevS=p.startDate||"", prevE=p.endDate||"";
+    let ne=nv;
+    if(prevS&&prevE&&prevE>=prevS){const diff=(new Date(prevE)-new Date(prevS))/86400000;const d=new Date(nv);d.setDate(d.getDate()+Math.round(diff));ne=d.toISOString().slice(0,10);}
+    return {...p,startDate:nv,endDate:ne};
+  });
+}} style={inpStyle}/></div>
                   <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>開始時刻</div><input type="time" value={newSession.startTime} onChange={e=>setNewSession(p=>({...p,startTime:e.target.value}))} style={inpStyle}/></div>
                   <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了日</div><input type="date" value={newSession.endDate} onChange={e=>setNewSession(p=>({...p,endDate:e.target.value}))} style={inpStyle}/></div>
                   <div><div style={{fontSize:8,color:C.textMuted,marginBottom:2}}>終了時刻</div><input type="time" value={newSession.endTime} onChange={e=>setNewSession(p=>({...p,endTime:e.target.value}))} style={inpStyle}/></div>

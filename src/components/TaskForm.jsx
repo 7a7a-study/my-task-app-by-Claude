@@ -307,7 +307,19 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
                   <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
                     <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>開始</span>
                     <input type="date" value={s.startDate}
-                      onChange={e=>{updateSession(0,"startDate",e.target.value); const s0=(f._sessions||[])[0]||{}; if(!s0.endDate) updateSession(0,"endDate",e.target.value);}}
+                      onChange={e=>{
+  const newStart = e.target.value;
+  const s0 = (f._sessions||[])[0]||{};
+  const prevStart = s0.startDate || "";
+  const prevEnd = s0.endDate || "";
+  let newEnd = newStart;
+  if (prevStart && prevEnd && prevEnd >= prevStart) {
+    const diff = (new Date(prevEnd) - new Date(prevStart)) / 86400000;
+    const d = new Date(newStart); d.setDate(d.getDate() + Math.round(diff));
+    newEnd = d.toISOString().slice(0,10);
+  }
+  setF(p => { const ns = (p._sessions||[]).map((s,i) => i===0 ? {...s, startDate:newStart, endDate:newEnd} : s); return {...p, _sessions:ns}; });
+}}
                       style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime} onChange={e=>hSt(e.target.value)}
                       style={{flex:"0 0 76px",background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
@@ -332,7 +344,19 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
                 <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:3}}>
                     <span style={{fontSize:8,color:C.textMuted,width:16,flexShrink:0}}>開始</span>
                     <input type="date" value={s.startDate}
-                      onChange={e=>{updateSession(i,"startDate",e.target.value); const si=(f._sessions||[])[i]||{}; if(!si.endDate) updateSession(i,"endDate",e.target.value);}}
+                      onChange={e=>{
+  const newStart = e.target.value;
+  const si = (f._sessions||[])[i]||{};
+  const prevStart = si.startDate || "";
+  const prevEnd = si.endDate || "";
+  let newEnd = newStart;
+  if (prevStart && prevEnd && prevEnd >= prevStart) {
+    const diff = (new Date(prevEnd) - new Date(prevStart)) / 86400000;
+    const d = new Date(newStart); d.setDate(d.getDate() + Math.round(diff));
+    newEnd = d.toISOString().slice(0,10);
+  }
+  setF(p => { const ns = (p._sessions||[]).map((s,j) => j===i ? {...s, startDate:newStart, endDate:newEnd} : s); return {...p, _sessions:ns}; });
+}}
                       style={{flex:"1 1 0",minWidth:90,background:"transparent",color:C.text,padding:"4px 5px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:11}}/>
                     <input type="time" value={s.startTime}
                       onChange={e=>updateSession(i,"startTime",e.target.value)}
@@ -356,7 +380,7 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
       </div>
       {/* ── 見積もり所要時間 ── */}
       <div style={{background:C.bgSub,borderRadius:8,padding:9,marginBottom:8,display:"flex",alignItems:"center",gap:8}}>
-        <div style={{fontSize:9,fontWeight:700,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 見積もり所要時間（分）</div>
+        <div style={{fontSize:9,fontWeight:700,color:C.textMuted,whiteSpace:"nowrap"}}>⏱ 所要時間（分）</div>
         <input type="number" min="0" value={f.duration} onChange={e=>hDur(e.target.value)} placeholder="60"
           style={{width:80,background:C.surface,color:C.text,padding:"5px 7px",borderRadius:5,border:`1px solid ${C.border}`,fontSize:12}}/>
       </div>
