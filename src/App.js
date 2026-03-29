@@ -195,22 +195,23 @@ export default function App() {
 
   const handleSave = f => {
     const {_sessions, ...fStripped} = f;
+    const sessions = (_sessions||[])
+      .filter(s => s.startDate || s.date || s.startTime)
+      .map(s => ({
+        id: s.id,
+        startDate: s.startDate || s.date || "",
+        date:      s.startDate || s.date || "",  // 旧フィールド互換
+        startTime: s.startTime || "",
+        endDate:   s.endDate || "",
+        endTime:   s.endTime || "",
+      }));
     const fw = {
       ...fStripped,
       startDate: "",
       startTime: "",
       endTime: "",
-      isLater: isLaterTask(fStripped),
-      sessions: (_sessions||[])
-        .filter(s => s.startDate || s.date || s.startTime)
-        .map(s => ({
-          id: s.id,
-          startDate: s.startDate || s.date || "",
-          date:      s.startDate || s.date || "",  // 旧フィールド互換
-          startTime: s.startTime || "",
-          endDate:   s.endDate || "",
-          endTime:   s.endTime || "",
-        })),
+      sessions,
+      isLater: isLaterTask({...fStripped, sessions}),  // sessions確定後に判定
     };
     let nt;
     const isExisting = editTask && flatten(tasks).some(t => t.id === editTask.id);
