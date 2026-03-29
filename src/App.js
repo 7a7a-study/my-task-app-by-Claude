@@ -194,8 +194,10 @@ export default function App() {
   const addChild      = (ts, pid, c) => ts.map(t => t.id === pid ? {...t, children: [...(t.children || []), c]} : {...t, children: addChild(t.children || [], pid, c)});
 
   const handleSave = f => {
+    // TaskFormは _sessions か sessions（展開済み）のどちらかで渡してくる
     const {_sessions, ...fStripped} = f;
-    const sessions = (_sessions||[])
+    const rawSessions = _sessions ?? fStripped.sessions ?? [];
+    const sessions = rawSessions
       .filter(s => s.startDate || s.date || s.startTime)
       .map(s => ({
         id: s.id,
