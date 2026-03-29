@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { C } from "../constants";
-import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m } from "../utils";
+import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, getTasksForDate } from "../utils";
 import { Popup } from "../components/Popup";
 
 export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd}) => {
@@ -37,9 +37,10 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   const laterTasks = all.filter(t => (t.isLater || isLaterTask(t)) && !t.done);
 
-  // 子タグのみ表示
-  const tagStats = tags.filter(t => t.parentId && !t.archived).map(tag => {
-    const tt = nonRep.filter(t => t.tags?.includes(tag.id));
+  // 親タグのみ表示
+  const tagStats = tags.filter(t => !t.parentId && !t.archived).map(tag => {
+    const childTagIds = tags.filter(c => c.parentId === tag.id).map(c => c.id);
+    const tt = nonRep.filter(t => t.tags?.includes(tag.id) || childTagIds.some(cid => t.tags?.includes(cid)));
     const td = tt.filter(t => t.done).length;
     return {...tag, total: tt.length, done: td, pct: tt.length ? Math.round(td / tt.length * 100) : 0};
   }).filter(t => t.total > 0);
@@ -64,34 +65,28 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const HH = 60 * PPM;
   const dayStartMin = DAY_START * 60;
 
-  // タイムライン: 時刻付き / 未設定
-  const timedTasks   = todayTasks.filter(t => t.startTime);
-  const untimedTasks = todayTasks.filter(t => !t.startTime);
+  // タイムライン: DayViewと同じくgetTasksForDateから取得
+  const tlTasks      = getTasksForDate ? getTasksForDate(tasks, today) : todayTasks;
+  const timedTasks   = tlTasks.filter(t => t.startTime);
+  const untimedTasks = tlTasks.filter(t => !t.startTime);
 
-  // 簡易overlap計算
+  // DayViewと同じ方式: 時間 or 表示が重なるチップを横分割
+  const PPM_DB = PPM;
   const calcOverlap = (timed) => {
-    const endCols = [];
-    const res = timed.map(t => ({...t}));
-    res.forEach(t => {
+    const chips = timed.map(t => {
       const s = t2m(t.startTime)||0;
       const e = t.endTime ? t2m(t.endTime) : s+(Number(t.duration)||60);
-      let col = 0;
-      while (endCols[col] && endCols[col] > s) col++;
-      endCols[col] = e;
-      t._col = col;
+      const dispH = Math.max(20, (e-s)*PPM_DB);
+      return {...t, _sm:s, _em:e, _dispEnd: s + dispH/PPM_DB};
     });
-    res.forEach(t => {
-      const s = t2m(t.startTime)||0;
-      const e = t.endTime ? t2m(t.endTime) : s+(Number(t.duration)||60);
-      let maxCols = 1;
-      res.forEach(u => {
-        const us = t2m(u.startTime)||0;
-        const ue = u.endTime ? t2m(u.endTime) : us+(Number(u.duration)||60);
-        if (us < e && ue > s) maxCols = Math.max(maxCols, u._col+1);
-      });
-      t._totalCols = maxCols;
+    return chips.map((chip, i) => {
+      const group = chips.map((_,j)=>j).filter(j =>
+        chips[j]._sm < chip._dispEnd && chips[j]._dispEnd > chip._sm
+      );
+      const totalCols = group.length;
+      const col = group.indexOf(i);
+      return {...chip, _col: col, _totalCols: totalCols};
     });
-    return res;
   };
   const timedWithCols = calcOverlap(timedTasks);
 
@@ -173,17 +168,30 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
             const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
             return (
-              <div key={t.id} onClick={e2=>openPopup(e2,t)}
+              <div key={t._sessionId||t.id} onClick={e2=>openPopup(e2,t)}
                 style={{position:"absolute",top:top,left:`calc(26px + ${colL})`,
                   width:`calc(${colW} - 3px)`,height:h2,
                   background:isDone?C.border+"38":c+"22",
                   borderLeft:`3px solid ${isDone?C.textMuted:c}`,
                   borderRadius:"0 5px 5px 0",overflow:"hidden",cursor:"pointer",
-                  opacity:isDone?.5:1,zIndex:2,padding:"2px 4px"}}>
-                <div style={{fontSize:9,color:isDone?C.textMuted:c,fontWeight:600,
-                  whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
-                  textDecoration:isDone?"line-through":"none"}}>
-                  {t.startTime}{t.endTime?`〜${t.endTime}`:""} {t.title}
+                  opacity:isDone?.5:1,zIndex:2,padding:"2px 4px",display:"flex",flexDirection:"column"}}>
+                <div style={{display:"flex",alignItems:"center",gap:3,flex:1,minHeight:0}}>
+                  <div onClick={e2=>{e2.stopPropagation();hToggle(t.id);}}
+                    style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
+                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer",
+                      display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {isDone && <span style={{color:"#fff",fontSize:5,fontWeight:900,lineHeight:1}}>✓</span>}
+                  </div>
+                  <div style={{flex:1,minWidth:0}}>
+                    <div style={{fontSize:8,color:isDone?C.textMuted:c,opacity:.9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {t.startTime}{t.endTime?`〜${t.endTime}`:""}
+                    </div>
+                    <div style={{fontSize:9,fontWeight:600,color:isDone?C.textMuted:c,
+                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
+                      textDecoration:isDone?"line-through":"none"}}>
+                      {t.title}
+                    </div>
+                  </div>
                 </div>
               </div>
             );

@@ -47,10 +47,17 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
       const y = ev.clientY||(ev.touches?.[0]?.clientY)||0;
       const nd = Math.max(15,Math.round((rsDur.current+(y-rsY.current)/PPM)/15)*15);
       const t = rsTask.current;
-      const newEnd = t.startTime ? addDur(t.startTime, nd) : "";
+      // _sessionId がある場合はそのsessionを更新、なければ sessions[0]
+      const targetSId = t._sessionId;
       const newSessions = (t.sessions||[]).length > 0
-        ? t.sessions.map((s,i) => i===0 ? {...s, endTime:newEnd} : s)
+        ? t.sessions.map(s => {
+            const isTarget = targetSId ? s.id === targetSId : t.sessions.indexOf(s) === 0;
+            if (!isTarget) return s;
+            const newEnd2 = s.startTime ? addDur(s.startTime, nd) : "";
+            return {...s, endTime:newEnd2};
+          })
         : t.sessions;
+      const newEnd = newSessions.find(s => targetSId ? s.id===targetSId : true)?.endTime || "";
       onUpdate({...t, duration:String(nd), endTime:newEnd, sessions:newSessions});
     };
     const up = () => { rsRef.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); document.removeEventListener("touchmove",mv); document.removeEventListener("touchend",up); };
@@ -212,7 +219,11 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   return {t, c, sm, em, isDone};
                 });
                 const assigned = chips.map((chip, i) => {
-                  const group = chips.map((_,j) => j).filter(j => chips[j].sm < chip.em && chips[j].em > chip.sm);
+                  const chipDispEnd = chip.sm + Math.max(22, (chip.em - chip.sm) * PPM) / PPM;
+                  const group = chips.map((chip2, j) => {
+                    const c2DispEnd = chip2.sm + Math.max(22, (chip2.em - chip2.sm) * PPM) / PPM;
+                    return (chip2.sm < chipDispEnd && c2DispEnd > chip.sm) ? j : -1;
+                  }).filter(j => j !== -1);
                   const totalCols = group.length;
                   const col = group.indexOf(i);
                   return {...chip, col, totalCols};
