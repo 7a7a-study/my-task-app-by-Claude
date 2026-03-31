@@ -4,9 +4,11 @@ import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDat
 import { TimelineChip } from "./ListView";
 import { Popup } from "../components/Popup";
 
-export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate}) => {
+export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask}) => {
   const [isPC, setIsPC] = useState(window.innerWidth >= 768);
   const [popup, setPopup] = useState(null);
+  const [dropH, setDropH] = useState(null);
+  const [dropH, setDropH] = useState(null);
   useEffect(() => {
     const fn = () => setIsPC(window.innerWidth >= 768);
     window.addEventListener("resize", fn);
@@ -78,6 +80,25 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const HH = 60 * PPM;
   const dayStartMin = DAY_START * 60;
 
+  const hDrop = (e, relY) => {
+    e.preventDefault(); setDropH(null);
+    const totalMin = Math.floor(relY / PPM) + DAY_START * 60;
+    const snapped  = Math.round(totalMin / 15) * 15;
+    const clampMin = Math.max(DAY_START * 60, Math.min((DAY_END - 1) * 60, snapped));
+    const hh = Math.floor(clampMin / 60);
+    const mm = clampMin % 60;
+    const st = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+    const tid = e.dataTransfer?.getData("taskId")||e.dataTransfer?.getData("laterTaskId");
+    const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
+    if (!t) { onAdd&&onAdd(today, hh); return; }
+    const et = t.duration ? addDur(st, Number(t.duration)) : "";
+    const newSessions = (t.sessions||[]).length > 0
+      ? t.sessions.map((s,i) => i===0 ? {...s, date:today, startDate:today, startTime:st, endTime:et} : s)
+      : [{id:"s_main", date:today, startDate:today, startTime:st, endTime:et}];
+    onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
+    setDragTask&&setDragTask(null);
+  };
+
   // タイムライン: DayViewと同じくgetTasksForDateから取得
   const tlTasks        = getTasksForDate ? getTasksForDate(tasks, today) : todayTasks;
   const deadlineTasks  = getDeadlineTasksForDate(tasks, today);
@@ -110,7 +131,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   };
   const timedWithCols = calcOverlap(timedTasks);
 
-  const MiniRow = ({task, showDate}) => {
+  const MiniRow = ({task, showDate, draggable: isDraggable}) => {
     const c = tags.find(tg => task.tags?.includes(tg.id))?.color || C.accent;
     const childTag = tags.find(tg => task.tags?.includes(tg.id) && tg.parentId);
     const isOver = task.deadlineDate && task.deadlineDate < today && !task.done;
@@ -119,7 +140,10 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       : task.done;
     return (
       <div style={{display:"flex",alignItems:"center",gap:7,padding:"5px 0",
-        borderBottom:`1px solid ${C.border}18`,cursor:"pointer",opacity:isDone?.55:1}}
+        borderBottom:`1px solid ${C.border}18`,cursor:isDraggable?"grab":"pointer",opacity:isDone?.55:1}}
+        draggable={!!isDraggable}
+        onDragStart={isDraggable ? e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);setDragTask&&setDragTask(task);} : undefined}
+        onDragEnd={isDraggable ? ()=>setDragTask&&setDragTask(null) : undefined}
         onClick={e=>openPopup(e,task)}>
         <div onClick={e=>{e.stopPropagation();hToggle(task.id);}}
           style={{width:12,height:12,borderRadius:3,border:`2px solid ${isDone?c:C.border}`,
@@ -193,6 +217,25 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
   }, [onUpdate]);
 
+  const hDropDB = (e, relY) => {
+    e.preventDefault(); setDropH(null);
+    const totalMin = Math.floor(relY / PPM) + DAY_START * 60;
+    const snapped  = Math.round(totalMin / 15) * 15;
+    const clampMin = Math.max(DAY_START * 60, Math.min((DAY_END - 1) * 60, snapped));
+    const hh = Math.floor(clampMin / 60);
+    const mm = clampMin % 60;
+    const st = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
+    const tid = e.dataTransfer?.getData("taskId")||e.dataTransfer?.getData("laterTaskId");
+    const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
+    if (!t) return;
+    const et = t.duration ? addDur(st, Number(t.duration)) : "";
+    const newSessions = (t.sessions||[]).length > 0
+      ? t.sessions.map((s,i) => i===0 ? {...s, date:today, startDate:today, startTime:st, endTime:et} : s)
+      : [{id:"s_main", date:today, startDate:today, startTime:st, endTime:et}];
+    onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
+    setDragTask&&setDragTask(null);
+  };
+
   const PCTimeline = () => {
     const now = new Date();
     const nowMin = now.getHours()*60+now.getMinutes();
@@ -248,8 +291,12 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               </div>
             ))}
           </div>
-          {/* チップエリア */}
-          <div style={{position:"relative",borderLeft:`1px solid ${C.border}44`}}>
+          {/* チップエリア（ドロップゾーン） */}
+          <div style={{position:"relative",borderLeft:`1px solid ${C.border}44`}}
+            onDragOver={e=>{e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();const snapped=Math.round((Math.floor((e.clientY-rect.top)/PPM)+DAY_START*60)/15)*15;setDropH(Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped)));}}
+            onDragLeave={()=>setDropH(null)}
+            onDrop={e=>{const rect=e.currentTarget.getBoundingClientRect();hDropDB(e,e.clientY-rect.top);}}
+            onClick={e=>{if(e.target===e.currentTarget||e.target.dataset.bg){const rect=e.currentTarget.getBoundingClientRect();const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));onAdd&&onAdd(today,h);}}}>
             {Array.from({length:DAY_END-DAY_START},(_,i)=>(
               <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`}}/>
             ))}
@@ -271,6 +318,24 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                 height:1.5,background:C.danger,zIndex:5,pointerEvents:"none"}}>
                 <div style={{width:5,height:5,borderRadius:"50%",background:C.danger,
                   position:"absolute",left:-2,top:-2}}/>
+              </div>
+            )}
+            {/* ドロップ位置インジケーター */}
+            {dropH!==null && (
+              <div style={{position:"absolute",top:(dropH-dayStartMin)*PPM,left:0,right:0,height:HH,
+                background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:10,color:C.accent,pointerEvents:"none",zIndex:6}}>
+                {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}{dragTask?` ← ${dragTask.title}`:""}
+              </div>
+            )}
+            {dropH!==null && (
+              <div style={{position:"absolute",top:(dropH-DAY_START*60)*PPM,left:0,right:0,height:HH,
+                background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,
+                display:"flex",alignItems:"center",justifyContent:"center",
+                fontSize:10,color:C.accent,pointerEvents:"none",zIndex:1}}>
+                {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}
+                {dragTask?` ← ${dragTask.title}`:""}
               </div>
             )}
             {/* 締切ライン */}
@@ -388,13 +453,13 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                 {overdue.length>0&&(
                   <div>
                     <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
-                    {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                    {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
                   </div>
                 )}
                 {overdueScheduled.length>0&&(
                   <div>
                     <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過</div>
-                    {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                    {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
                   </div>
                 )}
               </div>
@@ -420,7 +485,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           <div style={{flex:1,overflowY:"auto"}}>
             {laterTasks.length===0
               ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>あとでやるなし</div>
-              : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+              : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
           </div>
         </div>
       </div>
@@ -459,13 +524,13 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           {overdue.length>0&&(
             <div style={{marginBottom:6}}>
               <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
-              {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+              {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
             </div>
           )}
           {overdueScheduled.length>0&&(
             <div>
               <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過</div>
-              {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+              {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
             </div>
           )}
         </div>
@@ -485,7 +550,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
         {laterTasks.length===0
           ? <div style={{fontSize:11,color:C.textMuted}}>あとでやるなし</div>
-          : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+          : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
       </div>
       {/* 進捗関連 */}
       <div style={cardStyle(C.accent)}>
