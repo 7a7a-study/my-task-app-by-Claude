@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { C } from "../constants";
-import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate } from "../utils";
+import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate, getDeadlineTasksForDate } from "../utils";
 import { TimelineChip } from "./ListView";
 import { Popup } from "../components/Popup";
 
@@ -79,9 +79,16 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const dayStartMin = DAY_START * 60;
 
   // タイムライン: DayViewと同じくgetTasksForDateから取得
-  const tlTasks      = getTasksForDate ? getTasksForDate(tasks, today) : todayTasks;
-  const timedTasks   = tlTasks.filter(t => t.startTime);
-  const untimedTasks = tlTasks.filter(t => !t.startTime);
+  const tlTasks        = getTasksForDate ? getTasksForDate(tasks, today) : todayTasks;
+  const deadlineTasks  = getDeadlineTasksForDate(tasks, today);
+  const timedTasks     = tlTasks.filter(t => t.startTime);
+  const untimedTasks   = tlTasks.filter(t => !t.startTime);
+  const normalUntimed  = untimedTasks.filter(t => !t._isDeadline);
+  const deadlineUntimed = [
+    ...untimedTasks.filter(t => t._isDeadline),
+    ...deadlineTasks.filter(t => !t.deadlineTime && !tlTasks.some(s => s.id === t.id)),
+  ];
+  const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
 
   // DayViewと同じ方式: 時間 or 表示が重なるチップを横分割
   const PPM_DB = PPM;
@@ -192,6 +199,46 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const tlH = (DAY_END-DAY_START)*HH;
     return (
       <div style={{flex:1,overflowY:"auto",position:"relative",marginBottom:6}}>
+        {/* 時間未定欄（DayViewと同じ方式） */}
+        {normalUntimed.length > 0 && (
+          <div style={{padding:"5px 8px",background:C.surface,borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5}}>
+            <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:3,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
+            {normalUntimed.map(t => {
+              const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+              const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
+              return (
+                <div key={t.id} onClick={e=>openPopup(e,t)}
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                    borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 4px 4px 0",
+                    marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"pointer",opacity:isDone?.5:1}}>
+                  <div onClick={e=>{e.stopPropagation();hToggle(t.id);}}
+                    style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
+                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                  <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,
+                    textDecoration:isDone?"line-through":"none",flex:1,overflow:"hidden",
+                    whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
+                  {t.deadlineDate&&<span style={{fontSize:8,color:C.warn,marginLeft:"auto",flexShrink:0}}>⚠{fd(t.deadlineDate)}</span>}
+                </div>
+              );
+            })}
+          </div>
+        )}
+        {deadlineUntimed.length > 0 && (
+          <div style={{padding:"5px 8px",background:C.danger+"12",borderRadius:7,border:`1px solid ${C.danger}44`,marginBottom:5}}>
+            <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:3,letterSpacing:.4}}>⚠ 締切（時間未定）</div>
+            {deadlineUntimed.map(t => (
+              <div key={"dl_"+t.id} onClick={e=>openPopup(e,t)}
+                style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                  borderLeft:`3px solid ${t.done?C.textMuted:C.danger}`,borderRadius:"0 4px 4px 0",
+                  marginBottom:2,background:C.danger+(t.done?"0a":"22"),cursor:"pointer",opacity:t.done?.4:1}}>
+                <span style={{fontSize:10,fontWeight:700,color:t.done?C.textMuted:C.danger,
+                  textDecoration:t.done?"line-through":"none",flex:1,overflow:"hidden",
+                  whiteSpace:"nowrap",textOverflow:"ellipsis"}}>⚠ {t.title}</span>
+                <span style={{fontSize:8,color:t.done?C.textMuted:C.danger,marginLeft:"auto",flexShrink:0}}>{fd(t.deadlineDate)}</span>
+              </div>
+            ))}
+          </div>
+        )}
         <div style={{display:"grid",gridTemplateColumns:"26px 1fr",position:"relative",height:tlH+HH}}>
           {/* 時間軸 */}
           <div style={{position:"relative"}}>
@@ -226,14 +273,24 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                   position:"absolute",left:-2,top:-2}}/>
               </div>
             )}
+            {/* 締切ライン */}
+            {timedDeadlines.map(t => {
+              const dm = t2m(t.deadlineTime);
+              if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
+              const top = (dm - dayStartMin) * PPM;
+              return (
+                <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();openPopup(e,t);}}
+                  style={{position:"absolute",top:top-1,left:0,right:0,height:3,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
+                  title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
+                  <div style={{position:"absolute",right:2,top:-8,background:C.danger,color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:8,whiteSpace:"nowrap",pointerEvents:"none"}}>
+                    ⚠ {t.deadlineTime} {t.title}
+                  </div>
+                  <div style={{width:"100%",height:3,background:`linear-gradient(90deg,${C.danger}00,${C.danger},${C.danger}00)`}}/>
+                </div>
+              );
+            })}
           </div>
         </div>
-        {untimedTasks.length>0&&(
-          <div style={{marginTop:6,borderTop:`1px solid ${C.border}33`,paddingTop:5}}>
-            <div style={{fontSize:8,color:C.textMuted,marginBottom:3,fontWeight:700,textTransform:"uppercase",letterSpacing:.4}}>時刻未設定</div>
-            {untimedTasks.map(t=><MiniRow key={t.id} task={t} showDate={false}/>)}
-          </div>
-        )}
       </div>
     );
   };
