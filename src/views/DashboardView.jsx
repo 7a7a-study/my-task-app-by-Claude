@@ -364,61 +364,58 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               ))}
         </div>
       </div>
-      {/* ── 下段: タスク一覧 ── */}
+      {/* ── 下段: タスク一覧（左:タイムライン / 中:要対応+今後7日 / 右:あとでやる） ── */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,
         height:"calc(100vh - 230px)",minHeight:300,alignItems:"start"}}>
-        {/* 今日（タイムライン） */}
-        <div style={{...cardStyle(C.success),overflow:"hidden"}}>
+        {/* 左: 今日（タイムライン） */}
+        <div style={{...cardStyle(C.success),overflow:"hidden",height:"100%"}}>
           <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
           {todayTasks.length===0
             ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今日のタスクなし 🎉</div>
             : <PCTimeline/>}
         </div>
-        {/* 今後7日 */}
-        <div style={{...cardStyle(C.warn),overflow:"hidden"}}>
-          <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
-          {overdue.length>0&&(
-            <div style={{background:C.dangerS,borderRadius:7,padding:"6px 9px",marginBottom:8,border:`1px solid ${C.danger}33`,flexShrink:0}}>
-              <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4}}>⚠ 期限超過 ({overdue.length})</div>
-              {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+        {/* 中: 要対応（上）＋ 今後7日間（下） */}
+        <div style={{display:"flex",flexDirection:"column",gap:12,height:"100%",overflow:"hidden"}}>
+          {/* 要対応 */}
+          {(overdue.length > 0 || overdueScheduled.length > 0) ? (
+            <div style={{background:C.surface,borderRadius:12,padding:"10px 14px",border:`2px solid ${C.danger}55`,flexShrink:0,overflowY:"auto",maxHeight:"50%"}}>
+              <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+                <span style={{fontSize:14}}>🔥</span>
+                <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>要対応</span>
+                <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
+              </div>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                {overdue.length>0&&(
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
+                    {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                  </div>
+                )}
+                {overdueScheduled.length>0&&(
+                  <div>
+                    <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過</div>
+                    {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                  </div>
+                )}
+              </div>
             </div>
-          )}
-          <div style={{flex:1,overflowY:"auto"}}>
-            {upcoming.length===0&&startingIn7.length===0&&overdue.length===0
-              ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今後7日の予定なし 🎉</div>
-              : <>{upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-                  {startingIn7.length>0&&(<div style={{marginTop:8}}>
-                    <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5,paddingTop:4,borderTop:`1px solid ${C.border}33`}}>開始予定</div>
-                    {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-                  </div>)}</>}
+          ) : null}
+          {/* 今後7日間 */}
+          <div style={{...cardStyle(C.warn),overflow:"hidden",flex:1,minHeight:0}}>
+            <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
+            <div style={{flex:1,overflowY:"auto"}}>
+              {upcoming.length===0&&startingIn7.length===0&&overdue.length===0
+                ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今後7日の予定なし 🎉</div>
+                : <>{upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                    {startingIn7.length>0&&(<div style={{marginTop:8}}>
+                      <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5,paddingTop:4,borderTop:`1px solid ${C.border}33`}}>開始予定</div>
+                      {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                    </div>)}</>}
+            </div>
           </div>
         </div>
-        {/* 未完了・期限切れ */}
-        {(overdue.length > 0 || overdueScheduled.length > 0) && (
-          <div style={{gridColumn:"1 / -1",background:C.surface,borderRadius:12,padding:"10px 14px",border:`2px solid ${C.danger}55`,marginBottom:0,flexShrink:0}}>
-            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
-              <span style={{fontSize:14}}>🔥</span>
-              <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>要対応：期限・日程超過</span>
-              <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-              {overdue.length>0&&(
-                <div>
-                  <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
-                  {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-                </div>
-              )}
-              {overdueScheduled.length>0&&(
-                <div>
-                  <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過（未完了）</div>
-                  {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
-        {/* あとでやる */}
-        <div style={{...cardStyle(C.textMuted),overflow:"hidden"}}>
+        {/* 右: あとでやる */}
+        <div style={{...cardStyle(C.textMuted),overflow:"hidden",height:"100%"}}>
           <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
           <div style={{flex:1,overflowY:"auto"}}>
             {laterTasks.length===0
@@ -432,7 +429,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     );
   }
 
-  // スマホ: リスト表示
+  // スマホ: リスト表示（今日→要対応→今後7日間→あとでやる→進捗関連）
   return (
     <>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
@@ -444,6 +441,53 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           ＋ タスクを追加
         </button>
       </div>
+      {/* 今日 */}
+      <div style={cardStyle(C.success)}>
+        <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
+        {todayTasks.length===0
+          ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
+          : todayTasks.map(t=><MiniRow key={t.id} task={t} showDate={false}/>)}
+      </div>
+      {/* 要対応 */}
+      {(overdue.length > 0 || overdueScheduled.length > 0) && (
+        <div style={{background:C.surface,borderRadius:12,padding:"10px 14px",border:`2px solid ${C.danger}55`}}>
+          <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+            <span style={{fontSize:14}}>🔥</span>
+            <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>要対応</span>
+            <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
+          </div>
+          {overdue.length>0&&(
+            <div style={{marginBottom:6}}>
+              <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
+              {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+            </div>
+          )}
+          {overdueScheduled.length>0&&(
+            <div>
+              <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過</div>
+              {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+            </div>
+          )}
+        </div>
+      )}
+      {/* 今後7日間 */}
+      <div style={cardStyle(C.warn)}>
+        <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
+        {upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+        {startingIn7.length>0&&(<div style={{marginTop:8}}>
+          <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5,paddingTop:4,borderTop:`1px solid ${C.border}33`}}>開始予定</div>
+          {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+        </div>)}
+        {week7.length===0&&<div style={{fontSize:11,color:C.textMuted}}>今後7日の予定なし 🎉</div>}
+      </div>
+      {/* あとでやる */}
+      <div style={cardStyle(C.textMuted)}>
+        <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
+        {laterTasks.length===0
+          ? <div style={{fontSize:11,color:C.textMuted}}>あとでやるなし</div>
+          : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+      </div>
+      {/* 進捗関連 */}
       <div style={cardStyle(C.accent)}>
         <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
           <span style={{fontSize:28,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1}}>
@@ -452,30 +496,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           <span style={{fontSize:10,color:C.textMuted}}>{doneCnt} / {totalCnt} タスク完了</span>
         </div>
         <ProgressBar value={pct} color={C.accent} height={6}/>
-      </div>
-      <div style={cardStyle(C.success)}>
-        <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
-        {todayTasks.length===0
-          ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
-          : todayTasks.map(t=><MiniRow key={t.id} task={t} showDate={false}/>)}
-      </div>
-      <div style={cardStyle(C.warn)}>
-        <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
-        {overdue.length>0&&(
-          <div style={{background:C.dangerS,borderRadius:7,padding:"6px 9px",marginBottom:8,border:`1px solid ${C.danger}33`}}>
-            <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4}}>⚠ 期限超過 ({overdue.length})</div>
-            {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-          </div>
-        )}
-        {upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-        {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-        {week7.length===0&&<div style={{fontSize:11,color:C.textMuted}}>今後7日の予定なし 🎉</div>}
-      </div>
-      <div style={cardStyle(C.warn)}>
-        <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.warn}/>
-        {laterTasks.length===0
-          ? <div style={{fontSize:11,color:C.textMuted}}>あとでやるなし</div>
-          : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
       </div>
       {tagStats.length>0&&(
         <div style={cardStyle(C.accent)}>
