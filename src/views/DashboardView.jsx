@@ -8,7 +8,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const [isPC, setIsPC] = useState(window.innerWidth >= 768);
   const [popup, setPopup] = useState(null);
   const [dropH, setDropH] = useState(null);
-  const [dropH, setDropH] = useState(null);
   useEffect(() => {
     const fn = () => setIsPC(window.innerWidth >= 768);
     window.addEventListener("resize", fn);
@@ -327,15 +326,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                 display:"flex",alignItems:"center",justifyContent:"center",
                 fontSize:10,color:C.accent,pointerEvents:"none",zIndex:6}}>
                 {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}{dragTask?` ← ${dragTask.title}`:""}
-              </div>
-            )}
-            {dropH!==null && (
-              <div style={{position:"absolute",top:(dropH-DAY_START*60)*PPM,left:0,right:0,height:HH,
-                background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:10,color:C.accent,pointerEvents:"none",zIndex:1}}>
-                {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}
-                {dragTask?` ← ${dragTask.title}`:""}
               </div>
             )}
             {/* 締切ライン */}
