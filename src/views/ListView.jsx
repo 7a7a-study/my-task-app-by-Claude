@@ -1,4 +1,5 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
+import React from "react";
 import { C, SORTS } from "../constants";
 import { parseRepeat, isLaterTask, localDate, matchesRepeat } from "../utils";
 import { TaskRow } from "../components/TaskRow";
@@ -13,15 +14,48 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   const done = isDone !== undefined ? isDone : task.done;
   const colW = `${100 / totalCols}%`;
   const colL = `${col * 100 / totalCols}%`;
+  // タッチ環境: 長押し500msでのみドラッグ・リサイズ開始
+  const IS_TOUCH = !window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+  const lpTimer = useState(null); // [timerId, setTimerId]
+  const [lpActive, setLpActive] = useState(false);
+  const lpRef = React.useRef(null);
+  const handleTouchStart = (e) => {
+    if (!IS_TOUCH) return;
+    const touch = e.touches[0];
+    lpRef.current = setTimeout(() => {
+      setLpActive(true);
+    }, 500);
+  };
+  const handleTouchEnd = (e) => {
+    if (lpRef.current) { clearTimeout(lpRef.current); lpRef.current = null; }
+    if (!lpActive) { e.stopPropagation(); onPopup(e, task); }
+    setLpActive(false);
+  };
+  const handleTouchMove = (e) => {
+    if (!lpActive && lpRef.current) { clearTimeout(lpRef.current); lpRef.current = null; }
+  };
+  const handleRSTouchStart = (e) => {
+    if (!IS_TOUCH) { onRSStart(e, task); return; }
+    const lpT = setTimeout(() => { onRSStart(e, task); }, 500);
+    const cancel = () => { clearTimeout(lpT); document.removeEventListener("touchend", cancel); };
+    document.addEventListener("touchend", cancel, {once:true});
+    e.stopPropagation(); e.preventDefault();
+  };
   return (
-    <div className="drag" draggable
+    <div
+      draggable={!IS_TOUCH || lpActive}
       onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
-      onClick={e=>{e.stopPropagation();onPopup(e,task);}}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
+      onClick={e=>{if(IS_TOUCH)return; e.stopPropagation();onPopup(e,task);}}
       style={{position:"absolute",top,left:`calc(${colL} + 1px)`,width:`calc(${colW} - 2px)`,height:h,
         background:done?C.border+"38":color+"22",
         borderLeft:`3px solid ${done?C.textMuted:color}`,
         borderRadius:"0 5px 5px 0",overflow:"hidden",display:"flex",flexDirection:"column",
-        justifyContent:"space-between",zIndex:2,userSelect:"none",cursor:"grab",opacity:done?.5:1}}>
+        justifyContent:"space-between",zIndex:2,userSelect:"none",
+        cursor:lpActive?"grabbing":"grab",opacity:done?.5:1,
+        outline: lpActive ? `2px solid ${color}` : "none"}}>
       <div style={{padding:"2px 4px 0",flex:1,minHeight:0,overflow:"hidden"}}>
         {/* 1行目: 時間 */}
         <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:1}}>
@@ -44,7 +78,10 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
         </div>
         {h > 52 && task._pt && <div style={{fontSize:7,color:C.textMuted,paddingLeft:10}}>📁{task._pt}</div>}
       </div>
-      <div className="rh" onMouseDown={e=>onRSStart(e,task)} onTouchStart={e=>onRSStart(e,task)} onClick={e=>e.stopPropagation()}
+      <div className="rh"
+        onMouseDown={e=>{if(!IS_TOUCH){onRSStart(e,task);}}}
+        onTouchStart={handleRSTouchStart}
+        onClick={e=>e.stopPropagation()}
         style={{height:7,background:color+"30",borderTop:`1px dashed ${color}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
         <div style={{width:14,height:1.5,borderRadius:1,background:color+"88"}}/>
       </div>

@@ -1,9 +1,10 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { C } from "../constants";
-import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, getTasksForDate } from "../utils";
+import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate } from "../utils";
+import { TimelineChip } from "./ListView";
 import { Popup } from "../components/Popup";
 
-export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd}) => {
+export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate}) => {
   const [isPC, setIsPC] = useState(window.innerWidth >= 768);
   const [popup, setPopup] = useState(null);
   useEffect(() => {
@@ -27,6 +28,18 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const in7 = (() => { const d = new Date(today); d.setDate(d.getDate() + 7); return localDate(d); })();
   const overdue  = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
+  // 日時枠が今日より前にある未完了タスク（締切なし・締切は overdue に含める）
+  const overdueScheduled = nonRep.filter(t => {
+    if (t.done || t.deadlineDate) return false; // 締切あるものは overdue で扱う
+    return (t.sessions||[]).some(s => {
+      const sd = s.startDate || s.date || "";
+      return sd && sd < today;
+    });
+  }).sort((a,b) => {
+    const as = a.sessions?.[0]?.startDate || a.sessions?.[0]?.date || "";
+    const bs = b.sessions?.[0]?.startDate || b.sessions?.[0]?.date || "";
+    return as.localeCompare(bs);
+  });
   const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
   const startingIn7 = nonRep.filter(t => {
@@ -145,64 +158,75 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   });
 
   // PCタイムライン
+  // DayView と同様のリサイズ
+  const rsRefDB=useRef(false), rsTaskDB=useRef(null), rsYDB=useRef(0), rsDurDB=useRef(0);
+  const onRSStartDB = useCallback((e,task) => {
+    e.stopPropagation(); e.preventDefault();
+    rsRefDB.current=true; rsTaskDB.current=task;
+    rsYDB.current=e.clientY||(e.touches?.[0]?.clientY)||0;
+    rsDurDB.current=Number(task.duration)||60;
+    const mv = ev => {
+      if (!rsRefDB.current) return;
+      const y = ev.clientY||(ev.touches?.[0]?.clientY)||0;
+      const nd = Math.max(15, Math.round((rsDurDB.current+(y-rsYDB.current)/PPM)/15)*15);
+      const t = rsTaskDB.current;
+      const targetSId = t._sessionId;
+      const newSessions = (t.sessions||[]).length > 0
+        ? t.sessions.map(s => {
+            const isTarget = targetSId ? s.id===targetSId : t.sessions.indexOf(s)===0;
+            if (!isTarget) return s;
+            const ne = s.startTime ? addDur(s.startTime, nd) : "";
+            return {...s, endTime:ne};
+          })
+        : t.sessions;
+      const newEnd = newSessions.find(s=>targetSId?s.id===targetSId:true)?.endTime||"";
+      onUpdate&&onUpdate({...t, duration:String(nd), endTime:newEnd, sessions:newSessions});
+    };
+    const up = () => { rsRefDB.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); };
+    document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
+  }, [onUpdate]);
+
   const PCTimeline = () => {
     const now = new Date();
     const nowMin = now.getHours()*60+now.getMinutes();
     const tlH = (DAY_END-DAY_START)*HH;
     return (
       <div style={{flex:1,overflowY:"auto",position:"relative",marginBottom:6}}>
-        <div style={{position:"relative",height:tlH+HH}}>
-          {Array.from({length:DAY_END-DAY_START+1},(_,i)=>DAY_START+i).map(h=>(
-            <div key={h} style={{position:"absolute",top:(h-DAY_START)*HH,left:0,right:0,display:"flex",alignItems:"flex-start",pointerEvents:"none"}}>
-              <span style={{fontSize:8,color:C.textMuted,width:26,flexShrink:0,lineHeight:1,marginTop:-5}}>{h}:00</span>
-              <div style={{flex:1,borderTop:`1px solid ${C.border}33`}}/>
-            </div>
-          ))}
-          {timedWithCols.map(t => {
-            const s = t2m(t.startTime)||0;
-            const e = t.endTime?t2m(t.endTime):s+(Number(t.duration)||60);
-            const top = (s-dayStartMin)*PPM;
-            const h2 = Math.max(20,(e-s)*PPM);
-            const colW = `${100/t._totalCols}%`;
-            const colL = `${t._col*100/t._totalCols}%`;
-            const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-            const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
-            return (
-              <div key={t._sessionId||t.id} onClick={e2=>openPopup(e2,t)}
-                style={{position:"absolute",top:top,left:`calc(26px + ${colL})`,
-                  width:`calc(${colW} - 3px)`,height:h2,
-                  background:isDone?C.border+"38":c+"22",
-                  borderLeft:`3px solid ${isDone?C.textMuted:c}`,
-                  borderRadius:"0 5px 5px 0",overflow:"hidden",cursor:"pointer",
-                  opacity:isDone?.5:1,zIndex:2,padding:"2px 4px",display:"flex",flexDirection:"column"}}>
-                <div style={{display:"flex",alignItems:"center",gap:3,flex:1,minHeight:0}}>
-                  <div onClick={e2=>{e2.stopPropagation();hToggle(t.id);}}
-                    style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
-                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer",
-                      display:"flex",alignItems:"center",justifyContent:"center"}}>
-                    {isDone && <span style={{color:"#fff",fontSize:5,fontWeight:900,lineHeight:1}}>✓</span>}
-                  </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:8,color:isDone?C.textMuted:c,opacity:.9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
-                      {t.startTime}{t.endTime?`〜${t.endTime}`:""}
-                    </div>
-                    <div style={{fontSize:9,fontWeight:600,color:isDone?C.textMuted:c,
-                      whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",
-                      textDecoration:isDone?"line-through":"none"}}>
-                      {t.title}
-                    </div>
-                  </div>
-                </div>
+        <div style={{display:"grid",gridTemplateColumns:"26px 1fr",position:"relative",height:tlH+HH}}>
+          {/* 時間軸 */}
+          <div style={{position:"relative"}}>
+            {Array.from({length:DAY_END-DAY_START+1},(_,i)=>DAY_START+i).map(h=>(
+              <div key={h} style={{position:"absolute",top:(h-DAY_START)*HH,right:3,fontSize:8,color:C.textMuted,lineHeight:1}}>
+                {h}
               </div>
-            );
-          })}
-          {nowMin>=dayStartMin&&nowMin<=DAY_END*60&&(
-            <div style={{position:"absolute",top:(nowMin-dayStartMin)*PPM,left:0,right:0,
-              height:1.5,background:C.danger,zIndex:5,pointerEvents:"none"}}>
-              <div style={{width:5,height:5,borderRadius:"50%",background:C.danger,
-                position:"absolute",left:22,top:-2}}/>
-            </div>
-          )}
+            ))}
+          </div>
+          {/* チップエリア */}
+          <div style={{position:"relative",borderLeft:`1px solid ${C.border}44`}}>
+            {Array.from({length:DAY_END-DAY_START},(_,i)=>(
+              <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`}}/>
+            ))}
+            {timedWithCols.map(t => {
+              const sm = t2m(t.startTime)||0;
+              const em = t.endTime?t2m(t.endTime):sm+(Number(t.duration)||60);
+              const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+              const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
+              const col = t._col||0, totalCols = t._totalCols||1;
+              return (
+                <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
+                  startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
+                  onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
+                  onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}/>
+              );
+            })}
+            {nowMin>=dayStartMin&&nowMin<=DAY_END*60&&(
+              <div style={{position:"absolute",top:(nowMin-dayStartMin)*PPM,left:0,right:0,
+                height:1.5,background:C.danger,zIndex:5,pointerEvents:"none"}}>
+                <div style={{width:5,height:5,borderRadius:"50%",background:C.danger,
+                  position:"absolute",left:-2,top:-2}}/>
+              </div>
+            )}
+          </div>
         </div>
         {untimedTasks.length>0&&(
           <div style={{marginTop:6,borderTop:`1px solid ${C.border}33`,paddingTop:5}}>
@@ -285,7 +309,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       </div>
       {/* ── 下段: タスク一覧 ── */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,
-        height:"calc(100vh - 230px)",minHeight:300}}>
+        height:"calc(100vh - 230px)",minHeight:300,alignItems:"start"}}>
         {/* 今日（タイムライン） */}
         <div style={{...cardStyle(C.success),overflow:"hidden"}}>
           <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
@@ -312,6 +336,30 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                   </div>)}</>}
           </div>
         </div>
+        {/* 未完了・期限切れ */}
+        {(overdue.length > 0 || overdueScheduled.length > 0) && (
+          <div style={{gridColumn:"1 / -1",background:C.surface,borderRadius:12,padding:"10px 14px",border:`2px solid ${C.danger}55`,marginBottom:0,flexShrink:0}}>
+            <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
+              <span style={{fontSize:14}}>🔥</span>
+              <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>要対応：期限・日程超過</span>
+              <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              {overdue.length>0&&(
+                <div>
+                  <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
+                  {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                </div>
+              )}
+              {overdueScheduled.length>0&&(
+                <div>
+                  <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過（未完了）</div>
+                  {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {/* あとでやる */}
         <div style={{...cardStyle(C.textMuted),overflow:"hidden"}}>
           <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>

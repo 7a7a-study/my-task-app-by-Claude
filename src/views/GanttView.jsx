@@ -16,7 +16,7 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
   const DW  = 30;
   const RH  = 28;
   const all = flatten(tasks);
-  const vis = all.filter(t => ((t.sessions||[]).some(s=>s.date) || t.endDate || t.deadlineDate) && !(t.isLater||isLaterTask(t)) && !(hideCompleted&&t.done));
+  const vis = all.filter(t => ((t.sessions||[]).some(s=>s.startDate||s.date) || t.endDate || t.deadlineDate) && !(t.isLater||isLaterTask(t)) && !(hideCompleted&&t.done));
 
   useEffect(() => { fetchHolidays(vy).then(()=>setHolReady(true)); }, [vy]);
 
@@ -31,9 +31,11 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
   }, [vis.map(t=>t.id+t.done+(t.sessions?.[0]?.date||"")+t.endDate+t.deadlineDate).join(), tags.map(t=>t.id).join()]);
 
   const getBar = task => {
-    const sd = task.sessions?.[0]?.date;
-    const s = sd ? new Date(sd) : null;
-    const e = task.endDate ? new Date(task.endDate) : s;
+    const s0 = task.sessions?.[0] || {};
+    const sdStr = s0.startDate || s0.date;  // 旧フィールド互換
+    const edStr = s0.endDate || task.endDate;  // 旧フィールド互換
+    const s = sdStr ? new Date(sdStr) : null;
+    const e = edStr ? new Date(edStr) : s;
     if (!s) return null;
     const ms=new Date(vy,vm,1), me=new Date(vy,vm,D);
     if (e<ms||s>me) return null;
@@ -43,10 +45,11 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
   const getSessionSegs = task => {
     if (!(task.sessions||[]).length) return [];
     return (task.sessions||[]).filter(s=>{
-      if (!s.date) return false;
-      const d=new Date(s.date);
+      const sd = s.startDate || s.date;
+      if (!sd) return false;
+      const d=new Date(sd);
       return d.getFullYear()===vy && d.getMonth()===vm;
-    }).map(s=>({day:new Date(s.date).getDate(), s}));
+    }).map(s=>({day:new Date(s.startDate||s.date).getDate(), s}));
   };
   const getDL = task => {
     if (!task.deadlineDate) return null;
@@ -69,17 +72,17 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
     if (dragBar) {
       const diff=n-dragBar.startDay, t=dragBar.task;
       const shSessions = (sessions) => sessions.map((s,i) => {
-        if (i !== 0 || !s.date) return s;
-        const dt=new Date(s.date); dt.setDate(dt.getDate()+diff); return {...s,date:localDate(dt)};
+        if (i !== 0 || !(s.startDate||s.date)) return s;
+        const sd=s.startDate||s.date; const dt=new Date(sd); dt.setDate(dt.getDate()+diff); const nd=localDate(dt); return {...s,startDate:nd,date:nd};
       });
-      onUpdate({...t, sessions:shSessions(t.sessions||[]), endDate: t.endDate?(()=>{const dt=new Date(t.endDate);dt.setDate(dt.getDate()+diff);return localDate(dt);})():t.endDate, isLater:false});
+      onUpdate({...t, sessions:shSessions(t.sessions||[]), endDate: (t.sessions?.[0]?.endDate||t.endDate)?(()=>{const ed=t.sessions?.[0]?.endDate||t.endDate;const dt=new Date(ed);dt.setDate(dt.getDate()+diff);return localDate(dt);})():(t.sessions?.[0]?.endDate||t.endDate), isLater:false});
       setDragBar(null); return;
     }
     const tid=e.dataTransfer.getData("taskId")||e.dataTransfer.getData("laterTaskId");
     const t=tid?all.find(x=>x.id===tid)||dragTask:dragTask;
     if (t) {
       const newSessions = (t.sessions||[]).length > 0
-        ? t.sessions.map((s,i) => i===0 ? {...s, date:ds(n)} : s)
+        ? t.sessions.map((s,i) => i===0 ? {...s, startDate:ds(n), date:ds(n)} : s)
         : [{id:"s_main", date:ds(n), startTime:"", endTime:""}];
       onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
       setDragTask(null);
@@ -102,6 +105,14 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
     document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
     document.addEventListener("touchmove",mv,{passive:false}); document.addEventListener("touchend",up);
   }, [onUpdate]);
+  const IS_TOUCH_G = !window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+  const onBRSTouch = useCallback((e, task, barW) => {
+    if (!IS_TOUCH_G) { onBRS(e, task, barW); return; }
+    e.stopPropagation(); e.preventDefault();
+    const lpT = setTimeout(() => onBRS(e, task, barW), 500);
+    const cancel = () => clearTimeout(lpT);
+    document.addEventListener("touchend", cancel, {once:true});
+  }, [onBRS, IS_TOUCH_G]);
 
   const renderTaskRow = (task, ri, gc, indent=0) => {
     const bar = getBar(task);
@@ -130,7 +141,7 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
           onDrop={e=>{const n=Math.ceil(e.nativeEvent.offsetX/DW);hDrop(e,Math.max(1,Math.min(D,n)));}}>
           {todD && <div style={{position:"absolute",left:(todD-1)*DW+DW/2,top:0,bottom:0,width:2,background:`${C.accent}55`,pointerEvents:"none",zIndex:1}}/>}
           {bar && (
-            <div draggable
+            <div draggable={!IS_TOUCH_G}
               onDragStart={e=>{e.stopPropagation();e.dataTransfer.effectAllowed="move";setDragBar({task,startDay:bar.startDay});}}
               onDragEnd={()=>{setDragBar(null);setDropDay(null);}}
               onClick={e=>hp(e,task)}
@@ -139,7 +150,7 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
                 ? <span style={{fontSize:7,fontWeight:700,opacity:.9}}>{task.startTime}{task.endTime?`–${task.endTime}`:""}</span>
                 : (bar.width>1 ? task.title.slice(0,16) : "")
               }
-              <div className="ew" onMouseDown={e=>onBRS(e,task,bar.width)} onTouchStart={e=>onBRS(e,task,bar.width)} onClick={e=>e.stopPropagation()}
+              <div className="ew" onMouseDown={e=>{if(!IS_TOUCH_G)onBRS(e,task,bar.width);}} onTouchStart={e=>onBRSTouch(e,task,bar.width)} onClick={e=>e.stopPropagation()}
                 style={{position:"absolute",right:0,top:0,bottom:0,width:6,background:`${c}55`,borderRadius:"0 3px 3px 0",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <div style={{width:1.5,height:7,background:"rgba(255,255,255,.5)",borderRadius:1}}/>
               </div>
@@ -147,8 +158,8 @@ export const GanttView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDel
           )}
           {segs.map(({day,s},si)=>(
             <div key={s.id||si}
-              onClick={e=>hp(e,task,s.date)}
-              title={`${s.date} ${s.startTime}–${s.endTime}`}
+              onClick={e=>hp(e,task,s.startDate||s.date)}
+              title={`${s.startDate||s.date} ${s.startTime}–${s.endTime}`}
               style={{position:"absolute",left:(day-1)*DW+1,width:Math.max(DW-2,8),height:isParent?18:13,top:(RH-(isParent?18:13))/2,background:task.done?C.border+"44":`${c}88`,border:`1.5px solid ${c}`,borderRadius:4,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",overflow:"hidden"}}>
               <span style={{fontSize:7,color:task.done?C.textMuted:"#fff",fontWeight:700,lineHeight:1,padding:"0 2px",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
                 {s.startTime}
