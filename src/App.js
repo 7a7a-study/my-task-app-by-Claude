@@ -339,10 +339,11 @@ export default function App() {
   const activeCnt = nonRepeat.filter(t => !t.done).length;
   const pct       = totalCnt > 0 ? Math.round((doneCnt / totalCnt) * 100) : 0;
 
+  const isPC = window.innerWidth >= 768;
   const NAV = [
     {id: "dashboard", label: "ダッシュボード", icon: "◈"},
     {id: "list",      label: "リスト",         icon: "☰"},
-    {id: "day",       label: "日",             icon: "📆"},
+    ...(isPC ? [] : [{id: "day", label: "日", icon: "📆"}]),
     {id: "week",      label: "週",             icon: "📅"},
     {id: "gantt",     label: "ガント",         icon: "📊"},
     {id: "templates", label: "テンプレート",   icon: "📋"},
