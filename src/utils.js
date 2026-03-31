@@ -260,6 +260,8 @@ const sessionStartDate = s => s.startDate || s.date || "";
 // セッションがその日に表示されるか（日またぎ対応）
 const sessionCoversDate = (s, date) => {
   const sd = sessionStartDate(s);
+  // startDateなし + startTimeあり → 当日として扱う（日ビューからドラッグ配置した直後など）
+  if (!sd && s.startTime) return true;
   if (!sd) return false;
   const ed = s.endDate || sd;  // endDateなければ当日のみ
   return date >= sd && date <= ed;
@@ -299,16 +301,22 @@ export const getTasksForDate = (tasks, date) => {
             ...t,
             startDate: sd, startTime: s.startTime, endTime: s.endTime,
             endDate: s.endDate || sd,
-            duration: s.startTime && s.endTime ? String(t2m(s.endTime) - t2m(s.startTime)) : "",
+            duration: s.startTime && s.endTime
+              ? String(t2m(s.endTime) - t2m(s.startTime))
+              : (s.startTime ? (t.duration || "") : ""),  // startTimeあるがendTimeなし→タスク本体のdurationを保持
             _sessionId: s.id, _sessionOnly: (t.sessions || []).indexOf(s) > 0,
           };
         })
       ),
   ];
-  // 重複除去
+  // 重複除去: _overrideKey があるタスクは別キーで管理
   return raw.filter(t => {
     const isRepeat = t.repeat && parseRepeat(t.repeat).type !== "なし";
-    const key = t._sessionId || (isRepeat ? t.id + "_repeat" : t.id);
+    const key = t._overrideKey
+      ? t.id + "_ov_" + t._overrideKey
+      : t._sessionId
+        ? t._sessionId
+        : (isRepeat ? t.id + "_repeat" : t.id);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
