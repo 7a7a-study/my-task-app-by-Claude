@@ -28,14 +28,17 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   // 日時枠が今日より前にある未完了タスク（締切なし・締切は overdue に含める）
   const overdueScheduled = nonRep.filter(t => {
     if (t.done || t.deadlineDate) return false; // 締切あるものは overdue で扱う
-    return (t.sessions||[]).some(s => {
-      const sd = s.startDate || s.date || "";
-      return sd && sd < today;
-    });
+    const sessions = t.sessions || [];
+    if (sessions.length === 0) return false;
+    // 未来の枠が1つでもあれば超過扱いしない（案Z: クイックボタンで未来枠を追加すれば消える）
+    const hasFuture = sessions.some(s => { const sd = s.startDate || s.date || ""; return sd >= today; });
+    if (hasFuture) return false;
+    // 全セッションが今日より前 = 最終セッション日が今日以前
+    return sessions.some(s => { const sd = s.startDate || s.date || ""; return sd && sd < today; });
   }).sort((a,b) => {
-    const as = a.sessions?.[0]?.startDate || a.sessions?.[0]?.date || "";
-    const bs = b.sessions?.[0]?.startDate || b.sessions?.[0]?.date || "";
-    return as.localeCompare(bs);
+    // 最終セッション日でソート
+    const lastDate = t => [...(t.sessions||[])].map(s => s.startDate||s.date||"").sort().pop() || "";
+    return lastDate(a).localeCompare(lastDate(b));
   });
   const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
@@ -125,7 +128,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     });
   }, [timedTasks]); // eslint-disable-line
 
-  const MiniRow = ({task, showDate, draggable: isDraggable, showQuick}) => {
+  const MiniRow = ({task, showDate, draggable: isDraggable, showQuick, showQuickOverwrite}) => {
     const c = tags.find(tg => task.tags?.includes(tg.id))?.color || C.accent;
     const childTag = tags.find(tg => task.tags?.includes(tg.id) && tg.parentId);
     const isOver = task.deadlineDate && task.deadlineDate < today && !task.done;
@@ -161,7 +164,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               {isOver?"遅":"📅"}{fd(sessionDate)}
             </span>}
         </div>
-        {showQuick && !isDone && <QuickBtns task={task}/>}
+        {showQuick && !isDone && <QuickBtns task={task} mode="add"/>}
+        {showQuickOverwrite && !isDone && <QuickBtns task={task} mode="overwrite"/>}
       </div>
     );
   };
@@ -203,15 +207,36 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
   };
 
-  // クイックボタンUI（要対応・あとでやる共通）
-  const QuickBtns = ({task}) => (
-    <div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap"}}>
+  // 指定日付で「上書き」（今日タスク用: その枠の日付だけ変更・時間は維持）
+  const quickReschedule = (task, date) => {
+    if (!onUpdate) return;
+    const sid = task._sessionId;
+    let sessions;
+    if (sid) {
+      // 特定セッションの日付だけ変更（時間は維持）
+      sessions = (task.sessions||[]).map(s =>
+        s.id === sid ? {...s, startDate: date, date} : s
+      );
+    } else {
+      // sessions[0] を上書き
+      sessions = (task.sessions||[]).length > 0
+        ? task.sessions.map((s,i) => i===0 ? {...s, startDate: date, date} : s)
+        : [{id: "s_main", startDate: date, date, startTime: "", endTime: ""}];
+    }
+    onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
+  };
+
+  // クイックボタンUI
+  // mode="add": 枠を追加（日程超過・あとでやる）
+  // mode="overwrite": 枠を上書き（今日タスク）
+  const QuickBtns = ({task, mode="add", inline=false}) => (
+    <div style={{display:"flex",gap:3,marginTop:inline?0:4,flexWrap:"wrap"}}>
       {[
-        {label:"明日", fn:()=>quickSchedule(task, addDaysStr(today,1)), color:C.accent},
-        {label:"今週末", fn:()=>quickSchedule(task, nextWeekend(today)), color:C.warn},
-        {label:"来週", fn:()=>quickSchedule(task, nextWeekday(today)), color:C.info},
-      ].map(({label,fn,color})=>(
-        <button key={label} onClick={e=>{e.stopPropagation();fn();}}
+        {label:"明日", date:addDaysStr(today,1), color:C.accent},
+        {label:"今週末", date:nextWeekend(today), color:C.warn},
+        {label:"来週", date:nextWeekday(today), color:C.info},
+      ].map(({label,date,color})=>(
+        <button key={label} onClick={e=>{e.stopPropagation(); mode==="overwrite" ? quickReschedule(task,date) : quickSchedule(task,date);}}
           style={{fontSize:8,padding:"2px 6px",borderRadius:8,border:`1px solid ${color}55`,
             background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.4}}>
           {label}→
@@ -290,6 +315,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                     whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
                   {t.deadlineDate&&<span style={{fontSize:8,color:C.warn,marginLeft:"auto",flexShrink:0}}>⚠{fd(t.deadlineDate)}</span>}
                 </div>
+                {!isDone && !t.deadlineDate && <QuickBtns task={t} mode="overwrite"/>}
               );
             })}
           </div>
@@ -338,7 +364,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                 <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
                   startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
                   onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
-                  onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}/>
+                  onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}
+                  onQuickReschedule={(task,label)=>{
+                    const date = label==="明日" ? addDaysStr(today,1) : label==="今週末" ? nextWeekend(today) : nextWeekday(today);
+                    quickReschedule(task, date);
+                  }}/>
               );
             })}
             {nowMin>=dayStartMin&&nowMin<=DAY_END*60&&(
@@ -468,19 +498,14 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                 <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>日程超過</span>
                 <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
               </div>
-              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
-                {overdue.length>0&&(
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
-                    {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
+              <div>
+                {overdue.map(t=>(
+                  <div key={t.id} style={{background:C.danger+"0a",borderRadius:6,padding:"2px 6px",marginBottom:4}}>
+                    <div style={{fontSize:8,color:C.danger,fontWeight:700,marginBottom:1}}>⚠ 締切超過</div>
+                    <MiniRow task={t} showDate={true} draggable showQuick/>
                   </div>
-                )}
-                {overdueScheduled.length>0&&(
-                  <div>
-                    <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:5,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過</div>
-                    {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
-                  </div>
-                )}
+                ))}
+                {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
               </div>
             </div>
           ) : null}
@@ -530,7 +555,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
         {todayTasks.length===0
           ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
-          : todayTasks.map(t=><MiniRow key={t.id} task={t} showDate={false}/>)}
+          : todayTasks.map(t=><MiniRow key={t.id} task={t} showDate={false} showQuickOverwrite={!t.deadlineDate && !t._isDeadline}/>)}
       </div>
       {/* 日程超過 */}
       {(overdue.length > 0 || overdueScheduled.length > 0) && (
@@ -540,18 +565,13 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>日程超過</span>
             <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
           </div>
-          {overdue.length>0&&(
-            <div style={{marginBottom:6}}>
-              <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>⚠ 締切超過</div>
-              {overdue.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
+          {overdue.map(t=>(
+            <div key={t.id} style={{background:C.danger+"0a",borderRadius:6,padding:"2px 6px",marginBottom:4}}>
+              <div style={{fontSize:8,color:C.danger,fontWeight:700,marginBottom:1}}>⚠ 締切超過</div>
+              <MiniRow task={t} showDate={true} draggable showQuick/>
             </div>
-          )}
-          {overdueScheduled.length>0&&(
-            <div>
-              <div style={{fontSize:9,fontWeight:700,color:C.warn,marginBottom:4,textTransform:"uppercase",letterSpacing:.4}}>📅 日程超過</div>
-              {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
-            </div>
-          )}
+          ))}
+          {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
         </div>
       )}
       {/* 今後7日間 */}

@@ -7,7 +7,7 @@ import { TaskRow } from "../components/TaskRow";
 // ── タイムラインチップ（日/週ビューで使う時間軸上のタスクブロック）──
 // col/totalCols: overlap時の横分割位置（デフォルト0/1=全幅）
 // isDone: 繰り返しタスクの当日done判定（通常タスクはtask.doneをそのまま使う）
-export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,onToggle,onUpdate,onRSStart,col=0,totalCols=1,isDone}) => {
+export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,onPopup,onToggle,onUpdate,onRSStart,col=0,totalCols=1,isDone,onQuickReschedule}) => {
   const top  = (startMin - dayStartMin) * ppm;
   const h    = Math.max(22, (endMin - startMin) * ppm);
   const over = task.deadlineDate && !task.done && task.deadlineDate < localDate();
@@ -78,6 +78,22 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
         </div>
         {h > 52 && task._pt && <div style={{fontSize:7,color:C.textMuted,paddingLeft:10}}>📁{task._pt}</div>}
       </div>
+      {/* クイックボタン（時間あり・未完了・締切タスク以外） */}
+      {onQuickReschedule && !done && !task.deadlineDate && h > 40 && (
+        <div style={{display:"flex",gap:2,padding:"1px 4px",flexWrap:"wrap"}} onClick={e=>e.stopPropagation()}>
+          {[
+            {label:"明日", color:"#60a5fa"},
+            {label:"今週末", color:"#fbbf24"},
+            {label:"来週", color:"#a78bfa"},
+          ].map(({label,color:bc})=>(
+            <button key={label} onClick={e=>{e.stopPropagation();onQuickReschedule(task,label);}}
+              style={{fontSize:7,padding:"1px 4px",borderRadius:6,border:`1px solid ${bc}55`,
+                background:bc+"18",color:bc,cursor:"pointer",fontWeight:600,lineHeight:1.3}}>
+              {label}→
+            </button>
+          ))}
+        </div>
+      )}
       <div className="rh"
         onMouseDown={e=>{if(!IS_TOUCH){onRSStart(e,task);}}}
         onTouchStart={handleRSTouchStart}
