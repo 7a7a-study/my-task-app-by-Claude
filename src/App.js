@@ -456,7 +456,7 @@ export default function App() {
             {view === "templates" && <TemplatesView templates={templates} setTemplates={setTemplates} onUse={handleUseTemplate} tags={tags}/>}
             {view === "tagmgr"    && <TagsView tags={tags} setTags={setTags}/>}
           </div>
-          {showLater && <LaterPanel tasks={tasks} tags={tags} dragTask={dragTask} setDragTask={setDragTask} onEdit={handleEdit} onUpdate={handleUpdate}/>}
+          {showLater && <LaterPanel tasks={tasks} tags={tags} dragTask={dragTask} setDragTask={setDragTask} onEdit={handleEdit}/>}
         </div>
       </div>
 
