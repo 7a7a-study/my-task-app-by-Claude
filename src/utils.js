@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef, useCallback } from "react";
 import { C } from "./constants";
 
 // ── 日付・時刻ヘルパー ─────────────────────────────────────────────
@@ -349,3 +350,59 @@ export async function fetchHolidays(year) {
 export const isHol  = d => !!(d && HCACHE[d.slice(0,4)]?.[d]);
 export const holName = d => (d && HCACHE[d.slice(0,4)]?.[d]) || null;
 export const isRed  = d => !!(d && (new Date(d).getDay() === 0 || isHol(d)));
+
+// ── useIsPC カスタムhook ─────────────────────────────────────────────
+export const useIsPC = () => {
+  const [isPC, setIsPC] = useState(window.innerWidth >= 768);
+  useEffect(() => {
+    const fn = () => setIsPC(window.innerWidth >= 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
+  return isPC;
+};
+
+// ── useResizeHandler カスタムhook ────────────────────────────────────
+// DayView / WeekView / DashboardView 共通のリサイズハンドラ
+export const useResizeHandler = (onUpdate, PPM) => {
+  const rsRef  = useRef(false);
+  const rsTask = useRef(null);
+  const rsY    = useRef(0);
+  const rsDur  = useRef(0);
+  const onRSStart = useCallback((e, task) => {
+    e.stopPropagation(); e.preventDefault();
+    rsRef.current  = true;
+    rsTask.current = task;
+    rsY.current    = e.clientY || (e.touches?.[0]?.clientY) || 0;
+    rsDur.current  = Number(task.duration) || 60;
+    const mv = ev => {
+      if (!rsRef.current) return;
+      const y  = ev.clientY || (ev.touches?.[0]?.clientY) || 0;
+      const nd = Math.max(15, Math.round((rsDur.current + (y - rsY.current) / PPM) / 15) * 15);
+      const t  = rsTask.current;
+      const targetSId   = t._sessionId;
+      const newSessions = (t.sessions || []).length > 0
+        ? t.sessions.map(s => {
+            const isTarget = targetSId ? s.id === targetSId : t.sessions.indexOf(s) === 0;
+            if (!isTarget) return s;
+            const newEnd2 = s.startTime ? addDur(s.startTime, nd) : "";
+            return { ...s, endTime: newEnd2 };
+          })
+        : t.sessions;
+      const newEnd = newSessions.find(s => targetSId ? s.id === targetSId : true)?.endTime || "";
+      onUpdate({ ...t, duration: String(nd), endTime: newEnd, sessions: newSessions });
+    };
+    const up = () => {
+      rsRef.current = false;
+      document.removeEventListener("mousemove", mv);
+      document.removeEventListener("mouseup",   up);
+      document.removeEventListener("touchmove", mv);
+      document.removeEventListener("touchend",  up);
+    };
+    document.addEventListener("mousemove", mv);
+    document.addEventListener("mouseup",   up);
+    document.addEventListener("touchmove", mv, { passive: false });
+    document.addEventListener("touchend",  up);
+  }, [onUpdate, PPM]);
+  return onRSStart;
+};

@@ -1,11 +1,11 @@
-import { useState, useMemo, useEffect, useRef } from "react";
+import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
 import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
 import { registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
 
 import { C, G, TAG_PRESETS, ALLOWED } from "./constants";
-import { localDate, flatten, parseRepeat, syncTags, syncDone, isLaterTask, toggleMemo, fetchHolidays } from "./utils";
+import { localDate, flatten, parseRepeat, syncTags, syncDone, isLaterTask, toggleMemo, fetchHolidays, useIsPC } from "./utils";
 import { CB, Btn, Login, NotificationModal } from "./components/ui";
 import { TaskForm } from "./components/TaskForm";
 import { LaterPanel } from "./components/LaterPanel";
@@ -216,7 +216,7 @@ export default function App() {
       isLater: isLaterTask({...fStripped, sessions}),  // sessions確定後に判定
     };
     let nt;
-    const isExisting = editTask && flatten(tasks).some(t => t.id === editTask.id);
+    const isExisting = editTask && allFlat.some(t => t.id === editTask.id);
     if (isExisting)      nt = updTreeLocal(tasks, f.id, () => fw);
     else if (addChildTo) nt = addChild(tasks, addChildTo, fw);
     else                 nt = [...tasks, fw];
@@ -239,7 +239,7 @@ export default function App() {
   const handleAdd    = (date, hour) => { setDefDate(date); setDefTime(hour != null ? `${String(hour).padStart(2, "0")}:00` : null); setEditTask(null); setAddChildTo(null); setShowForm(true); };
 
   const handleToggle = (id, forDate) => {
-    const allFlat2 = flatten(tasks);
+    const allFlat2 = allFlat;
     const target = allFlat2.find(t => t.id === id);
     if (!target) return;
     const isRepeat = target.repeat && parseRepeat(target.repeat).type !== "なし";
@@ -263,7 +263,7 @@ export default function App() {
   const handleDelete = id => setTasks(delTreeLocal(tasks, id));
 
   const handleSkip = (id, date) => {
-    const t = flatten(tasks).find(x => x.id === id);
+    const t = allFlat.find(x => x.id === id);
     if (!t) return;
     const skipDates = [...(t.skipDates || [])];
     if (!skipDates.includes(date)) skipDates.push(date);
@@ -271,7 +271,7 @@ export default function App() {
   };
 
   const handleOverride = (id, origDate, ov) => {
-    const t = flatten(tasks).find(x => x.id === id);
+    const t = allFlat.find(x => x.id === id);
     if (!t) return;
     const overrideDates = {...(t.overrideDates || {}), [origDate]: ov};
     setTasks(syncDone(updTreeLocal(tasks, id, x => ({...x, overrideDates}))));
@@ -311,7 +311,7 @@ export default function App() {
 
   const handleEdit = t => {
     // _sessionOnly チップから来た場合、startDate/startTime/endTime が枠の値に上書きされているので元タスクを引き直す
-    const original = flatten(tasks).find(x => x.id === t.id);
+    const original = allFlat.find(x => x.id === t.id);
     setEditTask(original || t);
     setIsDuplicate(false);
     setShowForm(true);
@@ -332,14 +332,14 @@ export default function App() {
     setView("list");
   };
 
-  const allFlat   = flatten(tasks);
-  const nonRepeat = allFlat.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし");
+  const allFlat   = useMemo(() => flatten(tasks), [tasks]);
+  const nonRepeat = useMemo(() => allFlat.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし"), [allFlat]);
   const doneCnt   = nonRepeat.filter(t => t.done).length;
   const totalCnt  = nonRepeat.length;
   const activeCnt = nonRepeat.filter(t => !t.done).length;
   const pct       = totalCnt > 0 ? Math.round((doneCnt / totalCnt) * 100) : 0;
 
-  const isPC = window.innerWidth >= 768;
+  const isPC = useIsPC();
   const NAV = [
     {id: "dashboard", label: "ダッシュボード", icon: "◈"},
     {id: "list",      label: "リスト",         icon: "☰"},
@@ -463,7 +463,7 @@ export default function App() {
       {showForm && (
         <TaskForm
           task={editTask} tags={tags} isChild={!!addChildTo} isDuplicate={isDuplicate}
-          parentTags={addChildTo ? (flatten(tasks).find(t => t.id === addChildTo)?.tags || []) : null}
+          parentTags={addChildTo ? (allFlat.find(t => t.id === addChildTo)?.tags || []) : null}
           onSave={handleSave} defDate={defDate} defTime={defTime}
           onClose={() => { setShowForm(false); setEditTask(null); setIsDuplicate(false); setAddChildTo(null); setDefDate(null); setDefTime(null); }}
         />
