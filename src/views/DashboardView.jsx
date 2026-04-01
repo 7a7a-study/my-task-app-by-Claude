@@ -1,20 +1,15 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useMemo } from "react";
 import { C } from "../constants";
-import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate, getDeadlineTasksForDate } from "../utils";
+import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate, getDeadlineTasksForDate, useIsPC, useResizeHandler } from "../utils";
 import { TimelineChip } from "./ListView";
 import { Popup } from "../components/Popup";
 
 export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask}) => {
-  const [isPC, setIsPC] = useState(window.innerWidth >= 768);
+  const isPC = useIsPC();
   const [popup, setPopup] = useState(null);
   const [dropH, setDropH] = useState(null);
-  useEffect(() => {
-    const fn = () => setIsPC(window.innerWidth >= 768);
-    window.addEventListener("resize", fn);
-    return () => window.removeEventListener("resize", fn);
-  }, []);
 
-  const all = flatten(tasks);
+  const all = useMemo(() => flatten(tasks), [tasks]);
   const nonRep = all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし");
 
   const todayTasks = all.filter(t => {
@@ -99,8 +94,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   };
 
   // タイムライン: DayViewと同じくgetTasksForDateから取得
-  const tlTasks        = getTasksForDate ? getTasksForDate(tasks, today) : todayTasks;
-  const deadlineTasks  = getDeadlineTasksForDate(tasks, today);
+  const tlTasks       = useMemo(() => getTasksForDate(tasks, today), [tasks, today]);
+  const deadlineTasks = useMemo(() => getDeadlineTasksForDate(tasks, today), [tasks, today]);
   const timedTasks     = tlTasks.filter(t => t.startTime);
   const untimedTasks   = tlTasks.filter(t => !t.startTime);
   const normalUntimed  = untimedTasks.filter(t => !t._isDeadline);
@@ -112,8 +107,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   // DayViewと同じ方式: 時間 or 表示が重なるチップを横分割
   const PPM_DB = PPM;
-  const calcOverlap = (timed) => {
-    const chips = timed.map(t => {
+  const timedWithCols = useMemo(() => {
+    const chips = timedTasks.map(t => {
       const s = t2m(t.startTime)||0;
       const e = t.endTime ? t2m(t.endTime) : s+(Number(t.duration)||60);
       const dispH = Math.max(20, (e-s)*PPM_DB);
@@ -127,8 +122,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       const col = group.indexOf(i);
       return {...chip, _col: col, _totalCols: totalCols};
     });
-  };
-  const timedWithCols = calcOverlap(timedTasks);
+  }, [timedTasks]); // eslint-disable-line
 
   const MiniRow = ({task, showDate, draggable: isDraggable}) => {
     const c = tags.find(tg => task.tags?.includes(tg.id))?.color || C.accent;
@@ -188,33 +182,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   });
 
   // PCタイムライン
-  // DayView と同様のリサイズ
-  const rsRefDB=useRef(false), rsTaskDB=useRef(null), rsYDB=useRef(0), rsDurDB=useRef(0);
-  const onRSStartDB = useCallback((e,task) => {
-    e.stopPropagation(); e.preventDefault();
-    rsRefDB.current=true; rsTaskDB.current=task;
-    rsYDB.current=e.clientY||(e.touches?.[0]?.clientY)||0;
-    rsDurDB.current=Number(task.duration)||60;
-    const mv = ev => {
-      if (!rsRefDB.current) return;
-      const y = ev.clientY||(ev.touches?.[0]?.clientY)||0;
-      const nd = Math.max(15, Math.round((rsDurDB.current+(y-rsYDB.current)/PPM)/15)*15);
-      const t = rsTaskDB.current;
-      const targetSId = t._sessionId;
-      const newSessions = (t.sessions||[]).length > 0
-        ? t.sessions.map(s => {
-            const isTarget = targetSId ? s.id===targetSId : t.sessions.indexOf(s)===0;
-            if (!isTarget) return s;
-            const ne = s.startTime ? addDur(s.startTime, nd) : "";
-            return {...s, endTime:ne};
-          })
-        : t.sessions;
-      const newEnd = newSessions.find(s=>targetSId?s.id===targetSId:true)?.endTime||"";
-      onUpdate&&onUpdate({...t, duration:String(nd), endTime:newEnd, sessions:newSessions});
-    };
-    const up = () => { rsRefDB.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); };
-    document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
-  }, [onUpdate]);
+  const onRSStartDB = useResizeHandler(onUpdate, PPM);
 
   const hDropDB = (e, relY) => {
     e.preventDefault(); setDropH(null);

@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { C, DAYS_JP } from "../constants";
-import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed } from "../utils";
+import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed, useResizeHandler } from "../utils";
 import { Popup } from "../components/Popup";
 import { TimelineChip } from "./ListView";
 
@@ -29,41 +29,21 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
     Promise.all(years.map(y=>fetchHolidays(y))).then(()=>setHolReady(true));
   }, [wd.join(",")]);
 
-  const all = flatten(tasks);
-  const getDay         = date => getTasksForDate(tasks, date);
-  const getDeadlineDay = date => getDeadlineTasksForDate(tasks, date);
+  const all = useMemo(() => flatten(tasks), [tasks]);
+  const dayDataMap = useMemo(() =>
+    Object.fromEntries(wd.map(d => [d, {
+      tasks: getTasksForDate(tasks, d),
+      deadlines: getDeadlineTasksForDate(tasks, d),
+    }])),
+  [tasks, wd.join(",")]); // eslint-disable-line
+  const getDay         = date => dayDataMap[date]?.tasks || [];
+  const getDeadlineDay = date => dayDataMap[date]?.deadlines || [];
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
   const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||localDate()):undefined); };
 
-  const rsRef=useRef(false),rsTask=useRef(null),rsY=useRef(0),rsDur=useRef(0);
-  const onRSStart = useCallback((e,task) => {
-    e.stopPropagation(); e.preventDefault();
-    rsRef.current=true; rsTask.current=task;
-    rsY.current=e.clientY||(e.touches?.[0]?.clientY)||0; rsDur.current=Number(task.duration)||60;
-    const mv = ev => {
-      if (!rsRef.current) return;
-      const y = ev.clientY||(ev.touches?.[0]?.clientY)||0;
-      const nd = Math.max(15,Math.round((rsDur.current+(y-rsY.current)/PPM)/15)*15);
-      const t = rsTask.current;
-      // _sessionId がある場合はそのsessionを更新、なければ sessions[0]
-      const targetSId = t._sessionId;
-      const newSessions = (t.sessions||[]).length > 0
-        ? t.sessions.map(s => {
-            const isTarget = targetSId ? s.id === targetSId : t.sessions.indexOf(s) === 0;
-            if (!isTarget) return s;
-            const newEnd2 = s.startTime ? addDur(s.startTime, nd) : "";
-            return {...s, endTime:newEnd2};
-          })
-        : t.sessions;
-      const newEnd = newSessions.find(s => targetSId ? s.id===targetSId : true)?.endTime || "";
-      onUpdate({...t, duration:String(nd), endTime:newEnd, sessions:newSessions});
-    };
-    const up = () => { rsRef.current=false; document.removeEventListener("mousemove",mv); document.removeEventListener("mouseup",up); document.removeEventListener("touchmove",mv); document.removeEventListener("touchend",up); };
-    document.addEventListener("mousemove",mv); document.addEventListener("mouseup",up);
-    document.addEventListener("touchmove",mv,{passive:false}); document.addEventListener("touchend",up);
-  }, [onUpdate]);
+  const onRSStart = useResizeHandler(onUpdate, PPM);
 
   const dayStartMin = DAY_START * 60;
   const totalH      = (DAY_END - DAY_START) * HH;
