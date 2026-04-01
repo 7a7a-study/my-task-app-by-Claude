@@ -8,6 +8,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const isPC = useIsPC();
   const [popup, setPopup] = useState(null);
   const [dropH, setDropH] = useState(null);
+  const [focusOpen, setFocusOpen] = useState(true);
 
   const all = useMemo(() => flatten(tasks), [tasks]);
   const nonRep = all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし");
@@ -158,6 +159,80 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       </div>
     );
   };
+
+  // ── 今日フォーカス用ヘルパー ──────────────────────────────────
+  const addDaysStr = (base, n) => { const d = new Date(base); d.setDate(d.getDate()+n); return localDate(d); };
+  const nextMonday = (base) => { const d = new Date(base); const dow = d.getDay(); d.setDate(d.getDate()+(dow===0?1:8-dow)); return localDate(d); };
+
+  const focusTasks = (() => {
+    const seen = new Set();
+    const add = t => { if(!seen.has(t.id)){seen.add(t.id);return true;} return false; };
+    return [
+      ...overdue.filter(add),
+      ...overdueScheduled.filter(add),
+      ...nonRep.filter(t => !seen.has(t.id)&&!t.done&&sameDay(t.deadlineDate,today)).filter(add),
+      ...nonRep.filter(t => !seen.has(t.id)&&!t.done&&(t.sessions||[]).some(s=>sameDay(s.startDate||s.date,today))).filter(add),
+    ];
+  })();
+
+  const FocusRow = ({task}) => {
+    const isDone = task.done;
+    const isOver = task.deadlineDate && task.deadlineDate < today;
+    return (
+      <div style={{display:"flex",alignItems:"center",gap:6,padding:"6px 0",borderBottom:`1px solid ${C.border}22`}}>
+        <div onClick={e=>{e.stopPropagation();hToggle(task.id);}}
+          style={{width:13,height:13,borderRadius:3,border:`2px solid ${isDone?C.accent:C.border}`,
+            background:isDone?C.accent:"transparent",flexShrink:0,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center"}}>
+          {isDone && <span style={{color:"#fff",fontSize:7,fontWeight:900}}>✓</span>}
+        </div>
+        <span onClick={e=>openPopup(e,task)}
+          style={{fontSize:11,color:isDone?C.textMuted:C.text,flex:1,overflow:"hidden",
+            whiteSpace:"nowrap",textOverflow:"ellipsis",cursor:"pointer",
+            textDecoration:isDone?"line-through":"none"}}>
+          {isOver&&<span style={{color:C.danger,marginRight:3}}>⚠</span>}
+          {task.title}
+        </span>
+        {!isDone && onUpdate && (
+          <div style={{display:"flex",gap:2,flexShrink:0}}>
+            {[
+              {label:"明日", date:addDaysStr(today,1), color:C.accent},
+              {label:"来週", date:nextMonday(today), color:C.textMuted},
+            ].map(({label,date,color})=>(
+              <button key={label} onClick={()=>{
+                const newSessions = (task.sessions||[]).length>0
+                  ? task.sessions.map((s,i)=>i===0?{...s,startDate:date,date,startTime:s.startTime||"",endTime:s.endTime||""}:s)
+                  : [{id:"s_main",startDate:date,date,startTime:"",endTime:""}];
+                onUpdate({...task,sessions:newSessions,deadlineDate:task.deadlineDate||"",startDate:"",startTime:"",endTime:"",isLater:false});
+              }}
+                style={{fontSize:8,padding:"2px 5px",borderRadius:6,border:`1px solid ${color}44`,
+                  background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.3}}>
+                {label}→
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const TodayFocusCard = () => (
+    <div style={{background:C.surface,borderRadius:12,padding:"10px 14px",border:`1px solid ${C.accent}44`,marginBottom:12}}>
+      <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:focusOpen?8:0,cursor:"pointer"}} onClick={()=>setFocusOpen(v=>!v)}>
+        <span style={{fontSize:14}}>🎯</span>
+        <span style={{fontSize:12,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",flex:1}}>今日やること</span>
+        <span style={{fontSize:10,color:C.textMuted,background:C.accentS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>
+          {focusTasks.filter(t=>!t.done).length}件
+        </span>
+        <span style={{fontSize:10,color:C.textMuted}}>{focusOpen?"▲":"▼"}</span>
+      </div>
+      {focusOpen && (
+        focusTasks.length===0
+          ? <div style={{fontSize:11,color:C.textMuted,padding:"8px 0"}}>今日やることなし 🎉</div>
+          : focusTasks.map(t=><FocusRow key={t.id} task={t}/>)
+      )}
+    </div>
+  );
 
   const SectionHead = ({icon,title,count,color,done}) => (
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:7,
@@ -437,14 +512,17 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             </div>
           </div>
         </div>
-        {/* 右: あとでやる */}
-        <div style={{...cardStyle(C.textMuted),overflow:"hidden",height:"100%"}}>
+        {/* 右: 今日フォーカス + あとでやる */}
+        <div style={{display:"flex",flexDirection:"column",gap:12,height:"100%",overflow:"hidden"}}>
+        <TodayFocusCard/>
+        <div style={{...cardStyle(C.textMuted),overflow:"hidden",flex:1}}>
           <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
           <div style={{flex:1,overflowY:"auto"}}>
             {laterTasks.length===0
               ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>あとでやるなし</div>
               : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
           </div>
+        </div>
         </div>
       </div>
       <PopupLayer/>
@@ -503,6 +581,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         </div>)}
         {week7.length===0&&<div style={{fontSize:11,color:C.textMuted}}>今後7日の予定なし 🎉</div>}
       </div>
+      {/* 今日フォーカス */}
+      <TodayFocusCard/>
       {/* あとでやる */}
       <div style={cardStyle(C.textMuted)}>
         <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
@@ -510,30 +590,34 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           ? <div style={{fontSize:11,color:C.textMuted}}>あとでやるなし</div>
           : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable/>)}
       </div>
-      {/* 進捗関連 */}
+      {/* 進捗関連（折りたたみ） */}
       <div style={cardStyle(C.accent)}>
-        <div style={{display:"flex",alignItems:"baseline",gap:8,marginBottom:6}}>
+        <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setFocusOpen(v=>!v)}>
           <span style={{fontSize:28,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1}}>
             {pct}<span style={{fontSize:14}}>%</span>
           </span>
-          <span style={{fontSize:10,color:C.textMuted}}>{doneCnt} / {totalCnt} タスク完了</span>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,color:C.textMuted}}>📊 全体進捗</div>
+            <ProgressBar value={pct} color={C.accent} height={5}/>
+            <div style={{fontSize:9,color:C.textMuted,marginTop:2}}>{doneCnt} / {totalCnt} 完了</div>
+          </div>
+          <span style={{fontSize:10,color:C.textMuted}}>{focusOpen?"▲":"▼"}</span>
         </div>
-        <ProgressBar value={pct} color={C.accent} height={6}/>
-      </div>
-      {tagStats.length>0&&(
-        <div style={cardStyle(C.accent)}>
-          <SectionHead icon="🏷" title="タグ別進捗" count={tagStats.length} color={C.accent}/>
-          {tagStats.map(tag=>(
-            <div key={tag.id} style={{marginBottom:9}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:11,marginBottom:3}}>
-                <span style={{color:tag.color,fontWeight:700}}>{tag.name}</span>
-                <span style={{color:C.textMuted,fontSize:10}}>{tag.pct}% ({tag.done}/{tag.total})</span>
+        {/* NOTE: 進捗詳細は折りたたみ対象 — 表示したい場合は !focusOpen を focusOpen に変更 */}
+        {!focusOpen&&tagStats.length>0&&(
+          <div style={{marginTop:10}}>
+            {tagStats.map(tag=>(
+              <div key={tag.id} style={{marginBottom:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",fontSize:10,marginBottom:2}}>
+                  <span style={{color:tag.color,fontWeight:700}}>{tag.name}</span>
+                  <span style={{color:C.textMuted}}>{tag.pct}%</span>
+                </div>
+                <ProgressBar value={tag.pct} color={tag.color} height={4}/>
               </div>
-              <ProgressBar value={tag.pct} color={tag.color} height={5}/>
-            </div>
-          ))}
-        </div>
-      )}
+            ))}
+          </div>
+        )}
+      </div>
     </div>
     <PopupLayer/>
     </>
