@@ -143,7 +143,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const normalUntimed  = untimedTasks.filter(t => !t._isDeadline);
   const deadlineUntimed = [
     ...untimedTasks.filter(t => t._isDeadline),
-    ...deadlineTasks.filter(t => !t.deadlineTime && !tlTasks.some(s => s.id === t.id)),
+    ...deadlineTasks.filter(t => !t.deadlineTime && !tlTasks.some(s => s.id === t.id && !s.startTime)),
   ];
   const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
 

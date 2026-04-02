@@ -76,7 +76,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
       {/* 時間未定タスク（最上部） */}
       {(() => {
         const normalRows = wd.map(d => ({d, ts: getDay(d).filter(t=>!t.startTime)}));
-        const deadlineRows = wd.map(d => ({d, ts: getDeadlineDay(d).filter(t=>!t.deadlineTime && !getDay(d).some(s=>s.id===t.id))}));
+        const deadlineRows = wd.map(d => ({d, ts: getDeadlineDay(d).filter(t=>!t.deadlineTime && !getDay(d).some(s=>s.id===t.id && !s.startTime))}));
         const hasNormal = normalRows.some(r=>r.ts.length>0);
         const hasDeadline = deadlineRows.some(r=>r.ts.length>0);
         if (!hasNormal && !hasDeadline) return null;

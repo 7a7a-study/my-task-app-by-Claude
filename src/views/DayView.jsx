@@ -28,7 +28,8 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
   const timed   = todayT.filter(t => t.startTime);
   const untimed = [
     ...todayT.filter(t => !t.startTime),
-    ...deadlineTasks.filter(t => !t.deadlineTime && !startTasks.some(s => s.id === t.id)),
+    // deadlineTimeなし締切タスク: startTasksに「startTimeなし」で存在する場合のみ除外（時間付き枠を追加しても締切表示は残す）
+    ...deadlineTasks.filter(t => !t.deadlineTime && !startTasks.some(s => s.id === t.id && !s.startTime)),
   ];
   // ⑦ 締切ライン：deadlineTimeあり
   const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
