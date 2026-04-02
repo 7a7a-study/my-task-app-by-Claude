@@ -8,7 +8,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const isPC = useIsPC();
   const [popup, setPopup] = useState(null);
   const [dropH, setDropH] = useState(null);
-  const [showStats, setShowStats] = useState(false); // 進捗カード開閉（デフォルト折りたたみ）
+  const [showStats, setShowStats] = useState(false);
 
   const all = useMemo(() => flatten(tasks), [tasks]);
   const nonRep = all.filter(t => !t.repeat || parseRepeat(t.repeat).type === "なし");
@@ -23,23 +23,22 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   }).length;
 
   const in7 = (() => { const d = new Date(today); d.setDate(d.getDate() + 7); return localDate(d); })();
-  const overdue  = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today)
-                         .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
-  // 日時枠が今日より前にある未完了タスク（締切なし・締切は overdue に含める）
+
+  const overdue = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate < today)
+                        .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
+
   const overdueScheduled = nonRep.filter(t => {
-    if (t.done || t.deadlineDate) return false; // 締切あるものは overdue で扱う
+    if (t.done || t.deadlineDate) return false;
     const sessions = t.sessions || [];
     if (sessions.length === 0) return false;
-    // 未来の枠が1つでもあれば超過扱いしない（案Z: クイックボタンで未来枠を追加すれば消える）
     const hasFuture = sessions.some(s => { const sd = s.startDate || s.date || ""; return sd >= today; });
     if (hasFuture) return false;
-    // 全セッションが今日より前 = 最終セッション日が今日以前
     return sessions.some(s => { const sd = s.startDate || s.date || ""; return sd && sd < today; });
   }).sort((a,b) => {
-    // 最終セッション日でソート
     const lastDate = t => [...(t.sessions||[])].map(s => s.startDate||s.date||"").sort().pop() || "";
     return lastDate(a).localeCompare(lastDate(b));
   });
+
   const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
   const startingIn7 = nonRep.filter(t => {
@@ -50,7 +49,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   const laterTasks = all.filter(t => (t.isLater || isLaterTask(t)) && !t.done);
 
-  // 親タグのみ表示
   const tagStats = tags.filter(t => !t.parentId && !t.archived).map(tag => {
     const childTagIds = tags.filter(c => c.parentId === tag.id).map(c => c.id);
     const tt = nonRep.filter(t => t.tags?.includes(tag.id) || childTagIds.some(cid => t.tags?.includes(cid)));
@@ -73,31 +71,71 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     onToggle(id, isRep ? today : undefined);
   };
 
-  // タイムライン定数
+  const addDaysStr = (base, n) => { const d = new Date(base); d.setDate(d.getDate()+n); return localDate(d); };
+  const nextWeekend = (base) => {
+    const d = new Date(base); d.setDate(d.getDate()+1);
+    for (let i=0; i<14; i++) {
+      const s = localDate(d); const dow = d.getDay();
+      if (dow===0 || dow===6 || isHol(s)) return s;
+      d.setDate(d.getDate()+1);
+    }
+    return localDate(d);
+  };
+  const nextWeekday = (base) => {
+    const d = new Date(base); const dow = d.getDay();
+    d.setDate(d.getDate() + (dow===0 ? 1 : 8 - dow));
+    for (let i=0; i<7; i++) {
+      const s = localDate(d); const wd = d.getDay();
+      if (wd>=1 && wd<=5 && !isHol(s)) return s;
+      d.setDate(d.getDate()+1);
+    }
+    return localDate(d);
+  };
+
+  const quickScheduleAdd = (task, date) => {
+    if (!onUpdate) return;
+    const newSession = { id: "s_" + Date.now(), startDate: date, date, startTime: "", endTime: "" };
+    const sessions = [...(task.sessions||[]), newSession];
+    onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
+  };
+
+  const quickScheduleOverwrite = (task, date) => {
+    if (!onUpdate) return;
+    const sid = task._sessionId;
+    let sessions;
+    if (sid) {
+      sessions = (task.sessions||[]).map(s => s.id===sid ? {...s, startDate:date, date} : s);
+    } else {
+      sessions = (task.sessions||[]).length > 0
+        ? task.sessions.map((s,i) => i===0 ? {...s, startDate:date, date} : s)
+        : [{id:"s_main", startDate:date, date, startTime:"", endTime:""}];
+    }
+    onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
+  };
+
+  const quickDates = () => [
+    {label:"明日",   date:addDaysStr(today,1), color:C.accent},
+    {label:"今週末", date:nextWeekend(today),  color:C.warn},
+    {label:"来週",   date:nextWeekday(today),  color:C.info},
+  ];
+
+  const QuickBtns = ({task, mode}) => (
+    <div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap"}}>
+      {quickDates().map(({label,date,color}) => (
+        <button key={label}
+          onClick={e=>{e.stopPropagation(); mode==="overwrite" ? quickScheduleOverwrite(task,date) : quickScheduleAdd(task,date);}}
+          style={{fontSize:8,padding:"2px 6px",borderRadius:8,border:`1px solid ${color}55`,
+            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.4}}>
+          {label}→
+        </button>
+      ))}
+    </div>
+  );
+
   const DAY_START = 6, DAY_END = 23, PPM = 0.75;
   const HH = 60 * PPM;
   const dayStartMin = DAY_START * 60;
 
-  const hDrop = (e, relY) => {
-    e.preventDefault(); setDropH(null);
-    const totalMin = Math.floor(relY / PPM) + DAY_START * 60;
-    const snapped  = Math.round(totalMin / 15) * 15;
-    const clampMin = Math.max(DAY_START * 60, Math.min((DAY_END - 1) * 60, snapped));
-    const hh = Math.floor(clampMin / 60);
-    const mm = clampMin % 60;
-    const st = `${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
-    const tid = e.dataTransfer?.getData("taskId")||e.dataTransfer?.getData("laterTaskId");
-    const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
-    if (!t) { onAdd&&onAdd(today, hh); return; }
-    const et = t.duration ? addDur(st, Number(t.duration)) : "";
-    const newSessions = (t.sessions||[]).length > 0
-      ? t.sessions.map((s,i) => i===0 ? {...s, date:today, startDate:today, startTime:st, endTime:et} : s)
-      : [{id:"s_main", date:today, startDate:today, startTime:st, endTime:et}];
-    onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
-    setDragTask&&setDragTask(null);
-  };
-
-  // タイムライン: DayViewと同じくgetTasksForDateから取得
   const tlTasks       = useMemo(() => getTasksForDate(tasks, today), [tasks, today]);
   const deadlineTasks = useMemo(() => getDeadlineTasksForDate(tasks, today), [tasks, today]);
   const timedTasks     = tlTasks.filter(t => t.startTime);
@@ -109,7 +147,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   ];
   const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
 
-  // DayViewと同じ方式: 時間 or 表示が重なるチップを横分割
   const PPM_DB = PPM;
   const timedWithCols = useMemo(() => {
     const chips = timedTasks.map(t => {
@@ -135,10 +172,9 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const isDone = task.repeat && parseRepeat(task.repeat).type !== "なし"
       ? (task.doneDates||[]).includes(today)
       : task.done;
-    // セッションの日付ラベル（複数枠は最初の1枠を代表）
     const sessionDate = task.sessions?.[0]?.startDate || task.sessions?.[0]?.date || "";
     return (
-      <div style={{padding:"5px 0",borderBottom:`1px solid ${C.border}18`,opacity:isDone?.55:1}}>
+      <div style={{padding:"4px 0",borderBottom:`1px solid ${C.border}18`,opacity:isDone?.55:1}}>
         <div style={{display:"flex",alignItems:"center",gap:7,cursor:isDraggable?"grab":"pointer"}}
           draggable={!!isDraggable}
           onDragStart={isDraggable ? e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);setDragTask&&setDragTask(task);} : undefined}
@@ -170,81 +206,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     );
   };
 
-  // ── クイックスケジュールヘルパー ────────────────────────────────
-  // 今日からN日後
-  const addDaysStr = (base, n) => { const d = new Date(base); d.setDate(d.getDate()+n); return localDate(d); };
-  // 今週末 = 今日以降で最初の土日または祝日
-  const nextWeekend = (base) => {
-    const d = new Date(base); d.setDate(d.getDate()+1); // 今日は含まない
-    for (let i=0; i<14; i++) {
-      const s = localDate(d);
-      const dow = d.getDay();
-      if (dow===0 || dow===6 || isHol(s)) return s;
-      d.setDate(d.getDate()+1);
-    }
-    return localDate(d);
-  };
-  // 来週 = 来週以降の最初の平日（月〜金、祝日除く）
-  const nextWeekday = (base) => {
-    const d = new Date(base);
-    // まず来週月曜まで進める
-    const dow = d.getDay();
-    d.setDate(d.getDate() + (dow===0 ? 1 : 8 - dow));
-    for (let i=0; i<7; i++) {
-      const s = localDate(d);
-      const wd = d.getDay();
-      if (wd>=1 && wd<=5 && !isHol(s)) return s;
-      d.setDate(d.getDate()+1);
-    }
-    return localDate(d);
-  };
-
-  // 指定日付のセッションを「追加」してスケジュール化（既存セッションは保持）
-  const quickSchedule = (task, date) => {
-    if (!onUpdate) return;
-    const newSession = { id: "s_" + Date.now(), startDate: date, date, startTime: "", endTime: "" };
-    const sessions = [...(task.sessions||[]), newSession];
-    onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
-  };
-
-  // 指定日付で「上書き」（今日タスク用: その枠の日付だけ変更・時間は維持）
-  const quickReschedule = (task, date) => {
-    if (!onUpdate) return;
-    const sid = task._sessionId;
-    let sessions;
-    if (sid) {
-      // 特定セッションの日付だけ変更（時間は維持）
-      sessions = (task.sessions||[]).map(s =>
-        s.id === sid ? {...s, startDate: date, date} : s
-      );
-    } else {
-      // sessions[0] を上書き
-      sessions = (task.sessions||[]).length > 0
-        ? task.sessions.map((s,i) => i===0 ? {...s, startDate: date, date} : s)
-        : [{id: "s_main", startDate: date, date, startTime: "", endTime: ""}];
-    }
-    onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
-  };
-
-  // クイックボタンUI
-  // mode="add": 枠を追加（日程超過・あとでやる）
-  // mode="overwrite": 枠を上書き（今日タスク）
-  const QuickBtns = ({task, mode="add", inline=false}) => (
-    <div style={{display:"flex",gap:3,marginTop:inline?0:4,flexWrap:"wrap"}}>
-      {[
-        {label:"明日", date:addDaysStr(today,1), color:C.accent},
-        {label:"今週末", date:nextWeekend(today), color:C.warn},
-        {label:"来週", date:nextWeekday(today), color:C.info},
-      ].map(({label,date,color})=>(
-        <button key={label} onClick={e=>{e.stopPropagation(); mode==="overwrite" ? quickReschedule(task,date) : quickSchedule(task,date);}}
-          style={{fontSize:8,padding:"2px 6px",borderRadius:8,border:`1px solid ${color}55`,
-            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.4}}>
-          {label}→
-        </button>
-      ))}
-    </div>
-  );
-
   const SectionHead = ({icon,title,count,color,done}) => (
     <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,paddingBottom:7,
       borderBottom:`2px solid ${color}44`}}>
@@ -267,7 +228,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     border:`1px solid ${color}33`,display:"flex",flexDirection:"column",
   });
 
-  // PCタイムライン
   const onRSStartDB = useResizeHandler(onUpdate, PPM);
 
   const hDropDB = (e, relY) => {
@@ -289,127 +249,117 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     setDragTask&&setDragTask(null);
   };
 
-  // PCTimelineをインライン変数に（内部コンポーネント定義を避けてstale closureを防ぐ）
+  // タイムライン変数をここで計算（インライン展開でstale closureを防ぐ）
+  const now = new Date();
+  const nowMin = now.getHours()*60+now.getMinutes();
+  const tlH = (DAY_END-DAY_START)*HH;
+
   const pcTimelineJSX = (
-    const now = new Date();
-    const nowMin = now.getHours()*60+now.getMinutes();
-    const tlH = (DAY_END-DAY_START)*HH;
-
-      <div style={{flex:1,overflowY:"auto",position:"relative",marginBottom:6}}>
-        {/* 時間未定欄（DayViewと同じ方式） */}
-        {normalUntimed.length > 0 && (
-          <div style={{padding:"5px 8px",background:C.surface,borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5}}>
-            <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:3,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
-            {normalUntimed.map(t => {
-              const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-              const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
-
-                <div key={t.id}>
-                  <div onClick={e=>openPopup(e,t)}
-                    style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
-                      borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 4px 4px 0",
-                      marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"pointer",opacity:isDone?.5:1}}>
-                    <div onClick={e=>{e.stopPropagation();hToggle(t.id);}}
-                      style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
-                        background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
-                    <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,
-                      textDecoration:isDone?"line-through":"none",flex:1,overflow:"hidden",
-                      whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
-                    {t.deadlineDate&&<span style={{fontSize:8,color:C.warn,marginLeft:"auto",flexShrink:0}}>⚠{fd(t.deadlineDate)}</span>}
-                  </div>
-                  {!isDone && !t.deadlineDate && <QuickBtns task={t} mode="overwrite"/>}
+    <div style={{flex:1,overflowY:"auto",position:"relative",marginBottom:6}}>
+      {normalUntimed.length > 0 && (
+        <div style={{padding:"5px 8px",background:C.surface,borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:3,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
+          {normalUntimed.map(t => {
+            const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+            const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
+            return (
+              <div key={t.id}>
+                <div onClick={e=>openPopup(e,t)}
+                  style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                    borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 4px 4px 0",
+                    marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"pointer",opacity:isDone?.5:1}}>
+                  <div onClick={e=>{e.stopPropagation();hToggle(t.id);}}
+                    style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
+                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                  <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,
+                    textDecoration:isDone?"line-through":"none",flex:1,overflow:"hidden",
+                    whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
+                  {t.deadlineDate&&<span style={{fontSize:8,color:C.warn,marginLeft:"auto",flexShrink:0}}>⚠{fd(t.deadlineDate)}</span>}
                 </div>
-
-            })}
-          </div>
-        )}
-        {deadlineUntimed.length > 0 && (
-          <div style={{padding:"5px 8px",background:C.danger+"12",borderRadius:7,border:`1px solid ${C.danger}44`,marginBottom:5}}>
-            <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:3,letterSpacing:.4}}>⚠ 締切（時間未定）</div>
-            {deadlineUntimed.map(t => (
-              <div key={"dl_"+t.id} onClick={e=>openPopup(e,t)}
-                style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
-                  borderLeft:`3px solid ${t.done?C.textMuted:C.danger}`,borderRadius:"0 4px 4px 0",
-                  marginBottom:2,background:C.danger+(t.done?"0a":"22"),cursor:"pointer",opacity:t.done?.4:1}}>
-                <span style={{fontSize:10,fontWeight:700,color:t.done?C.textMuted:C.danger,
-                  textDecoration:t.done?"line-through":"none",flex:1,overflow:"hidden",
-                  whiteSpace:"nowrap",textOverflow:"ellipsis"}}>⚠ {t.title}</span>
-                <span style={{fontSize:8,color:t.done?C.textMuted:C.danger,marginLeft:"auto",flexShrink:0}}>{fd(t.deadlineDate)}</span>
+                {!isDone && !t.deadlineDate && <QuickBtns task={t} mode="overwrite"/>}
               </div>
-            ))}
-          </div>
-        )}
-        <div style={{display:"grid",gridTemplateColumns:"26px 1fr",position:"relative",height:tlH+HH}}>
-          {/* 時間軸 */}
-          <div style={{position:"relative"}}>
-            {Array.from({length:DAY_END-DAY_START+1},(_,i)=>DAY_START+i).map(h=>(
-              <div key={h} style={{position:"absolute",top:(h-DAY_START)*HH,right:3,fontSize:8,color:C.textMuted,lineHeight:1}}>
-                {h}
-              </div>
-            ))}
-          </div>
-          {/* チップエリア（ドロップゾーン） */}
-          <div style={{position:"relative",borderLeft:`1px solid ${C.border}44`}}
-            onDragOver={e=>{e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();const snapped=Math.round((Math.floor((e.clientY-rect.top)/PPM)+DAY_START*60)/15)*15;setDropH(Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped)));}}
-            onDragLeave={()=>setDropH(null)}
-            onDrop={e=>{const rect=e.currentTarget.getBoundingClientRect();hDropDB(e,e.clientY-rect.top);}}
-            onClick={e=>{if(e.target===e.currentTarget||e.target.dataset.bg){const rect=e.currentTarget.getBoundingClientRect();const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));onAdd&&onAdd(today,h);}}}>
-            {Array.from({length:DAY_END-DAY_START},(_,i)=>(
-              <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`}}/>
-            ))}
-            {timedWithCols.map(t => {
-              const sm = t2m(t.startTime)||0;
-              const em = t.endTime?t2m(t.endTime):sm+(Number(t.duration)||60);
-              const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
-              const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
-              const col = t._col||0, totalCols = t._totalCols||1;
-
-                <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
-                  startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
-                  onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
-                  onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}
-                  onQuickReschedule={(task,label)=>{
-                    const date = label==="明日" ? addDaysStr(today,1) : label==="今週末" ? nextWeekend(today) : nextWeekday(today);
-                    quickReschedule(task, date);
-                  }}/>
-
-            })}
-            {nowMin>=dayStartMin&&nowMin<=DAY_END*60&&(
-              <div style={{position:"absolute",top:(nowMin-dayStartMin)*PPM,left:0,right:0,
-                height:1.5,background:C.danger,zIndex:5,pointerEvents:"none"}}>
-                <div style={{width:5,height:5,borderRadius:"50%",background:C.danger,
-                  position:"absolute",left:-2,top:-2}}/>
-              </div>
-            )}
-            {/* ドロップ位置インジケーター */}
-            {dropH!==null && (
-              <div style={{position:"absolute",top:(dropH-dayStartMin)*PPM,left:0,right:0,height:HH,
-                background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,
-                display:"flex",alignItems:"center",justifyContent:"center",
-                fontSize:10,color:C.accent,pointerEvents:"none",zIndex:6}}>
-                {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}{dragTask?` ← ${dragTask.title}`:""}
-              </div>
-            )}
-            {/* 締切ライン */}
-            {timedDeadlines.map(t => {
-              const dm = t2m(t.deadlineTime);
-              if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
-              const top = (dm - dayStartMin) * PPM;
-
-                <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();openPopup(e,t);}}
-                  style={{position:"absolute",top:top-1,left:0,right:0,height:3,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
-                  title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
-                  <div style={{position:"absolute",right:2,top:-8,background:C.danger,color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:8,whiteSpace:"nowrap",pointerEvents:"none"}}>
-                    ⚠ {t.deadlineTime} {t.title}
-                  </div>
-                  <div style={{width:"100%",height:3,background:`linear-gradient(90deg,${C.danger}00,${C.danger},${C.danger}00)`}}/>
+            );
+          })}
+        </div>
+      )}
+      {deadlineUntimed.length > 0 && (
+        <div style={{padding:"5px 8px",background:C.danger+"12",borderRadius:7,border:`1px solid ${C.danger}44`,marginBottom:5}}>
+          <div style={{fontSize:9,fontWeight:700,color:C.danger,marginBottom:3,letterSpacing:.4}}>⚠ 締切（時間未定）</div>
+          {deadlineUntimed.map(t => (
+            <div key={"dl_"+t.id} onClick={e=>openPopup(e,t)}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                borderLeft:`3px solid ${t.done?C.textMuted:C.danger}`,borderRadius:"0 4px 4px 0",
+                marginBottom:2,background:C.danger+(t.done?"0a":"22"),cursor:"pointer",opacity:t.done?.4:1}}>
+              <span style={{fontSize:10,fontWeight:700,color:t.done?C.textMuted:C.danger,
+                textDecoration:t.done?"line-through":"none",flex:1,overflow:"hidden",
+                whiteSpace:"nowrap",textOverflow:"ellipsis"}}>⚠ {t.title}</span>
+              <span style={{fontSize:8,color:t.done?C.textMuted:C.danger,marginLeft:"auto",flexShrink:0}}>{fd(t.deadlineDate)}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <div style={{display:"grid",gridTemplateColumns:"26px 1fr",position:"relative",height:tlH+HH}}>
+        <div style={{position:"relative"}}>
+          {Array.from({length:DAY_END-DAY_START+1},(_,i)=>DAY_START+i).map(h=>(
+            <div key={h} style={{position:"absolute",top:(h-DAY_START)*HH,right:3,fontSize:8,color:C.textMuted,lineHeight:1}}>{h}</div>
+          ))}
+        </div>
+        <div style={{position:"relative",borderLeft:`1px solid ${C.border}44`}}
+          onDragOver={e=>{e.preventDefault();const rect=e.currentTarget.getBoundingClientRect();const snapped=Math.round((Math.floor((e.clientY-rect.top)/PPM)+DAY_START*60)/15)*15;setDropH(Math.max(DAY_START*60,Math.min((DAY_END-1)*60,snapped)));}}
+          onDragLeave={()=>setDropH(null)}
+          onDrop={e=>{const rect=e.currentTarget.getBoundingClientRect();hDropDB(e,e.clientY-rect.top);}}
+          onClick={e=>{if(e.target===e.currentTarget||e.target.dataset.bg){const rect=e.currentTarget.getBoundingClientRect();const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));onAdd&&onAdd(today,h);}}}>
+          {Array.from({length:DAY_END-DAY_START},(_,i)=>(
+            <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`}}/>
+          ))}
+          {timedWithCols.map(t => {
+            const sm = t2m(t.startTime)||0;
+            const em = t.endTime?t2m(t.endTime):sm+(Number(t.duration)||60);
+            const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
+            const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
+            const col = t._col||0, totalCols = t._totalCols||1;
+            return (
+              <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
+                startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
+                onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
+                onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}
+                onQuickReschedule={(task,label)=>{
+                  const found = quickDates().find(d=>d.label===label);
+                  if (found) quickScheduleOverwrite(task, found.date);
+                }}/>
+            );
+          })}
+          {nowMin>=dayStartMin&&nowMin<=DAY_END*60&&(
+            <div style={{position:"absolute",top:(nowMin-dayStartMin)*PPM,left:0,right:0,height:1.5,background:C.danger,zIndex:5,pointerEvents:"none"}}>
+              <div style={{width:5,height:5,borderRadius:"50%",background:C.danger,position:"absolute",left:-2,top:-2}}/>
+            </div>
+          )}
+          {dropH!==null && (
+            <div style={{position:"absolute",top:(dropH-dayStartMin)*PPM,left:0,right:0,height:HH,
+              background:C.accentS,border:`2px dashed ${C.accent}`,borderRadius:5,
+              display:"flex",alignItems:"center",justifyContent:"center",
+              fontSize:10,color:C.accent,pointerEvents:"none",zIndex:6}}>
+              {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}{dragTask?` ← ${dragTask.title}`:""}
+            </div>
+          )}
+          {timedDeadlines.map(t => {
+            const dm = t2m(t.deadlineTime);
+            if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
+            const top = (dm - dayStartMin) * PPM;
+            return (
+              <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();openPopup(e,t);}}
+                style={{position:"absolute",top:top-1,left:0,right:0,height:3,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
+                title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
+                <div style={{position:"absolute",right:2,top:-8,background:C.danger,color:"#fff",fontSize:8,fontWeight:700,padding:"1px 5px",borderRadius:8,whiteSpace:"nowrap",pointerEvents:"none"}}>
+                  ⚠ {t.deadlineTime} {t.title}
                 </div>
-
-            })}
-          </div>
+                <div style={{width:"100%",height:3,background:`linear-gradient(90deg,${C.danger}00,${C.danger},${C.danger}00)`}}/>
+              </div>
+            );
+          })}
         </div>
       </div>
-
+    </div>
   );
 
   const popupLayerJSX = popup ? (
@@ -432,7 +382,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   if (isPC) {
     return (
       <>
-      {/* ── 追加ボタン ── */}
       <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
         <button onClick={()=>onAdd&&onAdd()}
           style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",borderRadius:8,
@@ -441,9 +390,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           ＋ タスクを追加
         </button>
       </div>
-      {/* ── 上段: 進捗サマリー ── */}
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,marginBottom:14}}>
-        {/* 全体進捗 */}
         <div style={{background:C.surface,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.accent}33`,display:"flex",alignItems:"center",gap:14}}>
           <div style={{fontSize:32,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1,flexShrink:0}}>
             {pct}<span style={{fontSize:14}}>%</span>
@@ -454,7 +401,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             <div style={{fontSize:9,color:C.textMuted,marginTop:3}}>{doneCnt} / {totalCnt} 完了</div>
           </div>
         </div>
-        {/* 今日の進捗 */}
         <div style={{background:C.surface,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.success}33`,display:"flex",alignItems:"center",gap:14}}>
           <div style={{fontSize:32,fontWeight:800,color:C.success,fontFamily:"'Playfair Display',serif",lineHeight:1,flexShrink:0}}>
             {todayTasks.length?Math.round(todayDone/todayTasks.length*100):0}<span style={{fontSize:14}}>%</span>
@@ -465,7 +411,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             <div style={{fontSize:9,color:C.textMuted,marginTop:3}}>{todayDone} / {todayTasks.length} 完了</div>
           </div>
         </div>
-        {/* タグ別進捗 */}
         <div style={{background:C.surface,borderRadius:10,padding:"12px 16px",border:`1px solid ${C.border}`,overflow:"hidden"}}>
           <div style={{fontSize:10,color:C.textMuted,fontWeight:700,marginBottom:7}}>🏷 タグ別進捗</div>
           {tagStats.length===0
@@ -481,19 +426,14 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               ))}
         </div>
       </div>
-      {/* ── 下段: タスク一覧（左:タイムライン / 中:要対応+今後7日 / 右:あとでやる） ── */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,
-        height:"calc(100vh - 230px)",minHeight:300,alignItems:"start"}}>
-        {/* 左: 今日（タイムライン） */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:12,height:"calc(100vh - 230px)",minHeight:300,alignItems:"start"}}>
         <div style={{...cardStyle(C.success),overflow:"hidden",height:"100%"}}>
           <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
           {todayTasks.length===0
             ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今日のタスクなし 🎉</div>
             : pcTimelineJSX}
         </div>
-        {/* 中: 要対応（上）＋ 今後7日間（下） */}
         <div style={{display:"flex",flexDirection:"column",gap:12,height:"100%",overflow:"hidden"}}>
-          {/* 日程超過 */}
           {(overdue.length > 0 || overdueScheduled.length > 0) ? (
             <div style={{background:C.surface,borderRadius:12,padding:"10px 14px",border:`2px solid ${C.danger}55`,flexShrink:0,overflowY:"auto",maxHeight:"50%"}}>
               <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
@@ -501,18 +441,15 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                 <span style={{fontSize:12,fontWeight:800,color:C.danger,fontFamily:"'Playfair Display',serif",flex:1}}>日程超過</span>
                 <span style={{fontSize:10,color:C.textMuted,background:C.dangerS,padding:"1px 7px",borderRadius:8,fontWeight:700}}>{overdue.length + overdueScheduled.length}件</span>
               </div>
-              <div>
-                {overdue.map(t=>(
-                  <div key={t.id} style={{background:C.danger+"0a",borderRadius:6,padding:"2px 6px",marginBottom:4}}>
-                    <div style={{fontSize:8,color:C.danger,fontWeight:700,marginBottom:1}}>⚠ 締切超過</div>
-                    <MiniRow task={t} showDate={true} draggable showQuick/>
-                  </div>
-                ))}
-                {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
-              </div>
+              {overdue.map(t=>(
+                <div key={t.id} style={{background:C.danger+"0a",borderRadius:6,padding:"2px 6px",marginBottom:4}}>
+                  <div style={{fontSize:8,color:C.danger,fontWeight:700,marginBottom:1}}>⚠ 締切超過</div>
+                  <MiniRow task={t} showDate={true} draggable showQuick/>
+                </div>
+              ))}
+              {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
             </div>
           ) : null}
-          {/* 今後7日間 */}
           <div style={{...cardStyle(C.warn),overflow:"hidden",flex:1,minHeight:0}}>
             <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
             <div style={{flex:1,overflowY:"auto"}}>
@@ -526,7 +463,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             </div>
           </div>
         </div>
-        {/* 右: あとでやる */}
         <div style={{...cardStyle(C.textMuted),overflow:"hidden",height:"100%"}}>
           <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
           <div style={{flex:1,overflowY:"auto"}}>
@@ -541,26 +477,22 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     );
   }
 
-  // スマホ: リスト表示（今日→要対応→今後7日間→あとでやる→進捗関連）
   return (
     <>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
       <div style={{display:"flex",justifyContent:"flex-end"}}>
         <button onClick={()=>onAdd&&onAdd()}
           style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",borderRadius:8,
-            background:C.accent,color:"#fff",border:"none",cursor:"pointer",
-            fontSize:12,fontWeight:700}}>
+            background:C.accent,color:"#fff",border:"none",cursor:"pointer",fontSize:12,fontWeight:700}}>
           ＋ タスクを追加
         </button>
       </div>
-      {/* 今日 */}
       <div style={cardStyle(C.success)}>
         <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
         {todayTasks.length===0
           ? <div style={{fontSize:11,color:C.textMuted}}>今日のタスクなし 🎉</div>
           : todayTasks.map(t=><MiniRow key={t.id} task={t} showDate={false} showQuickOverwrite={!t.deadlineDate && !t._isDeadline}/>)}
       </div>
-      {/* 日程超過 */}
       {(overdue.length > 0 || overdueScheduled.length > 0) && (
         <div style={{background:C.surface,borderRadius:12,padding:"10px 14px",border:`2px solid ${C.danger}55`}}>
           <div style={{display:"flex",alignItems:"center",gap:6,marginBottom:8}}>
@@ -577,7 +509,6 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           {overdueScheduled.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
         </div>
       )}
-      {/* 今後7日間 */}
       <div style={cardStyle(C.warn)}>
         <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
         {upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
@@ -587,14 +518,12 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         </div>)}
         {week7.length===0&&<div style={{fontSize:11,color:C.textMuted}}>今後7日の予定なし 🎉</div>}
       </div>
-      {/* あとでやる */}
       <div style={cardStyle(C.textMuted)}>
         <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
         {laterTasks.length===0
           ? <div style={{fontSize:11,color:C.textMuted}}>あとでやるなし</div>
           : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
       </div>
-      {/* 進捗関連（折りたたみ） */}
       <div style={cardStyle(C.accent)}>
         <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setShowStats(v=>!v)}>
           <span style={{fontSize:28,fontWeight:800,color:C.accent,fontFamily:"'Playfair Display',serif",lineHeight:1}}>
