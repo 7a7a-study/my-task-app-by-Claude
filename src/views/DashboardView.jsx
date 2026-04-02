@@ -42,9 +42,17 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
                          .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
   const startingIn7 = nonRep.filter(t => {
-    const d = t.sessions?.[0]?.startDate || t.sessions?.[0]?.date;
-    return d && d > today && d <= in7 && !t.done && !t.deadlineDate;
-  }).sort((a,b) => (a.sessions?.[0]?.startDate||a.sessions?.[0]?.date||"").localeCompare(b.sessions?.[0]?.startDate||b.sessions?.[0]?.date||""));
+    if (t.done || t.deadlineDate) return false; // 締切ありはupcomingで扱う
+    // sessions内のいずれかの日付（startDate/endDate）が今後7日以内
+    return (t.sessions||[]).some(s => {
+      const sd = s.startDate || s.date || "";
+      const ed = s.endDate || "";
+      return (sd && sd > today && sd <= in7) || (ed && ed > today && ed <= in7);
+    });
+  }).sort((a,b) => {
+    const firstDate = t => (t.sessions||[]).map(s=>s.startDate||s.date||"").filter(Boolean).sort()[0] || "";
+    return firstDate(a).localeCompare(firstDate(b));
+  });
   const week7 = [...overdue, ...upcoming, ...startingIn7];
 
   const laterTasks = all.filter(t => (t.isLater || isLaterTask(t)) && !t.done);
@@ -143,7 +151,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const normalUntimed  = untimedTasks.filter(t => !t._isDeadline);
   const deadlineUntimed = [
     ...untimedTasks.filter(t => t._isDeadline),
-    ...deadlineTasks.filter(t => !t.deadlineTime && !tlTasks.some(s => s.id === t.id && !s.startTime)),
+    // 締切タスクは未完了なら日時枠の有無に関わらず常に表示
+    ...deadlineTasks.filter(t => !t.deadlineTime),
   ];
   const timedDeadlines = deadlineTasks.filter(t => !!t.deadlineTime);
 
