@@ -289,11 +289,12 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     setDragTask&&setDragTask(null);
   };
 
-  const PCTimeline = () => {
+  // PCTimelineをインライン変数に（内部コンポーネント定義を避けてstale closureを防ぐ）
+  const pcTimelineJSX = (
     const now = new Date();
     const nowMin = now.getHours()*60+now.getMinutes();
     const tlH = (DAY_END-DAY_START)*HH;
-    return (
+
       <div style={{flex:1,overflowY:"auto",position:"relative",marginBottom:6}}>
         {/* 時間未定欄（DayViewと同じ方式） */}
         {normalUntimed.length > 0 && (
@@ -302,21 +303,23 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             {normalUntimed.map(t => {
               const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
               const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
-              return (
-                <div key={t.id} onClick={e=>openPopup(e,t)}
-                  style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
-                    borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 4px 4px 0",
-                    marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"pointer",opacity:isDone?.5:1}}>
-                  <div onClick={e=>{e.stopPropagation();hToggle(t.id);}}
-                    style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
-                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
-                  <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,
-                    textDecoration:isDone?"line-through":"none",flex:1,overflow:"hidden",
-                    whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
-                  {t.deadlineDate&&<span style={{fontSize:8,color:C.warn,marginLeft:"auto",flexShrink:0}}>⚠{fd(t.deadlineDate)}</span>}
+
+                <div key={t.id}>
+                  <div onClick={e=>openPopup(e,t)}
+                    style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                      borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 4px 4px 0",
+                      marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"pointer",opacity:isDone?.5:1}}>
+                    <div onClick={e=>{e.stopPropagation();hToggle(t.id);}}
+                      style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
+                        background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                    <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,
+                      textDecoration:isDone?"line-through":"none",flex:1,overflow:"hidden",
+                      whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
+                    {t.deadlineDate&&<span style={{fontSize:8,color:C.warn,marginLeft:"auto",flexShrink:0}}>⚠{fd(t.deadlineDate)}</span>}
+                  </div>
+                  {!isDone && !t.deadlineDate && <QuickBtns task={t} mode="overwrite"/>}
                 </div>
-                {!isDone && !t.deadlineDate && <QuickBtns task={t} mode="overwrite"/>}
-              );
+
             })}
           </div>
         )}
@@ -360,7 +363,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
               const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
               const col = t._col||0, totalCols = t._totalCols||1;
-              return (
+
                 <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
                   startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
                   onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
@@ -369,7 +372,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                     const date = label==="明日" ? addDaysStr(today,1) : label==="今週末" ? nextWeekend(today) : nextWeekday(today);
                     quickReschedule(task, date);
                   }}/>
-              );
+
             })}
             {nowMin>=dayStartMin&&nowMin<=DAY_END*60&&(
               <div style={{position:"absolute",top:(nowMin-dayStartMin)*PPM,left:0,right:0,
@@ -392,7 +395,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               const dm = t2m(t.deadlineTime);
               if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
               const top = (dm - dayStartMin) * PPM;
-              return (
+
                 <div key={"dl_"+t.id} onClick={e=>{e.stopPropagation();openPopup(e,t);}}
                   style={{position:"absolute",top:top-1,left:0,right:0,height:3,zIndex:4,cursor:"pointer",display:"flex",alignItems:"center",pointerEvents:"auto"}}
                   title={`⚠ 締切: ${t.title} ${t.deadlineTime}`}>
@@ -401,15 +404,15 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                   </div>
                   <div style={{width:"100%",height:3,background:`linear-gradient(90deg,${C.danger}00,${C.danger},${C.danger}00)`}}/>
                 </div>
-              );
+
             })}
           </div>
         </div>
       </div>
-    );
-  };
 
-  const PopupLayer = () => popup ? (
+  );
+
+  const popupLayerJSX = popup ? (
     <Popup
       task={popup.task} tags={tags} anchor={{x:popup.x,y:popup.y}}
       viewDate={today}
@@ -486,7 +489,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           <SectionHead icon="📅" title="今日" count={todayTasks.length} done={todayDone} color={C.success}/>
           {todayTasks.length===0
             ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今日のタスクなし 🎉</div>
-            : <PCTimeline/>}
+            : pcTimelineJSX}
         </div>
         {/* 中: 要対応（上）＋ 今後7日間（下） */}
         <div style={{display:"flex",flexDirection:"column",gap:12,height:"100%",overflow:"hidden"}}>
@@ -533,7 +536,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           </div>
         </div>
       </div>
-      <PopupLayer/>
+      {popupLayerJSX}
       </>
     );
   }
@@ -619,7 +622,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         )}
       </div>
     </div>
-    <PopupLayer/>
+    {popupLayerJSX}
     </>
   );
 };
