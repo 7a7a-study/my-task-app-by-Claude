@@ -1,6 +1,6 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { C } from "../constants";
-import { localDate, flatten, fd, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed } from "../utils";
+import { localDate, flatten, fd, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed, useResizeHandler } from "../utils";
 import { Popup } from "../components/Popup";
 import { TimelineChip } from "./ListView";
 
@@ -21,8 +21,8 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
-  const startTasks    = getTasksForDate(tasks, viewDate);
-  const deadlineTasks = getDeadlineTasksForDate(tasks, viewDate);
+  const startTasks    = useMemo(() => getTasksForDate(tasks, viewDate), [tasks, viewDate]);
+  const deadlineTasks = useMemo(() => getDeadlineTasksForDate(tasks, viewDate), [tasks, viewDate]);
   const todayT = startTasks;
   // ① 繰り返し・通常タスク：startTimeなしでも「時間未定」欄に表示
   const timed   = todayT.filter(t => t.startTime);
