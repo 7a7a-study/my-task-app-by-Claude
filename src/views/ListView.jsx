@@ -14,17 +14,18 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   const done = isDone !== undefined ? isDone : task.done;
   const colW = `${100 / totalCols}%`;
   const colL = `${col * 100 / totalCols}%`;
-  // タッチ環境: 長押し500msでのみドラッグ・リサイズ開始
+  // タッチ環境: 長押し1000msでのみドラッグ・リサイズ開始
   const IS_TOUCH = ("ontouchstart" in window || navigator.maxTouchPoints > 0) && !window.matchMedia("(pointer:fine)").matches;
-  const lpTimer = useState(null); // [timerId, setTimerId]
   const [lpActive, setLpActive] = useState(false);
   const lpRef = React.useRef(null);
+  const rsLpRef = React.useRef(null); // リサイズ用長押しタイマー
+  const rsActiveRef = React.useRef(false); // リサイズ長押し中フラグ
+
   const handleTouchStart = (e) => {
     if (!IS_TOUCH) return;
-    const touch = e.touches[0];
     lpRef.current = setTimeout(() => {
       setLpActive(true);
-    }, 500);
+    }, 1000);
   };
   const handleTouchEnd = (e) => {
     if (lpRef.current) { clearTimeout(lpRef.current); lpRef.current = null; }
@@ -32,14 +33,28 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
     setLpActive(false);
   };
   const handleTouchMove = (e) => {
-    if (!lpActive && lpRef.current) { clearTimeout(lpRef.current); lpRef.current = null; }
+    if (lpRef.current) { clearTimeout(lpRef.current); lpRef.current = null; }
+    if (!lpActive) return;
   };
   const handleRSTouchStart = (e) => {
     if (!IS_TOUCH) { onRSStart(e, task); return; }
-    const lpT = setTimeout(() => { onRSStart(e, task); }, 500);
-    const cancel = () => { clearTimeout(lpT); document.removeEventListener("touchend", cancel); };
-    document.addEventListener("touchend", cancel, {once:true});
     e.stopPropagation(); e.preventDefault();
+    rsActiveRef.current = false;
+    rsLpRef.current = setTimeout(() => {
+      rsActiveRef.current = true;
+      onRSStart(e, task);
+    }, 1000);
+  };
+  const handleRSTouchEnd = (e) => {
+    if (rsLpRef.current) { clearTimeout(rsLpRef.current); rsLpRef.current = null; }
+    rsActiveRef.current = false;
+    e.stopPropagation();
+  };
+  const handleRSTouchMove = (e) => {
+    // 長押し確定前に指が動いたらキャンセル
+    if (!rsActiveRef.current && rsLpRef.current) {
+      clearTimeout(rsLpRef.current); rsLpRef.current = null;
+    }
   };
   return (
     <div
@@ -97,6 +112,8 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
       <div className="rh"
         onMouseDown={e=>{if(!IS_TOUCH){onRSStart(e,task);}}}
         onTouchStart={handleRSTouchStart}
+        onTouchEnd={handleRSTouchEnd}
+        onTouchMove={handleRSTouchMove}
         onClick={e=>e.stopPropagation()}
         style={{height:7,background:color+"30",borderTop:`1px dashed ${color}55`,display:"flex",alignItems:"center",justifyContent:"center",flexShrink:0}}>
         <div style={{width:14,height:1.5,borderRadius:1,background:color+"88"}}/>
