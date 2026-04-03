@@ -263,6 +263,7 @@ const sessionCoversDate = (s, date) => {
   const sd = sessionStartDate(s);
   // startDateなし + startTimeあり → 当日として扱う（日ビューからドラッグ配置した直後など）
   if (!sd && s.startTime) return true;
+  // startDateなし + startTimeなし → 日付情報なしのセッションはスキップ
   if (!sd) return false;
   const ed = s.endDate || sd;  // endDateなければ当日のみ
   return date >= sd && date <= ed;
@@ -316,8 +317,8 @@ export const getTasksForDate = (tasks, date) => {
     const key = t._overrideKey
       ? t.id + "_ov_" + t._overrideKey
       : t._sessionId
-        ? t._sessionId
-        : (isRepeat ? t.id + "_repeat" : t.id);
+        ? t.id + "_s_" + t._sessionId   // セッションIDにタスクIDも含めて一意に
+        : (isRepeat ? t.id + "_repeat_" + date : t.id);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
