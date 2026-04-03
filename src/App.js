@@ -198,9 +198,9 @@ export default function App() {
     const {_sessions, ...fStripped} = f;
     const rawSessions = _sessions ?? fStripped.sessions ?? [];
     const sessions = rawSessions
-      .filter(s => s.startDate || s.date || s.startTime)
+      .filter(s => s.startDate || s.date)  // startDateなしはセッションとして無効
       .map(s => ({
-        id: s.id,
+        id: s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
         startDate: s.startDate || s.date || "",
         date:      s.startDate || s.date || "",  // 旧フィールド互換
         startTime: s.startTime || "",
@@ -231,6 +231,16 @@ export default function App() {
     delete clean._pt; delete clean._pid;
     delete clean._sessionId; delete clean._sessionOnly;
     delete clean._isDeadline; delete clean._overrideKey; delete clean._overrideId;
+    delete clean._w7deadline; delete clean._w7session;
+    // startDateなしセッションを除去（毎日表示バグの原因）
+    if (clean.sessions) {
+      clean.sessions = clean.sessions
+        .filter(s => s.startDate || s.date)
+        .map(s => ({
+          ...s,
+          id: s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
+        }));
+    }
     const synced = syncTags(updTreeLocal(tasks, clean.id, () => clean), clean.id, clean.tags, tags);
     setTasks(syncDone(synced));
     setDragTask(null);

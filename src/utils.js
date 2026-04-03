@@ -62,11 +62,11 @@ export const matchesRepeat = (task, date) => {
   if (task.overrideDates && task.overrideDates[date]) return false;
   // 期間フィルタ
   const s0 = task.sessions?.[0] || {};
-  const startDate = s0.startDate || s0.date  // 旧フィールド互換
-    || task.createdAt?.slice?.(0, 10) || null;
-  const endDate = s0.endDate || task.endDate || null;  // task.endDate は旧フィールド互換
-  if (startDate && date < startDate) return false;
-  if (endDate   && date > endDate)   return false;
+  const startDate = s0.startDate || s0.date || null;  // createdAt フォールバック廃止（毎日表示バグの原因）
+  if (!startDate) return false;  // startDateなし繰り返しは表示しない（データ不正）
+  const endDate = s0.endDate || task.endDate || null;
+  if (date < startDate) return false;
+  if (endDate && date > endDate) return false;
   if (r.type === "毎日") return true;
   if (r.type === "平日のみ") { const d = new Date(date).getDay(); return d >= 1 && d <= 5; }
   if (r.type === "毎週") {
