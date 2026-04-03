@@ -39,21 +39,43 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     return lastDate(a).localeCompare(lastDate(b));
   });
 
-  const upcoming = nonRep.filter(t => t.deadlineDate && !t.done && t.deadlineDate >= today && t.deadlineDate <= in7)
-                         .sort((a,b) => a.deadlineDate.localeCompare(b.deadlineDate));
-  const startingIn7 = nonRep.filter(t => {
-    if (t.done || t.deadlineDate) return false; // 締切ありはupcomingで扱う
-    // sessions内のいずれかの日付（startDate/endDate）が今後7日以内
-    return (t.sessions||[]).some(s => {
-      const sd = s.startDate || s.date || "";
-      const ed = s.endDate || "";
-      return (sd && sd > today && sd <= in7) || (ed && ed > today && ed <= in7);
+  // 今後7日間（tomorrow〜+7日）に予定があるタスク（繰り返し含む・完了除外）
+  const tomorrow = (() => { const d = new Date(today); d.setDate(d.getDate()+1); return localDate(d); })();
+  const week7Tasks = (() => {
+    const days = [];
+    for (let i = 1; i <= 7; i++) {
+      const d = new Date(today); d.setDate(d.getDate() + i);
+      days.push(localDate(d));
+    }
+    const seen = new Set();
+    const result = [];
+    all.forEach(t => {
+      if (t.done) return;
+      if (seen.has(t.id)) return;
+      // 締切日が範囲内
+      const hasDeadline = !!(t.deadlineDate && t.deadlineDate >= tomorrow && t.deadlineDate <= in7);
+      // 繰り返しタスク: 範囲内の日にマッチするか
+      let hasSession = false;
+      if (t.repeat && parseRepeat(t.repeat).type !== "なし") {
+        hasSession = days.some(d => matchesRepeat(t, d));
+      } else {
+        // 通常タスク: sessionsのstartDate/endDateが範囲内
+        hasSession = (t.sessions||[]).some(s => {
+          const sd = s.startDate || s.date || "";
+          const ed = s.endDate || sd;
+          return sd && sd <= in7 && (ed || sd) >= tomorrow;
+        });
+      }
+      if (hasDeadline || hasSession) {
+        seen.add(t.id);
+        result.push({...t, _w7deadline: hasDeadline, _w7session: hasSession});
+      }
     });
-  }).sort((a,b) => {
-    const firstDate = t => (t.sessions||[]).map(s=>s.startDate||s.date||"").filter(Boolean).sort()[0] || "";
-    return firstDate(a).localeCompare(firstDate(b));
-  });
-  const week7 = [...overdue, ...upcoming, ...startingIn7];
+    return result.sort((a, b) => {
+      const dateOf = t => t.deadlineDate || (t.sessions||[]).map(s=>s.startDate||s.date||"").filter(Boolean).sort()[0] || "9";
+      return dateOf(a).localeCompare(dateOf(b));
+    });
+  })();
 
   const laterTasks = all.filter(t => (t.isLater || isLaterTask(t)) && !t.done);
 
@@ -181,7 +203,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const isDone = task.repeat && parseRepeat(task.repeat).type !== "なし"
       ? (task.doneDates||[]).includes(today)
       : task.done;
-    const sessionDate = task.sessions?.[0]?.startDate || task.sessions?.[0]?.date || "";
+
     return (
       <div style={{padding:"4px 0",borderBottom:`1px solid ${C.border}18`,opacity:isDone?.55:1}}>
         <div style={{display:"flex",alignItems:"center",gap:7,cursor:isDraggable?"grab":"pointer"}}
@@ -200,14 +222,35 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             flex:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{task.title}</span>
           {childTag && <span style={{fontSize:8,color:childTag.color,fontWeight:600,flexShrink:0,
             padding:"1px 5px",borderRadius:8,background:childTag.color+"18"}}>{childTag.name}</span>}
-          {showDate && task.deadlineDate &&
-            <span style={{fontSize:9,color:isOver?C.danger:C.warn,flexShrink:0,fontWeight:isOver?700:400}}>
-              {isOver?"⚠ ":""}{fd(task.deadlineDate)}
-            </span>}
-          {showDate && !task.deadlineDate && sessionDate &&
-            <span style={{fontSize:9,color:isOver?C.danger:C.accent,flexShrink:0,fontWeight:isOver?700:400}}>
-              {isOver?"遅":"📅"}{fd(sessionDate)}
-            </span>}
+          {showDate && (() => {
+            const hasDL = !!task.deadlineDate;
+            const sessionDate2 = task.sessions?.[0]?.startDate || task.sessions?.[0]?.date || "";
+            const isOver2 = hasDL && task.deadlineDate < today;
+            // 両方ある場合
+            if (task._w7deadline && task._w7session && sessionDate2) {
+              return (<>
+                <span style={{fontSize:9,color:isOver2?C.danger:C.warn,flexShrink:0,fontWeight:700}}>
+                  {isOver2?"⚠ ":""}{fd(task.deadlineDate)}締
+                </span>
+                <span style={{fontSize:9,color:C.accent,flexShrink:0}}>
+                  📅{fd(sessionDate2)}
+                </span>
+              </>);
+            }
+            // 締切のみ
+            if (hasDL) return (
+              <span style={{fontSize:9,color:isOver2?C.danger:C.warn,flexShrink:0,fontWeight:isOver2?700:400}}>
+                {isOver2?"⚠ ":""}{fd(task.deadlineDate)}
+              </span>
+            );
+            // セッションのみ
+            if (sessionDate2) return (
+              <span style={{fontSize:9,color:C.accent,flexShrink:0}}>
+                📅{fd(sessionDate2)}
+              </span>
+            );
+            return null;
+          })()}
         </div>
         {showQuick && !isDone && <QuickBtns task={task} mode="add"/>}
         {showQuickOverwrite && !isDone && <QuickBtns task={task} mode="overwrite"/>}
@@ -462,15 +505,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             </div>
           ) : null}
           <div style={{...cardStyle(C.warn),overflow:"hidden",flex:1,minHeight:0}}>
-            <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
+            <SectionHead icon="📆" title="今後7日間" count={week7Tasks.length} color={C.warn}/>
             <div style={{flex:1,overflowY:"auto"}}>
-              {upcoming.length===0&&startingIn7.length===0&&overdue.length===0
+              {week7Tasks.length===0
                 ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>今後7日の予定なし 🎉</div>
-                : <>{upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-                    {startingIn7.length>0&&(<div style={{marginTop:8}}>
-                      <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5,paddingTop:4,borderTop:`1px solid ${C.border}33`}}>開始予定</div>
-                      {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-                    </div>)}</>}
+                : week7Tasks.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
             </div>
           </div>
         </div>
@@ -521,13 +560,9 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         </div>
       )}
       <div style={cardStyle(C.warn)}>
-        <SectionHead icon="📆" title="今後7日間" count={week7.length} color={C.warn}/>
-        {upcoming.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-        {startingIn7.length>0&&(<div style={{marginTop:8}}>
-          <div style={{fontSize:9,color:C.textMuted,fontWeight:700,textTransform:"uppercase",letterSpacing:.5,marginBottom:5,paddingTop:4,borderTop:`1px solid ${C.border}33`}}>開始予定</div>
-          {startingIn7.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
-        </div>)}
-        {week7.length===0&&<div style={{fontSize:11,color:C.textMuted}}>今後7日の予定なし 🎉</div>}
+        <SectionHead icon="📆" title="今後7日間" count={week7Tasks.length} color={C.warn}/>
+        {week7Tasks.map(t=><MiniRow key={t.id} task={t} showDate={true}/>)}
+        {week7Tasks.length===0&&<div style={{fontSize:11,color:C.textMuted}}>今後7日の予定なし 🎉</div>}
       </div>
       <div style={cardStyle(C.textMuted)}>
         <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>

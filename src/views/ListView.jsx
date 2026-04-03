@@ -21,15 +21,19 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   const rsLpRef = React.useRef(null); // リサイズ用長押しタイマー
   const rsActiveRef = React.useRef(false); // リサイズ長押し中フラグ
 
+  const cbTouchedRef = React.useRef(false); // CB領域タッチ済みフラグ
+
   const handleTouchStart = (e) => {
     if (!IS_TOUCH) return;
+    cbTouchedRef.current = false;
     lpRef.current = setTimeout(() => {
       setLpActive(true);
     }, 1000);
   };
   const handleTouchEnd = (e) => {
     if (lpRef.current) { clearTimeout(lpRef.current); lpRef.current = null; }
-    if (!lpActive) { e.stopPropagation(); onPopup(e, task); }
+    if (!lpActive && !cbTouchedRef.current) { e.stopPropagation(); onPopup(e, task); }
+    cbTouchedRef.current = false;
     setLpActive(false);
   };
   const handleTouchMove = (e) => {
@@ -75,10 +79,13 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
         {/* 1行目: 時間 */}
         <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:1}}>
           <div onClick={e=>{e.stopPropagation();onToggle(task.id);}}
-            style={{width:16,height:16,borderRadius:3,border:`2px solid ${done?C.textMuted:color}`,
-              background:done?color:"transparent",flexShrink:0,cursor:"pointer",
+            onTouchEnd={e=>{cbTouchedRef.current=true; e.stopPropagation();e.preventDefault();onToggle(task.id);}}
+            style={{padding:6,margin:-6,flexShrink:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <div style={{width:16,height:16,borderRadius:3,border:`2px solid ${done?C.textMuted:color}`,
+              background:done?color:"transparent",pointerEvents:"none",
               display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {done && <span style={{color:"#fff",fontSize:8,fontWeight:900,lineHeight:1}}>✓</span>}
+              {done && <span style={{color:"#fff",fontSize:8,fontWeight:900,lineHeight:1}}>✓</span>}
+            </div>
           </div>
           <span style={{fontSize:9,color:done?C.textMuted:color,opacity:.9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             {task.startTime}{task.endTime?`〜${task.endTime}`:""}
