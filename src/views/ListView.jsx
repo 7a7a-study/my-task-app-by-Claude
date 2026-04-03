@@ -15,7 +15,7 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   const colW = `${100 / totalCols}%`;
   const colL = `${col * 100 / totalCols}%`;
   // タッチ環境: 長押し500msでのみドラッグ・リサイズ開始
-  const IS_TOUCH = !window.matchMedia("(hover:hover) and (pointer:fine)").matches;
+  const IS_TOUCH = ("ontouchstart" in window || navigator.maxTouchPoints > 0) && !window.matchMedia("(pointer:fine)").matches;
   const lpTimer = useState(null); // [timerId, setTimerId]
   const [lpActive, setLpActive] = useState(false);
   const lpRef = React.useRef(null);
@@ -60,10 +60,10 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
         {/* 1行目: 時間 */}
         <div style={{display:"flex",alignItems:"center",gap:3,marginBottom:1}}>
           <div onClick={e=>{e.stopPropagation();onToggle(task.id);}}
-            style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${done?C.textMuted:color}`,
+            style={{width:16,height:16,borderRadius:3,border:`2px solid ${done?C.textMuted:color}`,
               background:done?color:"transparent",flexShrink:0,cursor:"pointer",
               display:"flex",alignItems:"center",justifyContent:"center"}}>
-            {done && <span style={{color:"#fff",fontSize:5,fontWeight:900,lineHeight:1}}>✓</span>}
+            {done && <span style={{color:"#fff",fontSize:8,fontWeight:900,lineHeight:1}}>✓</span>}
           </div>
           <span style={{fontSize:9,color:done?C.textMuted:color,opacity:.9,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
             {task.startTime}{task.endTime?`〜${task.endTime}`:""}

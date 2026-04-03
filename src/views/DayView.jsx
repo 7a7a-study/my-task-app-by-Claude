@@ -113,7 +113,7 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
                       onDragEnd={()=>setDragTask(null)}
                       onClick={e=>hp(e,t)}
                       style={{display:"flex",alignItems:"center",gap:6,padding:"3px 6px",borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 5px 5px 0",marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"grab",opacity:isDone?.5:1}}>
-                      <div onClick={e=>{e.stopPropagation();hToggle(t.id);}} style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                      <div onClick={e=>{e.stopPropagation();hToggle(t.id);}} style={{width:16,height:16,borderRadius:3,border:`2px solid ${isDone?C.textMuted:c}`,background:isDone?c:"transparent",flexShrink:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>{isDone&&<span style={{color:"#fff",fontSize:9,fontWeight:900}}>✓</span>}</div>
                       <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,textDecoration:isDone?"line-through":"none"}}>{t.title}</span>
                       {t.deadlineDate && <span style={{fontSize:8,color:C.warn,marginLeft:"auto"}}>⚠{fd(t.deadlineDate)}</span>}
                     </div>

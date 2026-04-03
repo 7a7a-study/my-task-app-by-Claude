@@ -278,8 +278,10 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                     borderLeft:`3px solid ${isDone?C.textMuted:c}`,borderRadius:"0 4px 4px 0",
                     marginBottom:2,background:(isDone?C.textMuted:c)+"18",cursor:"pointer",opacity:isDone?.5:1}}>
                   <div onClick={e=>{e.stopPropagation();hToggle(t.id);}}
-                    style={{width:7,height:7,borderRadius:1.5,border:`1.5px solid ${isDone?C.textMuted:c}`,
-                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer"}}/>
+                    style={{width:16,height:16,borderRadius:3,border:`2px solid ${isDone?C.textMuted:c}`,
+                      background:isDone?c:"transparent",flexShrink:0,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center"}}>
+                    {isDone&&<span style={{color:"#fff",fontSize:9,fontWeight:900}}>✓</span>}
+                  </div>
                   <span style={{fontSize:10,fontWeight:600,color:isDone?C.textMuted:c,
                     textDecoration:isDone?"line-through":"none",flex:1,overflow:"hidden",
                     whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{t.title}</span>
