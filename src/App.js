@@ -21,12 +21,15 @@ import { TemplatesView } from "./views/TemplatesView";
 // ── 既存タスクのマイグレーション ────────────────────────────────────
 const migrateTask = (t) => {
   // sessions[] の各枠を新フィールドに統一（date → startDate）
-  const migrateSessions = (sessions) => sessions.map(s => ({
-    ...s,
-    startDate: s.startDate || s.date || "",  // date は旧フィールド
-    endDate:   s.endDate || "",
-    // date は互換のため残す（読み取り側で両方見る）
-  }));
+  const migrateSessions = (sessions) => sessions
+    .filter(s => s.startDate || s.date)  // 日付のないセッションを除去
+    .map(s => ({
+      ...s,
+      id: s.id || ("s_" + Math.random().toString(36).slice(2,8)),
+      startDate: s.startDate || s.date || "",  // date は旧フィールド
+      date:      s.startDate || s.date || "",  // 互換
+      endDate:   s.endDate || "",
+    }));
 
   let result = {...t, children: undefined};
 
