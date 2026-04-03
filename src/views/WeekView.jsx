@@ -172,8 +172,8 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                 const st=`${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
                 const et=task.duration?addDur(st,Number(task.duration)):"";
                 const newSessions=(task.sessions||[]).length>0
-                  ?task.sessions.map((s,i)=>i===0?{...s,date:d,startTime:st,endTime:et}:s)
-                  :[{id:"s_main",date:d,startTime:st,endTime:et}];
+                  ?task.sessions.map((s,i)=>i===0?{...s,date:d,startDate:d,startTime:st,endTime:et}:s)
+                  :[{id:"s_main",date:d,startDate:d,startTime:st,endTime:et}];
                 onUpdate({...task,sessions:newSessions,startDate:"",startTime:"",endTime:"",isLater:false});
                 setDragTask(null);
               }}

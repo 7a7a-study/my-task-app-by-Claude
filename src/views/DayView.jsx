@@ -53,8 +53,8 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
     if (!t) return;
     const et = t.duration ? addDur(st, Number(t.duration)) : "";
     const newSessions = (t.sessions||[]).length > 0
-      ? t.sessions.map((s,i) => i===0 ? {...s, date:viewDate, startTime:st, endTime:et} : s)
-      : [{id:"s_main", date:viewDate, startTime:st, endTime:et}];
+      ? t.sessions.map((s,i) => i===0 ? {...s, date:viewDate, startDate:viewDate, startTime:st, endTime:et} : s)
+      : [{id:"s_main", date:viewDate, startDate:viewDate, startTime:st, endTime:et}];
     onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
     setDragTask(null);
   };
