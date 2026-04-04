@@ -20,15 +20,22 @@ import { TemplatesView } from "./views/TemplatesView";
 
 // ── 既存タスクのマイグレーション ────────────────────────────────────
 const migrateTask = (t) => {
-  // sessions[] の各枠を新フィールドに統一（date → startDate）
+  // sessions[] の各枠を新フィールドに統一（date → startDate、不正フィールドを除去）
   const migrateSessions = (sessions) => sessions
-    .filter(s => s.startDate || s.date)  // 日付のないセッションを除去
-    .map(s => ({
-      ...s,
-      id: s.id || ("s_" + Math.random().toString(36).slice(2,8)),
-      startDate: s.startDate || s.date || "",  // date は旧フィールド
-      date:      s.startDate || s.date || "",  // 互換
+    .map(s => {
+      // startDate が空でも date から復元を試みる
+      const sd = (s.startDate && s.startDate !== "") ? s.startDate : (s.date && s.date !== "") ? s.date : "";
+      return { sd, s };
+    })
+    .filter(({sd}) => sd !== "")  // 日付のないセッションを除去
+    .map(({sd, s}) => ({
+      // 必要なフィールドだけ明示的にピック（タスク本体のstartDate等の混入を防ぐ）
+      id:        s.id || ("s_" + Math.random().toString(36).slice(2,8)),
+      startDate: sd,
+      date:      sd,  // 旧フィールド互換
+      startTime: s.startTime || "",
       endDate:   s.endDate || "",
+      endTime:   s.endTime || "",
     }));
 
   let result = {...t, children: undefined};
@@ -235,13 +242,21 @@ export default function App() {
     delete clean._sessionId; delete clean._sessionOnly;
     delete clean._isDeadline; delete clean._overrideKey; delete clean._overrideId;
     delete clean._w7deadline; delete clean._w7session;
-    // startDateなしセッションを除去（毎日表示バグの原因）
+    // セッションを正規化（不正フィールド混入・startDateなしを除去）
     if (clean.sessions) {
       clean.sessions = clean.sessions
-        .filter(s => s.startDate || s.date)
-        .map(s => ({
-          ...s,
-          id: s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
+        .map(s => {
+          const sd = (s.startDate && s.startDate !== "") ? s.startDate : (s.date && s.date !== "") ? s.date : "";
+          return {sd, s};
+        })
+        .filter(({sd}) => sd !== "")
+        .map(({sd, s}) => ({
+          id:        s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
+          startDate: sd,
+          date:      sd,
+          startTime: s.startTime || "",
+          endDate:   s.endDate || "",
+          endTime:   s.endTime || "",
         }));
     }
     const synced = syncTags(updTreeLocal(tasks, clean.id, () => clean), clean.id, clean.tags, tags);
