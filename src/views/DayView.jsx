@@ -96,28 +96,7 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
         </button>
       </div>
       </div>
-      {/* ===DEBUG PANEL=== */}
-      {(timed.length > 0 || untimed.filter(t=>!t._isDeadline).length > 0) && (
-        <div style={{background:"#1a1a2e",color:"#0f0",fontSize:9,padding:6,marginBottom:4,borderRadius:6,fontFamily:"monospace",overflowX:"auto"}}>
-          <div style={{color:"#ff0",marginBottom:2}}>🐛 {viewDate} に表示中のタスク（セッションRAW）</div>
-          {[...timed,...untimed.filter(t=>!t._isDeadline)].map((t,i)=>{
-            const orig = flatten(tasks).find(x=>x.id===t.id);
-            return (
-              <div key={i} style={{marginBottom:4,borderTop:"1px solid #333",paddingTop:3}}>
-                <div style={{color:"#8ff"}}>「{t.title}」 sid={t._sessionId||"なし"}</div>
-                <div>表示startDate="{t.startDate}" startTime="{t.startTime}"</div>
-                <div style={{color:"#fa0"}}>元sessions:</div>
-                {(orig?.sessions||[]).map((s,j)=>(
-                  <div key={j} style={{paddingLeft:8,color:"#cfc"}}>
-                    [{j}] sd="{s.startDate}" date="{s.date}" st="{s.startTime}" et="{s.endTime}" ed="{s.endDate}"
-                  </div>
-                ))}
-              </div>
-            );
-          })}
-        </div>
-      )}
-      {/* ===END DEBUG=== */}
+
         const normalUntimed = untimed.filter(t => !t._isDeadline);
         const deadlineUntimed = untimed.filter(t => t._isDeadline);
         return (
