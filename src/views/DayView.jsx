@@ -96,7 +96,7 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
         </button>
       </div>
       </div>
-
+      {(() => {
         const normalUntimed = untimed.filter(t => !t._isDeadline);
         const deadlineUntimed = untimed.filter(t => t._isDeadline);
         return (
