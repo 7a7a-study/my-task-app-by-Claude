@@ -14,7 +14,7 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
   const [holReady, setHolReady] = useState(false);
   const [dayOffset, setDayOffset] = useState(0);
 
-  const viewDate = (() => { const d=new Date(today); d.setDate(d.getDate()+dayOffset); return localDate(d); })();
+  const viewDate = useMemo(() => { const d=new Date(today); d.setDate(d.getDate()+dayOffset); return localDate(d); }, [today, dayOffset]);
   const isToday  = dayOffset === 0;
 
   const all = flatten(tasks);
