@@ -262,7 +262,8 @@ const sessionStartDate = s => s.startDate || s.date || "";
 const sessionCoversDate = (s, date) => {
   const sd = sessionStartDate(s);
   if (!sd) return false;  // startDateなければスキップ（startTimeだけでは日付特定不可）
-  const ed = s.endDate || sd;  // endDateなければ当日のみ
+  // endDateがstartDateより前の場合は不正値として無視（毎日表示バグの防止）
+  const ed = (s.endDate && s.endDate >= sd) ? s.endDate : sd;
   return date >= sd && date <= ed;
 };
 

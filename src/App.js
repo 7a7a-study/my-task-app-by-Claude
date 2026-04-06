@@ -217,14 +217,19 @@ export default function App() {
     const rawSessions = _sessions ?? fStripped.sessions ?? [];
     const sessions = rawSessions
       .filter(s => s.startDate || s.date)  // startDateなしはセッションとして無効
-      .map(s => ({
-        id: s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
-        startDate: s.startDate || s.date || "",
-        date:      s.startDate || s.date || "",  // 旧フィールド互換
-        startTime: s.startTime || "",
-        endDate:   s.endDate || "",
-        endTime:   s.endTime || "",
-      }));
+      .map(s => {
+        const sd = s.startDate || s.date || "";
+        // endDateがstartDateより前なら不正値として除去（毎日表示バグの防止）
+        const ed = (s.endDate && s.endDate >= sd) ? s.endDate : "";
+        return {
+          id: s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
+          startDate: sd,
+          date:      sd,  // 旧フィールド互換
+          startTime: s.startTime || "",
+          endDate:   ed,
+          endTime:   s.endTime || "",
+        };
+      });
     const fw = {
       ...fStripped,
       startDate: "",
@@ -263,7 +268,8 @@ export default function App() {
           startDate: sd,
           date:      sd,
           startTime: s.startTime || "",
-          endDate:   s.endDate || "",
+          // endDateがstartDateより前なら不正値として除去（毎日表示バグの防止）
+          endDate:   (s.endDate && s.endDate >= sd) ? s.endDate : "",
           endTime:   s.endTime || "",
         }));
     }
