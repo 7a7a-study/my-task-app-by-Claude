@@ -132,7 +132,15 @@ export default function App() {
             setTasksRaw(migrated);
             if (needsSave) {
               // 移行が必要なタスクがあれば即保存して永続化
-              save2DB(migrated, d.tags || TAG_PRESETS, d.templates || []);
+              // ※ save2DB を経由すると setSaving(true/false) が連鎖して
+              //   onSnapshot が再発火するたびに「保存中」がチカチカするため
+              //   setDoc を直接呼び出して表示に影響させない
+              const tg = d.tags || TAG_PRESETS;
+              const tp = d.templates || [];
+              setDoc(doc(db, "users", user.uid), {
+                tasks: migrated, tags: tg, templates: tp,
+                updatedAt: new Date().toISOString()
+              }).catch(e => console.error("マイグレーション保存失敗", e));
             }
           }
           if (d.tags)      setTagsRaw(d.tags);
