@@ -96,6 +96,11 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
         </button>
       </div>
       </div>
+      {/* デバッグ表示（確認後削除） */}
+      <div style={{fontSize:9,color:"#fff",background:"#333",padding:"4px 8px",borderRadius:6,marginBottom:4,wordBreak:"break-all"}}>
+        <div>viewDate: {viewDate}</div>
+        <div>startTasks({startTasks.length}): {startTasks.map(t=>`${t.title}[sd:${t.startDate},s0sd:${t.sessions?.[0]?.startDate}]`).join(" / ")}</div>
+      </div>
       {(() => {
         const normalUntimed = untimed.filter(t => !t._isDeadline);
         const deadlineUntimed = untimed.filter(t => t._isDeadline);
