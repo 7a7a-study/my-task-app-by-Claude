@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
-import { doc, setDoc, getDoc, onSnapshot } from "firebase/firestore";
+import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
 
 import { C, G, TAG_PRESETS, ALLOWED } from "./constants";
@@ -38,7 +38,9 @@ const migrateTask = (t) => {
       endTime:   s.endTime || "",
     }));
 
-  let result = {...t, children: undefined};
+  // children は undefined にしない（JSON比較の false-positive を防ぐ）
+  // migrateTasks 側で children を上書きするため、ここでは spread のまま
+  let result = {...t};
 
   // sessions がある場合は枠フィールドを統一
   if ((t.sessions||[]).length > 0) {
@@ -81,6 +83,16 @@ const migrateTasks = (tasks) => tasks.map(t => ({
   children: migrateTasks(t.children || []),
 }));
 
+// ── マイグレーション要否の判定（children:[] vs undefined の差異は無視）──
+// ── マイグレーション要否の判定（children:[] vs undefined の差異は無視）──
+const needsMigration = (original, migrated) => {
+  const strip = tasks => JSON.stringify(tasks, (key, val) => {
+    if (key === "children" && (!val || (Array.isArray(val) && val.length === 0))) return "__empty__";
+    return val;
+  });
+  return strip(original) !== strip(migrated);
+};
+
 export default function App() {
   const [sideOpen, setSideOpen]       = useState(window.innerWidth >= 768);
   const [sortOrder, setSortOrder]     = useState("デフォルト");
@@ -106,8 +118,11 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("notifSettings") || "null") || {enabled: false, minutesBefore: 60}; }
     catch { return {enabled: false, minutesBefore: 60}; }
   });
+  // notifRef はここで宣言（setNotifSettings の closure で参照するため先に定義）
+  const notifRef = useRef(notifSettings);
   const setNotifSettings = s => {
     setNotifSettingsRaw(s);
+    notifRef.current = s;  // ref を即時更新（save2DB が800ms後に参照するため）
     try { localStorage.setItem("notifSettings", JSON.stringify(s)); } catch {}
   };
 
@@ -120,33 +135,32 @@ export default function App() {
     if (!user) return;
     const unsub = onSnapshot(
       doc(db, "users", user.uid),
-      // includeMetadataChanges は外す（自分の書き込み完了時の再発火を防ぐ）
       snap => {
         if (snap.metadata.hasPendingWrites) return;
         if (snap.exists()) {
           const d = snap.data();
           if (d.tasks) {
             const migrated = migrateTasks(d.tasks);
-            const needsSave = JSON.stringify(migrated) !== JSON.stringify(d.tasks);
             setTasksRaw(migrated);
-            if (needsSave) {
-              // マイグレーションが必要な場合のみ保存
-              // ※ save2DB（setSaving経由）を使わずsetDoc直接呼び出し
-              //   → 保存中チカチカ防止 & onSnapshot再発火ループ防止
-              const tg = d.tags || TAG_PRESETS;
-              const tp = d.templates || [];
-              setDoc(doc(db, "users", user.uid), {
-                tasks: migrated, tags: tg, templates: tp,
-                updatedAt: new Date().toISOString()
-              }).catch(e => console.error("マイグレーション保存失敗", e));
+            // マイグレーションが必要な場合のみ保存トリガー
+            // needsMigration は children:[]↔undefined の差異を無視して比較
+            if (needsMigration(d.tasks, migrated)) {
+              // 直接 setDoc ではなく debounced save2DB を使う
+              // → scheduledNotifs/fcmToken の上書き消去を防ぎ、
+              //   複数デバイスからの同時書き込みも自然に吸収できる
+              save2DBRef.current();
             }
           }
-          if (d.tags)      setTagsRaw(d.tags);
-          if (d.templates) setTemplatesRaw(d.templates);
+          if (d.tags)           setTagsRaw(d.tags);
+          if (d.templates)      setTemplatesRaw(d.templates);
+          // notifSettings が Firestore に保存されていれば復元
+          // （localStorage を持たない別デバイスとの同期用）
+          if (d.notifSettings)  setNotifSettingsRaw(d.notifSettings);
         }
       }
     );
     return unsub;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   // 今年・来年の祝日プリフェッチ
@@ -163,8 +177,7 @@ export default function App() {
   [tasks]);
   useEffect(() => { scheduleNotifications(tasks, notifSettings); }, [notifHash, notifSettings]);
 
-  // tasksとnotifSettingsをrefで追跡（stale closure防止）
-  const notifRef = useRef(notifSettings);
+  // notifRef を notifSettings の変化に追従させる（useCallback/setInterval内のstale closure防止）
   useEffect(() => { notifRef.current = notifSettings; }, [notifSettings]);
 
   // フォアグラウンド通知チェック
@@ -181,34 +194,48 @@ export default function App() {
   useEffect(() => { tagsLatest.current = tags; }, [tags]);
   useEffect(() => { templatesLatest.current = templates; }, [templates]);
 
-  // save2DB 呼び出し回数の安全弁（1分間に最大10回まで）
-  const saveCountRef = useRef(0);
-  const saveCountResetRef = useRef(null);
-  const save2DB = async (t, tg, tp) => {
-    if (!user) return;
-    // 1分間に10回超えたら停止（無限ループ検知）
-    saveCountRef.current += 1;
-    if (saveCountRef.current > 10) {
-      console.error("save2DB: 1分間の呼び出し上限(10回)を超えました。保存を停止します。");
-      return;
-    }
-    if (!saveCountResetRef.current) {
-      saveCountResetRef.current = setTimeout(() => {
-        saveCountRef.current = 0;
-        saveCountResetRef.current = null;
-      }, 60 * 1000);
-    }
-    setSaving(true);
-    try {
-      await setDoc(doc(db, "users", user.uid), {tasks: t, tags: tg, templates: tp, updatedAt: new Date().toISOString()});
-    }
-    catch(e) { console.error("保存失敗", e); }
-    setSaving(false);
-  };
+  // ── save2DB：デバウンス付き Firestore 保存 ──────────────────────────
+  // 【設計方針】
+  //   - 引数なし。ref（最新値）を参照するため、ドラッグ中の連続呼び出しは
+  //     最後の1回だけが実際に保存される（Firestore 書き込み回数を大幅削減）
+  //   - setDoc に { merge: true } を付けることで scheduledNotifs / fcmToken を
+  //     上書き消去しない（Cloud Function との共存に必須）
+  //   - notifSettings も保存することで Cloud Function が FCM 通知設定を読める
+  //     （将来の通知設定 UI 追加時にそのまま機能する）
+  const saveTimerRef = useRef(null);
+  const save2DBRef   = useRef(null); // onSnapshot 内から参照するための ref
 
-  const setTasks     = t  => { setTasksRaw(t);  save2DB(t, tagsLatest.current, templatesLatest.current); };
-  const setTags      = tg => { setTagsRaw(tg);  save2DB(tasksLatest.current, tg, templatesLatest.current); };
-  const setTemplates = tp => { setTemplatesRaw(tp); save2DB(tasksLatest.current, tagsLatest.current, tp); };
+  const save2DB = useCallback(() => {
+    if (!user) return;
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      saveTimerRef.current = null;
+      setSaving(true);
+      try {
+        await setDoc(
+          doc(db, "users", user.uid),
+          {
+            tasks:        tasksLatest.current,
+            tags:         tagsLatest.current,
+            templates:    templatesLatest.current,
+            notifSettings: notifRef.current,
+            updatedAt:    new Date().toISOString(),
+          },
+          { merge: true }   // ← scheduledNotifs / fcmToken を消さない
+        );
+      } catch (e) {
+        console.error("保存失敗", e);
+      }
+      setSaving(false);
+    }, 800); // 800ms デバウンス：ドラッグ中の連続更新を1回に集約
+  }, [user]);
+
+  // onSnapshot の closure からも最新の save2DB を呼べるよう ref に保持
+  useEffect(() => { save2DBRef.current = save2DB; }, [save2DB]);
+
+  const setTasks     = t  => { setTasksRaw(t);  save2DB(); };
+  const setTags      = tg => { setTagsRaw(tg);  save2DB(); };
+  const setTemplates = tp => { setTemplatesRaw(tp); save2DB(); };
 
   const handleLogin = async () => {
     setLoginLoading(true);
@@ -353,9 +380,8 @@ export default function App() {
 
   const handleMemoToggle = (id, idx) => {
     const next = updTreeLocal(tasks, id, x => ({...x, memo: toggleMemo(x.memo, idx)}));
-    setTasksRaw(next);
-    clearTimeout(window._memoSaveTimer);
-    window._memoSaveTimer = setTimeout(() => save2DB(next, tags, templates), 800);
+    setTasksRaw(next);  // setTasks ではなく setTasksRaw（DB保存は下の save2DB に任せる）
+    save2DB();          // デバウンス済み：連続トグルは最後の1回だけ保存
   };
 
   const handleEdit = t => {
