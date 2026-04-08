@@ -1,10 +1,11 @@
 import { useState, useMemo } from "react";
 import { C } from "../constants";
 import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate, getDeadlineTasksForDate, useIsPC, useResizeHandler, isHol } from "../utils";
+import { getGCalEventsForDate } from "../gcal";
 import { TimelineChip } from "./ListView";
 import { Popup } from "../components/Popup";
 
-export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask}) => {
+export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask,gcalEvents,gcalEnabled,setGCalEnabled,gcalError}) => {
   const isPC = useIsPC();
   const [popup, setPopup] = useState(null);
   const [dropH, setDropH] = useState(null);
@@ -167,6 +168,10 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const dayStartMin = DAY_START * 60;
 
   const tlTasks       = useMemo(() => getTasksForDate(tasks, today), [tasks, today]);
+  // GCalイベント（メモリキャッシュのみ・Firestoreに書かない）
+  const gcalForToday  = useMemo(() => getGCalEventsForDate(gcalEvents, today), [gcalEvents, today]);
+  const gcalTimed     = gcalForToday.filter(ev => ev.startTime && !ev.isAllDay);
+  const gcalAllDay    = gcalForToday.filter(ev => ev.isAllDay || !ev.startTime);
   const deadlineTasks = useMemo(() => getDeadlineTasksForDate(tasks, today), [tasks, today]);
   const timedTasks     = tlTasks.filter(t => t.startTime);
   const untimedTasks   = tlTasks.filter(t => !t.startTime);
@@ -320,6 +325,22 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   const pcTimelineJSX = (
     <div style={{flex:1,overflowY:"auto",position:"relative",marginBottom:6}}>
+      {/* GCal終日・時間なしイベント */}
+      {gcalAllDay.length > 0 && (
+        <div style={{padding:"5px 8px",background:"#4285f420",borderRadius:7,border:"1px solid #4285f444",marginBottom:5}}>
+          <div style={{fontSize:9,fontWeight:700,color:"#4285f4",marginBottom:3,letterSpacing:.4}}>📅 Googleカレンダー（終日）</div>
+          {gcalAllDay.map(ev => (
+            <div key={ev.id}
+              onClick={()=>ev.htmlLink&&window.open(ev.htmlLink,"_blank")}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                borderLeft:"3px solid #4285f4",borderRadius:"0 4px 4px 0",
+                marginBottom:2,background:"#4285f415",cursor:"pointer"}}>
+              <span style={{fontSize:10,fontWeight:600,color:"#4285f4",flex:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{ev.title}</span>
+              {ev.location&&<span style={{fontSize:8,color:"#4285f4",opacity:.7,flexShrink:0}}>📍</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {normalUntimed.length > 0 && (
         <div style={{padding:"5px 8px",background:C.surface,borderRadius:7,border:`1px solid ${C.border}`,marginBottom:5}}>
           <div style={{fontSize:9,fontWeight:700,color:C.textMuted,marginBottom:3,textTransform:"uppercase",letterSpacing:.4}}>時間未定</div>
@@ -408,6 +429,27 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               {`${String(Math.floor(dropH/60)).padStart(2,"0")}:${String(dropH%60).padStart(2,"0")}`}{dragTask?` ← ${dragTask.title}`:""}
             </div>
           )}
+          {/* GCalタイムチップ（右側表示・Slateタスクと重ならないようoffset） */}
+          {gcalTimed.map(ev => {
+            const sm = t2m(ev.startTime)||0;
+            const em = ev.endTime ? t2m(ev.endTime) : sm+60;
+            if (sm < dayStartMin || sm > DAY_END*60) return null;
+            const top = (sm - dayStartMin)*PPM_DB;
+            const h   = Math.max(20,(em-sm)*PPM_DB);
+            return (
+              <div key={"gcal_"+ev.id}
+                onClick={e=>{e.stopPropagation();ev.htmlLink&&window.open(ev.htmlLink,"_blank");}}
+                title={`${ev.title}${ev.location?" 📍"+ev.location:""}`}
+                style={{position:"absolute",top,right:0,width:"40%",height:h,
+                  background:"#4285f428",borderLeft:"3px solid #4285f4",
+                  borderRadius:"0 5px 5px 0",overflow:"hidden",zIndex:2,
+                  cursor:"pointer",padding:"2px 4px",pointerEvents:"auto"}}>
+                <div style={{fontSize:9,fontWeight:600,color:"#4285f4",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {ev.startTime} {ev.title}
+                </div>
+              </div>
+            );
+          })}
           {timedDeadlines.map(t => {
             const dm = t2m(t.deadlineTime);
             if (dm === null || dm < dayStartMin || dm > DAY_END*60) return null;
@@ -425,6 +467,27 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           })}
         </div>
       </div>
+    </div>
+  );
+
+  // GCal連携トグルUI（PC・スマホ共通パーツ）
+  const GCalToggle = () => (
+    <div style={{display:"flex",alignItems:"center",gap:6}}>
+      <button
+        onClick={()=>setGCalEnabled&&setGCalEnabled(!gcalEnabled)}
+        style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:8,
+          background:gcalEnabled?"#4285f422":"transparent",
+          color:gcalEnabled?"#4285f4":C.textMuted,
+          border:`1px solid ${gcalEnabled?"#4285f4":C.border}`,
+          cursor:"pointer",fontSize:10,fontWeight:gcalEnabled?700:400,transition:"all .15s"}}>
+        📅 GCal{gcalEnabled?"連携中":"連携オフ"}
+      </button>
+      {gcalEnabled && gcalError==="no_token" && (
+        <span style={{fontSize:9,color:C.warn}}>⚠ 再ログインでカレンダーを読込</span>
+      )}
+      {gcalEnabled && !gcalError && gcalEvents && (
+        <span style={{fontSize:9,color:"#4285f4"}}>{gcalEvents.length}件取得済</span>
+      )}
     </div>
   );
 
@@ -448,7 +511,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   if (isPC) {
     return (
       <>
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+        <GCalToggle/>
         <button onClick={()=>onAdd&&onAdd()}
           style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",borderRadius:8,
             background:C.accent,color:"#fff",border:"none",cursor:"pointer",
@@ -542,7 +606,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   return (
     <>
     <div style={{display:"flex",flexDirection:"column",gap:12}}>
-      <div style={{display:"flex",justifyContent:"flex-end"}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+        <GCalToggle/>
         <button onClick={()=>onAdd&&onAdd()}
           style={{display:"flex",alignItems:"center",gap:5,padding:"7px 16px",borderRadius:8,
             background:C.accent,color:"#fff",border:"none",cursor:"pointer",fontSize:12,fontWeight:700}}>

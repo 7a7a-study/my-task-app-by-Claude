@@ -1,10 +1,11 @@
 import { useState, useEffect, useRef, useMemo } from "react";
 import { C } from "../constants";
 import { localDate, flatten, fd, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed, useResizeHandler } from "../utils";
+import { getGCalEventsForDate } from "../gcal";
 import { Popup } from "../components/Popup";
 import { TimelineChip } from "./ListView";
 
-export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,dragTask,setDragTask}) => {
+export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,dragTask,setDragTask,gcalEvents}) => {
   const DAY_START = 6;
   const DAY_END   = 23;
   const PPM       = 0.85;
@@ -22,6 +23,10 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
   useEffect(() => { fetchHolidays(viewDate.slice(0,4)).then(()=>setHolReady(true)); }, [viewDate]);
 
   const startTasks    = useMemo(() => getTasksForDate(tasks, viewDate), [tasks, viewDate]);
+  // GCalイベント（メモリキャッシュから。Firestoreに書かない）
+  const gcalForDate   = useMemo(() => getGCalEventsForDate(gcalEvents, viewDate), [gcalEvents, viewDate]);
+  const gcalTimed     = gcalForDate.filter(ev => ev.startTime && !ev.isAllDay);
+  const gcalAllDay    = gcalForDate.filter(ev => ev.isAllDay || !ev.startTime);
   const deadlineTasks = useMemo(() => getDeadlineTasksForDate(tasks, viewDate), [tasks, viewDate]);
   const todayT = startTasks;
   // ① 繰り返し・通常タスク：startTimeなしでも「時間未定」欄に表示
@@ -96,13 +101,23 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
         </button>
       </div>
       </div>
-      {/* デバッグ表示（確認後削除） */}
-      <div style={{fontSize:9,color:"#fff",background:"#333",padding:"4px 8px",borderRadius:6,marginBottom:4,wordBreak:"break-all"}}>
-        <div>viewDate: {viewDate}</div>
-        <div>timed({timed.length}): {timed.map(t=>`${t.title}[st:${t.startTime},sd:${t.startDate}]`).join(" / ")}</div>
-        <div>deadlineTasks({deadlineTasks.length}): {deadlineTasks.map(t=>`${t.title}[dd:${t.deadlineDate},dt:${t.deadlineTime}]`).join(" / ")}</div>
-        <div>timedDeadlines({timedDeadlines.length}): {timedDeadlines.map(t=>`${t.title}[dd:${t.deadlineDate}]`).join(" / ")}</div>
-      </div>
+
+      {/* GCal終日・時間なしイベント */}
+      {gcalAllDay.length > 0 && (
+        <div style={{padding:"5px 8px",background:"#4285f422",borderRadius:7,border:"1px solid #4285f444",marginBottom:4}}>
+          <div style={{fontSize:9,fontWeight:700,color:"#4285f4",marginBottom:3,letterSpacing:.4}}>📅 Googleカレンダー</div>
+          {gcalAllDay.map(ev => (
+            <div key={ev.id}
+              onClick={()=>window.open(ev.htmlLink,"_blank")}
+              style={{display:"flex",alignItems:"center",gap:5,padding:"2px 5px",
+                borderLeft:"3px solid #4285f4",borderRadius:"0 4px 4px 0",
+                marginBottom:2,background:"#4285f415",cursor:"pointer"}}>
+              <span style={{fontSize:10,fontWeight:600,color:"#4285f4",flex:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{ev.title}</span>
+              {ev.location && <span style={{fontSize:8,color:"#4285f4",opacity:.7,flexShrink:0}}>📍</span>}
+            </div>
+          ))}
+        </div>
+      )}
       {(() => {
         const normalUntimed = untimed.filter(t => !t._isDeadline);
         const deadlineUntimed = untimed.filter(t => t._isDeadline);
@@ -207,6 +222,26 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
               <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={hToggle} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
             ));
           })()}
+          {/* GCalタイムチップ（右側に表示・クリックでGCalを開く） */}
+          {gcalTimed.map(ev => {
+            const sm = t2m(ev.startTime)||0;
+            const em = ev.endTime ? t2m(ev.endTime) : sm+60;
+            const top = (sm - dayStartMin)*PPM;
+            const h   = Math.max(22,(em-sm)*PPM);
+            return (
+              <div key={"gcal_"+ev.id}
+                onClick={e=>{e.stopPropagation();ev.htmlLink&&window.open(ev.htmlLink,"_blank");}}
+                title={`${ev.title}${ev.location?" 📍"+ev.location:""}`}
+                style={{position:"absolute",top,right:0,width:"42%",height:h,
+                  background:"#4285f428",borderLeft:"3px solid #4285f4",
+                  borderRadius:"0 5px 5px 0",overflow:"hidden",zIndex:2,
+                  cursor:"pointer",pointerEvents:"auto",padding:"2px 4px"}}>
+                <div style={{fontSize:9,fontWeight:600,color:"#4285f4",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                  {ev.startTime} {ev.title}
+                </div>
+              </div>
+            );
+          })}
           {/* 締切ライン（完了済みは除外済み） */}
           {timedDeadlines.map(t => {
             const dm = t2m(t.deadlineTime);

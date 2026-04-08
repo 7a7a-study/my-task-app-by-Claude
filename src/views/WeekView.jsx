@@ -1,10 +1,11 @@
 import { useState, useEffect, useMemo } from "react";
 import { C, DAYS_JP } from "../constants";
 import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed, useResizeHandler } from "../utils";
+import { getGCalEventsForDate } from "../gcal";
 import { Popup } from "../components/Popup";
 import { TimelineChip } from "./ListView";
 
-export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,dragTask,setDragTask}) => {
+export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,dragTask,setDragTask,gcalEvents}) => {
   const DAY_START = 6;
   const DAY_END   = 23;
   const PPM       = 0.85;
@@ -37,6 +38,11 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
     }])),
   [tasks, wd.join(",")]); // eslint-disable-line
   const getDay         = date => dayDataMap[date]?.tasks || [];
+  // GCalイベント（メモリキャッシュのみ・Firestoreに書かない）
+  const gcalDayMap = useMemo(() =>
+    Object.fromEntries(wd.map(d => [d, getGCalEventsForDate(gcalEvents, d)])),
+  [gcalEvents, wd.join(",")]); // eslint-disable-line
+  const getGCalDay  = date => gcalDayMap[date] || [];
   const getDeadlineDay = date => dayDataMap[date]?.deadlines || [];
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
@@ -73,6 +79,29 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
         </button>
       </div>
       </div>
+      {/* GCal終日・時間なしイベント行 */}
+      {(() => {
+        const gcalAllDayRows = wd.map(d => ({d, evs: getGCalDay(d).filter(ev => ev.isAllDay || !ev.startTime)}));
+        if (!gcalAllDayRows.some(r => r.evs.length > 0)) return null;
+        return (
+          <div style={{display:"grid",gridTemplateColumns:"38px repeat(7,1fr)",minWidth:540,marginBottom:3,background:"#4285f410",borderRadius:"8px 8px 0 0",border:"1px solid #4285f433"}}>
+            <div style={{fontSize:7,color:"#4285f4",fontWeight:700,padding:"6px 3px 4px",textAlign:"right",borderRight:"1px solid #4285f422"}}>📅GC</div>
+            {gcalAllDayRows.map(({d,evs}) => (
+              <div key={d} style={{padding:"3px 2px",minHeight:22,borderLeft:"1px solid #4285f420"}}>
+                {evs.map(ev => (
+                  <div key={ev.id}
+                    onClick={()=>ev.htmlLink&&window.open(ev.htmlLink,"_blank")}
+                    style={{fontSize:8,fontWeight:600,color:"#4285f4",whiteSpace:"nowrap",overflow:"hidden",
+                      textOverflow:"ellipsis",padding:"1px 3px",borderLeft:"2px solid #4285f4",
+                      marginBottom:1,background:"#4285f415",borderRadius:"0 3px 3px 0",cursor:"pointer"}}>
+                    {ev.title}
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        );
+      })()}
       {/* 時間未定タスク（最上部） */}
       {(() => {
         const normalRows = wd.map(d => ({d, ts: getDay(d).filter(t=>!t.startTime)}));
@@ -213,6 +242,26 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
                 ));
               })()}
+              {/* GCalタイムチップ */}
+              {getGCalDay(d).filter(ev=>ev.startTime&&!ev.isAllDay).map(ev => {
+                const sm = t2m(ev.startTime)||0;
+                const em = ev.endTime ? t2m(ev.endTime) : sm+60;
+                const top = (sm - dayStartMin)*PPM;
+                const h   = Math.max(18,(em-sm)*PPM);
+                return (
+                  <div key={"gcal_"+ev.id}
+                    onClick={e=>{e.stopPropagation();ev.htmlLink&&window.open(ev.htmlLink,"_blank");}}
+                    title={ev.title}
+                    style={{position:"absolute",top,right:0,width:"44%",height:h,
+                      background:"#4285f428",borderLeft:"2px solid #4285f4",
+                      borderRadius:"0 3px 3px 0",overflow:"hidden",zIndex:2,
+                      cursor:"pointer",padding:"1px 3px"}}>
+                    <div style={{fontSize:8,fontWeight:600,color:"#4285f4",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>
+                      {ev.startTime} {ev.title}
+                    </div>
+                  </div>
+                );
+              })}
               {/* 締切ライン（完了済みは除外済み） */}
               {getDeadlineDay(d).filter(t=>t.deadlineTime).map(t => {
                 const dm = t2m(t.deadlineTime);
