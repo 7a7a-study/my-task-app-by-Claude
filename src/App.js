@@ -1,8 +1,9 @@
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
-import { signInWithPopup, signOut, onAuthStateChanged } from "firebase/auth";
+import { signInWithPopup, signOut, onAuthStateChanged, GoogleAuthProvider } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
 import { registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
+import { saveGCalToken, clearGCalToken, fetchGCalEvents } from "./gcal";
 
 import { C, G, TAG_PRESETS, ALLOWED } from "./constants";
 import { localDate, flatten, parseRepeat, syncTags, syncDone, isLaterTask, toggleMemo, fetchHolidays, useIsPC } from "./utils";
@@ -76,6 +77,18 @@ const migrateTask = (t) => {
     };
   }
 
+  // 繰り返しタスクで sessions[0].endDate === startDate になっているデータを修復
+  // （TaskFormの開始日自動セットバグで登録当日しか表示されなくなる問題）
+  if (result.repeat && result.repeat !== "なし") {
+    const s0 = (result.sessions||[])[0];
+    if (s0 && s0.endDate && s0.endDate === (s0.startDate || s0.date || "")) {
+      result = {
+        ...result,
+        sessions: result.sessions.map((s, i) => i === 0 ? {...s, endDate: ""} : s),
+      };
+    }
+  }
+
   return result;
 };
 const migrateTasks = (tasks) => tasks.map(t => ({
@@ -118,6 +131,13 @@ export default function App() {
     try { return JSON.parse(localStorage.getItem("notifSettings") || "null") || {enabled: false, minutesBefore: 60}; }
     catch { return {enabled: false, minutesBefore: 60}; }
   });
+  // GCalイベント（メモリのみ・Firestore書き込みなし）
+  const [gcalEvents, setGCalEvents] = useState(null); // null=未取得, []=取得済み空, [...]=イベントあり
+  const [gcalEnabled, setGCalEnabled] = useState(() => {
+    try { return localStorage.getItem("gcal_enabled") === "true"; } catch { return false; }
+  });
+  const [gcalError, setGCalError] = useState(null); // "no_token" | "api_error" | null
+
   // notifRef はここで宣言（setNotifSettings の closure で参照するため先に定義）
   const notifRef = useRef(notifSettings);
   const setNotifSettings = s => {
@@ -184,6 +204,30 @@ export default function App() {
     const stop = startForegroundCheck(() => tasksLatest.current, () => notifRef.current, null);
     return stop;
   }, []);
+
+  // ── GCalイベント取得（メモリキャッシュ/Firestore書き込みなし）─────────
+  // ビューが日/週/ダッシュボードに切り替わったとき、または今日の日付が変わったときに取得。
+  // gcalEnabledがfalseのときは何もしない。
+  const gcalFetchRef = useRef(null); // 重複fetch防止
+  useEffect(() => {
+    if (!gcalEnabled) return;
+    // 取得対象期間：今日から±30日（週ビュー・ダッシュボードをカバー）
+    const from = (() => { const d = new Date(today); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
+    const to   = (() => { const d = new Date(today); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10); })();
+    const key  = from + "_" + to;
+    if (gcalFetchRef.current === key) return; // 同一範囲は再取得しない
+    gcalFetchRef.current = key;
+
+    fetchGCalEvents(from, to).then(events => {
+      if (events === null) {
+        setGCalError("no_token"); // トークンなし（再ログイン案内）
+        setGCalEvents(null);
+      } else {
+        setGCalError(null);
+        setGCalEvents(events);
+      }
+    });
+  }, [gcalEnabled, today]); // eslint-disable-line
 
   // 最新値をrefで追跡（stale closure防止のため save2DB 呼び出し時に参照する）
   const tasksLatest     = useRef(tasks);
@@ -266,6 +310,11 @@ export default function App() {
     try {
       const r = await signInWithPopup(auth, provider);
       if (!ALLOWED.includes(r.user.uid)) { await signOut(auth); alert("アクセスできません。"); }
+      else {
+        // GCalアクセストークンをlocalStorageに保存（Firestoreへの書き込みなし）
+        const credential = GoogleAuthProvider.credentialFromResult(r);
+        if (credential) saveGCalToken(credential);
+      }
     } catch(e) { console.error(e); }
     setLoginLoading(false);
   };
@@ -521,7 +570,7 @@ export default function App() {
               <button onClick={() => setShowNotifModal(true)} style={{width: "100%", background: notifSettings?.enabled ? C.accentS : "transparent", color: notifSettings?.enabled ? C.accent : C.textMuted, border: `1px solid ${notifSettings?.enabled ? C.accent : C.border}`, borderRadius: 6, padding: "4px", fontSize: 9, cursor: "pointer", marginBottom: 4, display: "flex", alignItems: "center", justifyContent: "center", gap: 4}}>
                 {notifSettings?.enabled ? "🔔" : "🔕"} 通知設定
               </button>
-              <button onClick={() => signOut(auth)} style={{width: "100%", background: "transparent", color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px", fontSize: 9, cursor: "pointer"}}
+              <button onClick={() => { signOut(auth); clearGCalToken(); }} style={{width: "100%", background: "transparent", color: C.textMuted, border: `1px solid ${C.border}`, borderRadius: 6, padding: "4px", fontSize: 9, cursor: "pointer"}}
                 onMouseEnter={e => { e.currentTarget.style.background = C.dangerS; e.currentTarget.style.color = C.danger; }}
                 onMouseLeave={e => { e.currentTarget.style.background = "transparent"; e.currentTarget.style.color = C.textMuted; }}>ログアウト</button>
             </div>
@@ -546,10 +595,10 @@ export default function App() {
                 <Btn v="accent" onClick={() => { setDefDate(null); setDefTime(null); setEditTask(null); setAddChildTo(null); setShowForm(true); }}>＋ 追加</Btn>
               )}
             </div>
-            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle} onAdd={handleAdd} onUpdate={handleUpdate} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle} onAdd={handleAdd} onUpdate={handleUpdate} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents} gcalEnabled={gcalEnabled} setGCalEnabled={v=>{setGCalEnabled(v);try{localStorage.setItem("gcal_enabled",v?"true":"false");}catch{}}} gcalError={gcalError}/>}
             {view === "list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid => { setAddChildTo(pid); setShowForm(true); }} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
-            {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
-            {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask}/>}
+            {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents}/>}
+            {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents}/>}
             {view === "gantt"     && <GanttView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} hideCompleted={filters.hideCompleted} dragTask={dragTask} setDragTask={setDragTask}/>}
             {view === "report"    && <ReportView tasks={tasks} tags={tags}/>}
             {view === "templates" && <TemplatesView templates={templates} setTemplates={setTemplates} onUse={handleUseTemplate} tags={tags}/>}

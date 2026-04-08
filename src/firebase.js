@@ -14,4 +14,6 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
+// Googleカレンダー読み取り用スコープ（読み取り専用。Firestoreへの書き込みなし）
+provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 export const db = getFirestore(app);
