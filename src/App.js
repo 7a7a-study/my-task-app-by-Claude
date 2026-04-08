@@ -200,12 +200,37 @@ export default function App() {
   //   - setDoc に { merge: true } を付けることで scheduledNotifs / fcmToken を
   //     上書き消去しない（Cloud Function との共存に必須）
   //   - notifSettings も保存することで Cloud Function が FCM 通知設定を読める
-  //     （将来の通知設定 UI 追加時にそのまま機能する）
-  const saveTimerRef = useRef(null);
-  const save2DBRef   = useRef(null); // onSnapshot 内から参照するための ref
+  //   - クライアント側ハードストップ：5分間に20回を超えたら保存を停止
+  //     （CF側 Layer2〜4 と独立した最終安全弁）
+  const saveTimerRef    = useRef(null);
+  const save2DBRef      = useRef(null); // onSnapshot 内から参照するための ref
+  const saveCountRef    = useRef(0);    // ハードストップ用カウンター
+  const saveCountReset  = useRef(null); // カウンターリセットタイマー
+  const saveHalted      = useRef(false);// ハードストップフラグ
 
   const save2DB = useCallback(() => {
     if (!user) return;
+
+    // ── ハードストップ判定（5分間に20回超え）──────────────────────────
+    if (saveHalted.current) {
+      console.error("[save2DB] ハードストップ中。Firestoreへの保存を停止しています。");
+      return;
+    }
+    saveCountRef.current += 1;
+    if (!saveCountReset.current) {
+      saveCountReset.current = setTimeout(() => {
+        saveCountRef.current  = 0;
+        saveHalted.current    = false; // 5分後にリセット（自動復旧）
+        saveCountReset.current = null;
+      }, 5 * 60 * 1000);
+    }
+    if (saveCountRef.current > 20) {
+      saveHalted.current = true;
+      console.error(`[save2DB] 5分間に${saveCountRef.current}回の保存を検出。無限ループの可能性があるため停止しました。`);
+      return;
+    }
+
+    // ── デバウンス（800ms）──────────────────────────────────────────
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
       saveTimerRef.current = null;
