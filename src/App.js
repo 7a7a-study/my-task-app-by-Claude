@@ -160,8 +160,7 @@ export default function App() {
       }
     );
     return unsub;
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user]);
+  }, [user]); // eslint-disable-line
 
   // 今年・来年の祝日プリフェッチ
   useEffect(() => { const y = new Date().getFullYear(); fetchHolidays(y); fetchHolidays(y + 1); }, []);
