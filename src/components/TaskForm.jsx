@@ -312,11 +312,21 @@ export const TaskForm = ({task,tags,onSave,onClose,isChild,defDate,defTime,paren
   const s0 = (f._sessions||[])[0]||{};
   const prevStart = s0.startDate || "";
   const prevEnd = s0.endDate || "";
-  let newEnd = newStart;
-  if (prevStart && prevEnd && prevEnd >= prevStart) {
-    const diff = (new Date(prevEnd) - new Date(prevStart)) / 86400000;
-    const d = new Date(newStart); d.setDate(d.getDate() + Math.round(diff));
-    newEnd = d.toISOString().slice(0,10);
+  // 繰り返しタスクの場合、endDateは「繰り返し終了日」として手動設定するもの。
+  // 開始日変更時に自動セットするとendDate=startDateになり、翌日以降が表示されなくなるバグの原因。
+  // 繰り返しなし（日またぎ対応）のときのみ差分を維持して自動セット。
+  const isRepeat = f.repeat && f.repeat !== "なし";
+  let newEnd = "";
+  if (!isRepeat) {
+    newEnd = newStart;
+    if (prevStart && prevEnd && prevEnd >= prevStart) {
+      const diff = (new Date(prevEnd) - new Date(prevStart)) / 86400000;
+      const d = new Date(newStart); d.setDate(d.getDate() + Math.round(diff));
+      newEnd = d.toISOString().slice(0,10);
+    }
+  } else {
+    // 繰り返しタスク：既存のendDate（繰り返し終了日）があればそのまま保持
+    newEnd = prevEnd || "";
   }
   setF(p => { const ns = (p._sessions||[]).map((s,i) => i===0 ? {...s, startDate:newStart, endDate:newEnd} : s); return {...p, _sessions:ns}; });
 }}
