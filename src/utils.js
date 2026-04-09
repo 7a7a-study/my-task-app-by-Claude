@@ -22,6 +22,9 @@ export const m2t  = m => `${String(Math.floor(Math.max(0,m)/60)%24).padStart(2,"
 export const durFrom = (a,b) => { if(!a||!b) return null; const d=t2m(b)-t2m(a); return d>0?d:null; };
 export const addDur  = (a,d) => (!a||!d) ? "" : m2t(t2m(a)+Number(d));
 export const isLaterTask = t => {
+  // 繰り返しタスクは日付未設定でも「あとでやる」にしない
+  const repeatType = typeof t.repeat === "string" ? t.repeat : t.repeat?.type;
+  if (repeatType && repeatType !== "なし") return false;
   const sessions = t.sessions || [];
   return !sessions.some(s => s.startDate || s.date || s.startTime);  // date は旧フィールド互換
 };
