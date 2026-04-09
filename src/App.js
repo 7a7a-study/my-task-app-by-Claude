@@ -44,8 +44,26 @@ const migrateTask = (t) => {
   let result = {...t};
 
   // sessions がある場合は枠フィールドを統一
+  // 繰り返しタスクで日付なし・時間あり のセッションは後段の補完に回すため除去しない
   if ((t.sessions||[]).length > 0) {
-    result = {...result, sessions: migrateSessions(t.sessions)};
+    const repeatType2 = typeof t.repeat === "string" ? t.repeat : t.repeat?.type;
+    const isRep = repeatType2 && repeatType2 !== "なし";
+    if (isRep) {
+      // 日付なしセッションも一旦通す（後段で startDate 補完される）
+      result = {...result, sessions: t.sessions.map(s => {
+        const sd = (s.startDate && s.startDate !== "") ? s.startDate : (s.date && s.date !== "") ? s.date : "";
+        return {
+          id:        s.id || ("s_" + Math.random().toString(36).slice(2,8)),
+          startDate: sd,
+          date:      sd,
+          startTime: s.startTime || "",
+          endDate:   s.endDate || "",
+          endTime:   s.endTime || "",
+        };
+      })};
+    } else {
+      result = {...result, sessions: migrateSessions(t.sessions)};
+    }
   }
 
   // 旧フォーマット：startDate がタスク本体にある場合 sessions[0] に移動
@@ -86,6 +104,40 @@ const migrateTask = (t) => {
         ...result,
         sessions: result.sessions.map((s, i) => i === 0 ? {...s, endDate: ""} : s),
       };
+    }
+  }
+
+  // 繰り返しタスクで sessions が空 or startDate なしセッションあり → task_timestamp から登録日を補完
+  const repeatType = typeof result.repeat === "string" ? result.repeat : result.repeat?.type;
+  if (repeatType && repeatType !== "なし") {
+    const tsMatch = (result.id || "").match(/task_(\d{13})/);
+    const d = tsMatch ? new Date(parseInt(tsMatch[1], 10)) : new Date();
+    const pad = n => String(n).padStart(2, "0");
+    const createdDate = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+    if ((result.sessions||[]).length === 0) {
+      // セッションなし → 新規生成
+      result = {
+        ...result,
+        sessions: [{
+          id: "s_migrated_" + (result.id || ""),
+          startDate: createdDate,
+          date:      createdDate,
+          startTime: "",
+          endDate:   "",
+          endTime:   "",
+        }],
+      };
+    } else {
+      // 日付なしセッションに startDate を補完（時間は保持）
+      const needsFill = result.sessions.some(s => !s.startDate && !s.date);
+      if (needsFill) {
+        result = {
+          ...result,
+          sessions: result.sessions.map(s =>
+            (s.startDate || s.date) ? s : {...s, startDate: createdDate, date: createdDate}
+          ),
+        };
+      }
     }
   }
 
@@ -328,7 +380,22 @@ export default function App() {
     // TaskFormは _sessions か sessions（展開済み）のどちらかで渡してくる
     const {_sessions, ...fStripped} = f;
     const rawSessions = _sessions ?? fStripped.sessions ?? [];
-    const sessions = rawSessions
+    const isRepeat = fStripped.repeat && parseRepeat(fStripped.repeat).type !== "なし";
+    // 繰り返しタスクで日付なしセッション（時間だけ入っている場合も含む）→ 今日を startDate に上書き
+    const filledSessions = isRepeat
+      ? (() => {
+          const today = localDate();
+          const filled = rawSessions.map(s =>
+            (s.startDate || s.date) ? s : {...s, startDate: today, date: today}
+          );
+          // セッションが空なら新規生成
+          if (filled.length === 0) {
+            return [{ startDate: today, date: today, startTime: "", endDate: "", endTime: "" }];
+          }
+          return filled;
+        })()
+      : rawSessions;
+    let sessions = filledSessions
       .filter(s => s.startDate || s.date)  // startDateなしはセッションとして無効
       .map(s => ({
         id: s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
