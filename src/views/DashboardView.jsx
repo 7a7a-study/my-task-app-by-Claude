@@ -5,7 +5,7 @@ import { getGCalEventsForDate } from "../gcal";
 import { TimelineChip } from "./ListView";
 import { Popup } from "../components/Popup";
 
-export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask,gcalEvents,gcalEnabled,setGCalEnabled,gcalError}) => {
+export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask,gcalEvents,gcalEnabled,gcalError}) => {
   const isPC = useIsPC();
   const [popup, setPopup] = useState(null);
   const [dropH, setDropH] = useState(null);
@@ -94,7 +94,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   const openPopup = (e, task) => {
     e.stopPropagation();
     const r = e.currentTarget.getBoundingClientRect();
-    setPopup({task, x: Math.min(r.right+8, window.innerWidth-308), y: Math.min(r.top, window.innerHeight-420)});
+    setPopup({task, taskId: task.id, x: Math.min(r.right+8, window.innerWidth-308), y: Math.min(r.top, window.innerHeight-420)});
   };
   const hToggle = (id) => {
     const t = all.find(x=>x.id===id);
@@ -397,7 +397,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           onDrop={e=>{const rect=e.currentTarget.getBoundingClientRect();hDropDB(e,e.clientY-rect.top);}}
           onClick={e=>{if(e.target===e.currentTarget||e.target.dataset.bg){const rect=e.currentTarget.getBoundingClientRect();const h=Math.max(DAY_START,Math.min(DAY_END-1,Math.floor((e.clientY-rect.top)/HH)+DAY_START));onAdd&&onAdd(today,h);}}}>
           {Array.from({length:DAY_END-DAY_START},(_,i)=>(
-            <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`}}/>
+            <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}20`,pointerEvents:"none"}}/>
           ))}
           {timedWithCols.map(t => {
             const sm = t2m(t.startTime)||0;
@@ -473,19 +473,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   // GCal連携トグルUI（PC・スマホ共通パーツ）
   const GCalToggle = () => (
     <div style={{display:"flex",alignItems:"center",gap:6}}>
-      <button
-        onClick={()=>setGCalEnabled&&setGCalEnabled(!gcalEnabled)}
-        style={{display:"flex",alignItems:"center",gap:5,padding:"5px 11px",borderRadius:8,
-          background:gcalEnabled?"#4285f422":"transparent",
-          color:gcalEnabled?"#4285f4":C.textMuted,
-          border:`1px solid ${gcalEnabled?"#4285f4":C.border}`,
-          cursor:"pointer",fontSize:10,fontWeight:gcalEnabled?700:400,transition:"all .15s"}}>
-        📅 GCal{gcalEnabled?"連携中":"連携オフ"}
-      </button>
-      {gcalEnabled && gcalError==="no_token" && (
+      <span style={{fontSize:10,color:"#4285f4",fontWeight:700}}>📅 GCal</span>
+      {gcalError==="no_token" && (
         <span style={{fontSize:9,color:C.warn}}>⚠ 再ログインでカレンダーを読込</span>
       )}
-      {gcalEnabled && !gcalError && gcalEvents && (
+      {!gcalError && gcalEvents && (
         <span style={{fontSize:9,color:"#4285f4"}}>{gcalEvents.length}件取得済</span>
       )}
     </div>
@@ -493,7 +485,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   const popupLayerJSX = popup ? (
     <Popup
-      task={popup.task} tags={tags} anchor={{x:popup.x,y:popup.y}}
+      task={(popup.taskId ? all.find(x=>x.id===popup.taskId) : null) || popup.task} tags={tags} anchor={{x:popup.x,y:popup.y}}
       viewDate={today}
       onClose={()=>setPopup(null)}
       onEdit={t=>{onEdit(t);setPopup(null);}}
