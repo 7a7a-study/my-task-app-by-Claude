@@ -16,4 +16,6 @@ export const auth = getAuth(app);
 export const provider = new GoogleAuthProvider();
 // Googleカレンダー読み取り用スコープ（読み取り専用。Firestoreへの書き込みなし）
 provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
+// 毎回アカウント選択を出してアクセストークンを確実に取得する
+provider.setCustomParameters({ prompt: "select_account" });
 export const db = getFirestore(app);

@@ -282,6 +282,27 @@ export default function App() {
     });
   }, [gcalEnabled, today, gcalFetchTrigger]); // eslint-disable-line
 
+  // アプリ復帰時（バックグラウンド→フォアグラウンド）にGCal再取得をトリガー
+  useEffect(() => {
+    if (!gcalEnabled) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") {
+        // トークンが有効かチェックし、あれば再取得トリガー（キャッシュが5分以内なら実際のAPIは呼ばれない）
+        const token = localStorage.getItem("gcal_access_token");
+        const tokenExp = parseInt(localStorage.getItem("gcal_token_exp") || "0");
+        if (token && Date.now() < tokenExp) {
+          setGCalFetchTrigger(n => n + 1);
+        } else {
+          // トークン切れ → エラー表示
+          setGCalError("no_token");
+          setGCalEvents(null);
+        }
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [gcalEnabled]); // eslint-disable-line
+
   // 最新値をrefで追跡（stale closure防止のため save2DB 呼び出し時に参照する）
   const tasksLatest     = useRef(tasks);
   const tagsLatest      = useRef(tags);
