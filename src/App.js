@@ -185,9 +185,7 @@ export default function App() {
   });
   // GCalイベント（メモリのみ・Firestore書き込みなし）
   const [gcalEvents, setGCalEvents] = useState(null); // null=未取得, []=取得済み空, [...]=イベントあり
-  const [gcalEnabled, setGCalEnabled] = useState(() => {
-    try { return localStorage.getItem("gcal_enabled") === "true"; } catch { return false; }
-  });
+  const gcalEnabled = true; // 常にGCal連携オン
   const [gcalError, setGCalError] = useState(null); // "no_token" | "api_error" | null
   const [gcalFetchTrigger, setGCalFetchTrigger] = useState(0); // ログイン後の再取得トリガー
 
@@ -200,7 +198,22 @@ export default function App() {
   };
 
   // 認証
-  useEffect(() => { const u = onAuthStateChanged(auth, u => { setUser(u); setAuthLoading(false); }); return u; }, []);
+  useEffect(() => {
+    const u = onAuthStateChanged(auth, u => {
+      setUser(u);
+      setAuthLoading(false);
+      // ログイン済みの場合、localStorageのトークンが有効ならGCal再取得をトリガー
+      // （リロード・アプリ再起動時の自動復帰）
+      if (u) {
+        const token = localStorage.getItem("gcal_access_token");
+        const tokenExp = parseInt(localStorage.getItem("gcal_token_exp") || "0");
+        if (token && Date.now() < tokenExp) {
+          setGCalFetchTrigger(n => n + 1);
+        }
+      }
+    });
+    return u;
+  }, []); // eslint-disable-line
 
   // Firestore リアルタイム同期
   // hasPendingWrites=true の間はローカル書き込み中なのでスキップ
@@ -684,7 +697,7 @@ export default function App() {
                 <Btn v="accent" onClick={() => { setDefDate(null); setDefTime(null); setEditTask(null); setAddChildTo(null); setShowForm(true); }}>＋ 追加</Btn>
               )}
             </div>
-            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle} onAdd={handleAdd} onUpdate={handleUpdate} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents} gcalEnabled={gcalEnabled} setGCalEnabled={v=>{setGCalEnabled(v);try{localStorage.setItem("gcal_enabled",v?"true":"false");}catch{}}} gcalError={gcalError}/>}
+            {view === "dashboard" && <DashboardView tasks={tasks} tags={tags} today={today} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} onMemoToggle={handleMemoToggle} onAdd={handleAdd} onUpdate={handleUpdate} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents} gcalEnabled={gcalEnabled} gcalError={gcalError}/>}
             {view === "list"      && <ListView tasks={tasks} tags={tags} filters={filters} onEdit={handleEdit} onDelete={handleDelete} onToggle={handleToggle} onAddChild={pid => { setAddChildTo(pid); setShowForm(true); }} onDuplicate={handleDuplicate} onMemoToggle={handleMemoToggle} sortOrder={sortOrder} setSortOrder={setSortOrder}/>}
             {view === "day"       && <DayView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents}/>}
             {view === "week"      && <WeekView tasks={tasks} tags={tags} today={today} onUpdate={handleUpdate} onAdd={handleAdd} onToggle={handleToggle} onEdit={handleEdit} onDelete={handleDelete} onDuplicate={handleDuplicate} onSkip={handleSkip} onOverride={handleOverride} onAddSession={handleAddSession} onRemoveSession={handleRemoveSession} dragTask={dragTask} setDragTask={setDragTask} gcalEvents={gcalEvents}/>}
