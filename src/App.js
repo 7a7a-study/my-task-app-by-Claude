@@ -189,6 +189,7 @@ export default function App() {
     try { return localStorage.getItem("gcal_enabled") === "true"; } catch { return false; }
   });
   const [gcalError, setGCalError] = useState(null); // "no_token" | "api_error" | null
+  const [gcalFetchTrigger, setGCalFetchTrigger] = useState(0); // ログイン後の再取得トリガー
 
   // notifRef はここで宣言（setNotifSettings の closure で参照するため先に定義）
   const notifRef = useRef(notifSettings);
@@ -266,7 +267,7 @@ export default function App() {
     // 取得対象期間：今日から±30日（週ビュー・ダッシュボードをカバー）
     const from = (() => { const d = new Date(today); d.setDate(d.getDate()-7); return d.toISOString().slice(0,10); })();
     const to   = (() => { const d = new Date(today); d.setDate(d.getDate()+30); return d.toISOString().slice(0,10); })();
-    const key  = from + "_" + to;
+    const key  = from + "_" + to + "_" + gcalFetchTrigger;
     if (gcalFetchRef.current === key) return; // 同一範囲は再取得しない
     gcalFetchRef.current = key;
 
@@ -279,7 +280,7 @@ export default function App() {
         setGCalEvents(events);
       }
     });
-  }, [gcalEnabled, today]); // eslint-disable-line
+  }, [gcalEnabled, today, gcalFetchTrigger]); // eslint-disable-line
 
   // 最新値をrefで追跡（stale closure防止のため save2DB 呼び出し時に参照する）
   const tasksLatest     = useRef(tasks);
@@ -365,7 +366,7 @@ export default function App() {
       else {
         // GCalアクセストークンをlocalStorageに保存（Firestoreへの書き込みなし）
         const credential = GoogleAuthProvider.credentialFromResult(r);
-        if (credential) saveGCalToken(credential);
+        if (credential) { saveGCalToken(credential); setGCalFetchTrigger(n => n + 1); }
       }
     } catch(e) { console.error(e); }
     setLoginLoading(false);
