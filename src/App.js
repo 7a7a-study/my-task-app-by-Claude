@@ -44,23 +44,15 @@ const migrateTask = (t) => {
   let result = {...t};
 
   // sessions がある場合は枠フィールドを統一
-  // 繰り返しタスクで日付なし・時間あり のセッションは後段の補完に回すため除去しない
   if ((t.sessions||[]).length > 0) {
     const repeatType2 = typeof t.repeat === "string" ? t.repeat : t.repeat?.type;
     const isRep = repeatType2 && repeatType2 !== "なし";
     if (isRep) {
-      // 日付なしセッションも一旦通す（後段で startDate 補完される）
-      result = {...result, sessions: t.sessions.map(s => {
-        const sd = (s.startDate && s.startDate !== "") ? s.startDate : (s.date && s.date !== "") ? s.date : "";
-        return {
-          id:        s.id || ("s_" + Math.random().toString(36).slice(2,8)),
-          startDate: sd,
-          date:      sd,
-          startTime: s.startTime || "",
-          endDate:   s.endDate || "",
-          endTime:   s.endTime || "",
-        };
-      })};
+      // 繰り返しタスク：フィールドを極力触らずidだけ補完（毎回書き換えによるループ防止）
+      result = {...result, sessions: t.sessions.map(s => ({
+        ...s,
+        id: s.id || ("s_" + Math.random().toString(36).slice(2,8)),
+      }))};
     } else {
       result = {...result, sessions: migrateSessions(t.sessions)};
     }
