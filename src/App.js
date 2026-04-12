@@ -237,7 +237,7 @@ export default function App() {
           if (d.templates)      setTemplatesRaw(d.templates);
           // notifSettings が Firestore に保存されていれば復元
           // （localStorage を持たない別デバイスとの同期用）
-          if (d.notifSettings)  setNotifSettingsRaw(d.notifSettings);
+          if (d.notifSettings && !localStorage.getItem("notifSettings")) setNotifSettingsRaw(d.notifSettings);
         }
       }
     );
@@ -249,6 +249,13 @@ export default function App() {
 
   // Service Worker登録
   useEffect(() => { registerSW(); }, []);
+
+  // localStorageにnotifSettingsが未保存なら初期値を書き込む（リロード時上書き防止）
+  useEffect(() => {
+    if (!localStorage.getItem("notifSettings")) {
+      try { localStorage.setItem("notifSettings", JSON.stringify(notifSettings)); } catch {}
+    }
+  }, []); // eslint-disable-line
 
   // 通知スケジュール
   const notifHash = useMemo(() =>
