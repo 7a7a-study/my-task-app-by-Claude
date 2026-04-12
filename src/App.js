@@ -2,7 +2,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import { auth, provider, db } from "./firebase";
 import { signInWithPopup, signOut, onAuthStateChanged, GoogleAuthProvider } from "firebase/auth";
 import { doc, setDoc, onSnapshot } from "firebase/firestore";
-import { registerSW, scheduleNotifications, startForegroundCheck } from "./notifications";
+import { registerSW, scheduleNotifications, startForegroundCheck, registerFCMToken } from "./notifications";
 import { saveGCalToken, clearGCalToken, fetchGCalEvents } from "./gcal";
 
 import { C, G, TAG_PRESETS, ALLOWED } from "./constants";
@@ -201,6 +201,10 @@ export default function App() {
         const tokenExp = parseInt(localStorage.getItem("gcal_token_exp") || "0");
         if (token && Date.now() < tokenExp) {
           setGCalFetchTrigger(n => n + 1);
+        }
+        // FCMトークン登録（通知許可済みの場合のみ）
+        if (Notification.permission === "granted") {
+          registerFCMToken(u.uid);
         }
       }
     });
@@ -710,7 +714,7 @@ export default function App() {
           onClose={() => { setShowForm(false); setEditTask(null); setIsDuplicate(false); setAddChildTo(null); setDefDate(null); setDefTime(null); }}
         />
       )}
-      {showNotifModal && <NotificationModal settings={notifSettings} onSave={setNotifSettings} onClose={() => setShowNotifModal(false)}/>}
+      {showNotifModal && <NotificationModal settings={notifSettings} onSave={async (s) => { setNotifSettings(s); if (s.enabled && user) registerFCMToken(user.uid); }} onClose={() => setShowNotifModal(false)}/>}
     </>
   );
 }
