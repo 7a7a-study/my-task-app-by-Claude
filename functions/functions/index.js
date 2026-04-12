@@ -251,7 +251,7 @@ function buildNotifs(tasks, settings) {
 // Cloud Function ① onUserDataWrite
 // ════════════════════════════════════════════════════════════════════════
 exports.onUserDataWrite = functions
-  .runWith({ maxInstances: 3, memory: "128MB", timeoutSeconds: 30 })
+  .runWith({ maxInstances: 3, memory: "128MB", timeoutSeconds: 30, runtime: "nodejs20" })
   .firestore
   .document("users/{uid}")
   .onWrite(async (change, context) => {
@@ -291,7 +291,7 @@ exports.onUserDataWrite = functions
 //         → 毎分の無駄な 2ops（usage read+write）を節約
 // ════════════════════════════════════════════════════════════════════════
 exports.sendScheduledNotifs = functions
-  .runWith({ maxInstances: 1, memory: "128MB", timeoutSeconds: 60 })
+  .runWith({ maxInstances: 1, memory: "128MB", timeoutSeconds: 60, runtime: "nodejs20" })
   .pubsub
   .schedule("every 1 minutes")
   .onRun(async () => {
