@@ -1,6 +1,7 @@
 import { initializeApp } from "firebase/app";
 import { getAuth, GoogleAuthProvider } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
+import { getMessaging } from "firebase/messaging";
 
 const firebaseConfig = {
   apiKey: "AIzaSyCXtJRO1oyKhpfBJfL_dmUkdi_bCIX1Vlw",
@@ -19,3 +20,4 @@ provider.addScope("https://www.googleapis.com/auth/calendar.readonly");
 // 毎回アカウント選択を出してアクセストークンを確実に取得する
 provider.setCustomParameters({ prompt: "select_account" });
 export const db = getFirestore(app);
+export const messaging = getMessaging(app);
