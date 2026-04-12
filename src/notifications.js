@@ -1,6 +1,25 @@
 // notifications.js
 //
 // 【通知タイミングの仕様】
+// ── FCMトークン登録（追加） ──────────────────────────────────
+import { getToken } from "firebase/messaging";
+import { doc, setDoc } from "firebase/firestore";
+import { messaging, db } from "./firebase";
+
+const VAPID_KEY = "BDpHqJDd8zzfFAI-AYMOQsyU7UgF2rRl1oD5t9Ez_oKXZUQC06dRyc29yg8PRN8V-uzbKKr5-WsJyky7SihBgMY";
+
+export async function registerFCMToken(uid) {
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: reg });
+    if (!token) { console.warn("FCMトークン取得失敗"); return; }
+    await setDoc(doc(db, "users", uid), { fcmToken: token }, { merge: true });
+    console.log("FCMトークン登録完了");
+  } catch (e) {
+    console.error("FCMトークン登録エラー:", e);
+  }
+}
+
 //   task.notifyStart   : 開始時刻の何分前か（0=定刻、-1=通知しない）
 //   task.notifyDeadline: 締切の何分前か（null=当日朝9:00、-1=通知しない）
 //   ※フィールドが未設定の場合のデフォルト：
