@@ -48,10 +48,11 @@ const migrateTask = (t) => {
     const repeatType2 = typeof t.repeat === "string" ? t.repeat : t.repeat?.type;
     const isRep = repeatType2 && repeatType2 !== "なし";
     if (isRep) {
-      // 繰り返しタスク：フィールドを極力触らずidだけ補完（毎回書き換えによるループ防止）
-      result = {...result, sessions: t.sessions.map(s => ({
+      // 繰り返しタスク：idのみ補完。ランダム生成ではなくタスクid+indexから確定的に生成
+      // （ランダムだとmigrateのたびにneedsMigration=trueになり無限ループになる）
+      result = {...result, sessions: t.sessions.map((s, i) => ({
         ...s,
-        id: s.id || ("s_" + Math.random().toString(36).slice(2,8)),
+        id: s.id || (t.id + "_s" + i),
       }))};
     } else {
       result = {...result, sessions: migrateSessions(t.sessions)};
