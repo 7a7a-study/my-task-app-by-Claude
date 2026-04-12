@@ -172,8 +172,8 @@ export default function App() {
   const [defTime, setDefTime]         = useState(null);
   const [showNotifModal, setShowNotifModal] = useState(false);
   const [notifSettings, setNotifSettingsRaw] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("notifSettings") || "null") || {enabled: false, minutesBefore: 60}; }
-    catch { return {enabled: false, minutesBefore: 60}; }
+    try { return JSON.parse(localStorage.getItem("notifSettings") || "null") || {enabled: true, minutesBefore: 60}; }
+    catch { return {enabled: true, minutesBefore: 60}; }
   });
   // GCalイベント（メモリのみ・Firestore書き込みなし）
   const [gcalEvents, setGCalEvents] = useState(null); // null=未取得, []=取得済み空, [...]=イベントあり
