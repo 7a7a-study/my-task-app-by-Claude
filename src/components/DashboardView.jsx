@@ -79,7 +79,9 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     });
   })();
 
-  const laterTasks = all.filter(t => !t.children?.length && (t.isLater || isLaterTask(t)) && !t.done);
+  // 自分または子孫にlaterタスクがあるかチェック（ツリー表示のため親タスクも含める）
+  const hasLaterDesc = t => (t.isLater || isLaterTask(t)) || (t.children||[]).some(c => hasLaterDesc(c));
+  const laterTasks = tasks.filter(t => !t.done && hasLaterDesc(t));
 
   const tagStats = tags.filter(t => !t.parentId && !t.archived).map(tag => {
     const childTagIds = tags.filter(c => c.parentId === tag.id).map(c => c.id);
