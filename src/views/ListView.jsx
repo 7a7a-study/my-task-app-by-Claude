@@ -64,6 +64,7 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
     <div
       draggable={!IS_TOUCH || lpActive}
       onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
+      onDragOver={e=>e.preventDefault()}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
       onTouchMove={handleTouchMove}
@@ -146,9 +147,11 @@ export const ListView = ({tasks,tags,filters,onEdit,onDelete,onToggle,onAddChild
   }, [tasks, filters, sortOrder]);
 
   // ── セクション分類（通常タスク / 繰り返し / あとでやる）────────────
-  const later   = filtered.filter(t => t.isLater||isLaterTask(t));
-  const habits  = filtered.filter(t => !(t.isLater||isLaterTask(t)) && t.repeat && parseRepeat(t.repeat).type !== "なし");
-  const regular = filtered.filter(t => !(t.isLater||isLaterTask(t)) && (!t.repeat || parseRepeat(t.repeat).type === "なし"));
+  // 自分または子孫にlaterタスクがあるかチェック（ツリー表示のため親タスクも含める）
+  const hasLaterDesc = t => (t.isLater || isLaterTask(t)) || (t.children||[]).some(c => hasLaterDesc(c));
+  const later   = filtered.filter(t => hasLaterDesc(t));
+  const habits  = filtered.filter(t => !hasLaterDesc(t) && t.repeat && parseRepeat(t.repeat).type !== "なし");
+  const regular = filtered.filter(t => !hasLaterDesc(t) && (!t.repeat || parseRepeat(t.repeat).type === "なし"));
 
   // ── タググループ表示（ソート「タググループ順」のときに使うサブコンポーネント）──
   const TagGroupView = ({items}) => {
