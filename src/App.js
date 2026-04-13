@@ -149,7 +149,16 @@ const needsMigration = (original, migrated) => {
     if (key === "children" && (!val || (Array.isArray(val) && val.length === 0))) return "__empty__";
     return val;
   });
-  return strip(original) !== strip(migrated);
+  const a = strip(original), b = strip(migrated);
+  if (a !== b) {
+    for (let i = 0; i < Math.max(a.length, b.length); i++) {
+      if (a[i] !== b[i]) {
+        console.warn("[needsMigration] diff at", i, "\noriginal:", a.slice(Math.max(0,i-60), i+60), "\nmigrated:", b.slice(Math.max(0,i-60), i+60));
+        break;
+      }
+    }
+  }
+  return a !== b;
 };
 
 export default function App() {
