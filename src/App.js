@@ -145,20 +145,22 @@ const migrateTasks = (tasks) => tasks.map(t => ({
 // ── マイグレーション要否の判定（children:[] vs undefined の差異は無視）──
 // ── マイグレーション要否の判定（children:[] vs undefined の差異は無視）──
 const needsMigration = (original, migrated) => {
-  const strip = tasks => JSON.stringify(tasks, (key, val) => {
+  // フィールド順・date互換フィールドの差異を無視して比較
+  const normalize = tasks => JSON.stringify(tasks, (key, val) => {
     if (key === "children" && (!val || (Array.isArray(val) && val.length === 0))) return "__empty__";
+    // sessions内のフィールド順を正規化・dateフィールドは除外（startDateと重複）
+    if (key === "sessions" && Array.isArray(val)) {
+      return val.map(s => ({
+        id:        s.id || "",
+        startDate: s.startDate || s.date || "",
+        startTime: s.startTime || "",
+        endDate:   s.endDate || "",
+        endTime:   s.endTime || "",
+      }));
+    }
     return val;
   });
-  const a = strip(original), b = strip(migrated);
-  if (a !== b) {
-    for (let i = 0; i < Math.max(a.length, b.length); i++) {
-      if (a[i] !== b[i]) {
-        console.warn("[needsMigration] diff at", i, "\noriginal:", a.slice(Math.max(0,i-60), i+60), "\nmigrated:", b.slice(Math.max(0,i-60), i+60));
-        break;
-      }
-    }
-  }
-  return a !== b;
+  return normalize(original) !== normalize(migrated);
 };
 
 export default function App() {
