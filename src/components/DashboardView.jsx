@@ -3,6 +3,7 @@ import { C } from "../constants";
 import { flatten, fd, sameDay, parseRepeat, matchesRepeat, isLaterTask, localDate, t2m, addDur, getTasksForDate, getDeadlineTasksForDate, useIsPC, useResizeHandler, isHol } from "../utils";
 import { getGCalEventsForDate } from "../gcal";
 import { TimelineChip } from "./ListView";
+import { TaskRow } from "../components/TaskRow";
 import { Popup } from "../components/Popup";
 
 export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDuplicate,onSkip,onOverride,onAddSession,onRemoveSession,onMemoToggle,onAdd,onUpdate,dragTask,setDragTask,gcalEvents,gcalEnabled,gcalError}) => {
@@ -586,7 +587,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
           <div style={{flex:1,overflowY:"auto"}}>
             {laterTasks.length===0
               ? <div style={{textAlign:"center",padding:"32px 0",color:C.textMuted,fontSize:12}}>あとでやるなし</div>
-              : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
+              : laterTasks.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle||((id,idx)=>{})}/>)}
           </div>
         </div>
       </div>
@@ -637,7 +638,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         <SectionHead icon="📌" title="あとでやる" count={laterTasks.length} color={C.textMuted}/>
         {laterTasks.length===0
           ? <div style={{fontSize:11,color:C.textMuted}}>あとでやるなし</div>
-          : laterTasks.map(t=><MiniRow key={t.id} task={t} showDate={true} draggable showQuick/>)}
+          : laterTasks.map(t=><TaskRow key={t.id} task={t} tags={tags} onEdit={onEdit} onDelete={onDelete} onToggle={onToggle} onDuplicate={onDuplicate} onMemoToggle={onMemoToggle||((id,idx)=>{})}/>)}
       </div>
       <div style={cardStyle(C.accent)}>
         <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>setShowStats(v=>!v)}>
