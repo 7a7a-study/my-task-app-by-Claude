@@ -29,9 +29,10 @@ const migrateTask = (t) => {
       return { sd, s };
     })
     .filter(({sd}) => sd !== "")  // 日付のないセッションを除去
-    .map(({sd, s}) => ({
+    .map(({sd, s}, i) => ({
       // 必要なフィールドだけ明示的にピック（タスク本体のstartDate等の混入を防ぐ）
-      id:        s.id || ("s_" + Math.random().toString(36).slice(2,8)),
+      // ランダムIDだとneedsMigrationが常にtrueになり無限ループになるため確定的に生成
+      id:        s.id || (t.id + "_s" + i),
       startDate: sd,
       date:      sd,  // 旧フィールド互換
       startTime: s.startTime || "",
@@ -477,7 +478,7 @@ export default function App() {
           return {sd, s};
         })
         .filter(({sd}) => sd !== "")
-        .map(({sd, s}) => ({
+        .map(({sd, s}, i) => ({
           id:        s.id || ("s_" + Date.now() + "_" + Math.random().toString(36).slice(2,6)),
           startDate: sd,
           date:      sd,
