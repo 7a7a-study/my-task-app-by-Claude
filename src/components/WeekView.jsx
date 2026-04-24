@@ -47,11 +47,19 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,taskId:task.id,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
+  const [debugLog, setDebugLog] = useState([]);
+  const addLog = (msg) => setDebugLog(prev => [{time: new Date().toLocaleTimeString(), msg}, ...prev].slice(0,10));
+
   const hToggle = (id, date) => {
     const dayTasks = date ? (dayDataMap[date]?.tasks || []) : [];
     const t = dayTasks.find(x=>x.id===id) || all.find(x=>x.id===id);
-    if (t?._overrideKey && t?._overrideId) { onToggle(t._overrideId, t._overrideKey); return; }
+    addLog(`hToggle called | id="${id}" | date="${date}" | found=${!!t} | _overrideKey="${t?._overrideKey||""}" | _overrideId="${t?._overrideId||""}" | repeat="${t?.repeat||""}" | doneDates=${JSON.stringify(t?.doneDates||[])}`);
+    if (t?._overrideKey && t?._overrideId) {
+      addLog(`→ override path: onToggle("${t._overrideId}", "${t._overrideKey}")`);
+      onToggle(t._overrideId, t._overrideKey); return;
+    }
     const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
+    addLog(`→ normal path: onToggle("${id}", ${isRep ? `"${date||localDate()}"` : "undefined"})`);
     onToggle(id, isRep ? (date || localDate()) : undefined);
   };
 
@@ -63,6 +71,15 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
 
   return (
     <div style={{overflowX:"auto"}}>
+      {/* 🛠 デバッグパネル（一時的） */}
+      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:9999,background:"#111",color:"#0f0",fontFamily:"monospace",fontSize:11,padding:"6px 10px",maxHeight:160,overflowY:"auto",borderTop:"2px solid #0f0"}}>
+        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+          <b>🛠 DEBUG LOG</b>
+          <button onClick={()=>setDebugLog([])} style={{background:"#333",color:"#0f0",border:"1px solid #0f0",padding:"0 8px",cursor:"pointer"}}>clear</button>
+        </div>
+        {debugLog.length===0 && <div style={{color:"#666"}}>✓ を押すとここにログが出ます</div>}
+        {debugLog.map((l,i)=><div key={i}><span style={{color:"#888"}}>[{l.time}]</span> {l.msg}</div>)}
+      </div>
       <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setWeekOffset(o=>o-1)}
