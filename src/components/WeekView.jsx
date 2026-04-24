@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { C, DAYS_JP } from "../constants";
 import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed, useResizeHandler } from "../utils";
 import { getGCalEventsForDate } from "../gcal";
@@ -71,15 +72,18 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
 
   return (
     <div style={{overflowX:"auto"}}>
-      {/* 🛠 デバッグパネル（一時的） */}
-      <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:9999,background:"#111",color:"#0f0",fontFamily:"monospace",fontSize:11,padding:"6px 10px",maxHeight:160,overflowY:"auto",borderTop:"2px solid #0f0"}}>
-        <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-          <b>🛠 DEBUG LOG</b>
-          <button onClick={()=>setDebugLog([])} style={{background:"#333",color:"#0f0",border:"1px solid #0f0",padding:"0 8px",cursor:"pointer"}}>clear</button>
-        </div>
-        {debugLog.length===0 && <div style={{color:"#666"}}>✓ を押すとここにログが出ます</div>}
-        {debugLog.map((l,i)=><div key={i}><span style={{color:"#888"}}>[{l.time}]</span> {l.msg}</div>)}
-      </div>
+      {/* 🛠 デバッグパネル（Portal経由でbodyに直接マウント） */}
+      {createPortal(
+        <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:99999,background:"#111",color:"#0f0",fontFamily:"monospace",fontSize:11,padding:"6px 10px",maxHeight:160,overflowY:"auto",borderTop:"2px solid #0f0"}}>
+          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+            <b>🛠 DEBUG LOG</b>
+            <button onClick={()=>setDebugLog([])} style={{background:"#333",color:"#0f0",border:"1px solid #0f0",padding:"0 8px",cursor:"pointer"}}>clear</button>
+          </div>
+          {debugLog.length===0 && <div style={{color:"#666"}}>✓ を押すとここにログが出ます</div>}
+          {debugLog.map((l,i)=><div key={i}><span style={{color:"#888"}}>[{l.time}]</span> {l.msg}</div>)}
+        </div>,
+        document.body
+      )}
       <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setWeekOffset(o=>o-1)}
