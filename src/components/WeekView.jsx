@@ -48,7 +48,8 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,taskId:task.id,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
   const hToggle = (id, date) => {
-    const t = all.find(x=>x.id===id);
+    const dayTasks = date ? (dayDataMap[date]?.tasks || []) : [];
+    const t = dayTasks.find(x=>x.id===id) || all.find(x=>x.id===id);
     if (t?._overrideKey && t?._overrideId) { onToggle(t._overrideId, t._overrideKey); return; }
     const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
     onToggle(id, isRep ? (date || localDate()) : undefined);

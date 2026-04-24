@@ -98,8 +98,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     setPopup({task, taskId: task.id, x: Math.min(r.right+8, window.innerWidth-308), y: Math.min(r.top, window.innerHeight-420)});
   };
   const hToggle = (id) => {
-    const t = all.find(x=>x.id===id);
-    // 今回のみ変更（override）インスタンス → 元タスクIDと元の日付でtoggle
+    // override インスタンスは tlTasks にしか存在しない（all=flatten は元タスクのみ）
+    const t = tlTasks.find(x=>x.id===id) || all.find(x=>x.id===id);
     if (t?._overrideKey && t?._overrideId) {
       onToggle(t._overrideId, t._overrideKey);
       return;
