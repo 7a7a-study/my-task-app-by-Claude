@@ -369,17 +369,25 @@ export const useIsPC = () => {
 
 // ── useResizeHandler カスタムhook ────────────────────────────────────
 // DayView / WeekView / DashboardView 共通のリサイズハンドラ
+// ドラッグ中はローカル表示のみ更新、離したときだけFirestoreに保存
 export const useResizeHandler = (onUpdate, PPM) => {
-  const rsRef  = useRef(false);
-  const rsTask = useRef(null);
-  const rsY    = useRef(0);
-  const rsDur  = useRef(0);
+  const rsRef       = useRef(false);
+  const rsTask      = useRef(null);
+  const rsY         = useRef(0);
+  const rsDur       = useRef(0);
+  const rsCurrent   = useRef(null); // ドラッグ中の最新状態をrefで保持
+  const onUpdateRef = useRef(onUpdate);
+  useEffect(() => { onUpdateRef.current = onUpdate; }, [onUpdate]);
+
+  const [rsPreview, setRsPreview] = useState(null); // ローカル表示用
+
   const onRSStart = useCallback((e, task) => {
     e.stopPropagation(); e.preventDefault();
     rsRef.current  = true;
     rsTask.current = task;
     rsY.current    = e.clientY || (e.touches?.[0]?.clientY) || 0;
     rsDur.current  = Number(task.duration) || 60;
+    rsCurrent.current = null;
     const mv = ev => {
       if (!rsRef.current) return;
       const y  = ev.clientY || (ev.touches?.[0]?.clientY) || 0;
@@ -395,10 +403,16 @@ export const useResizeHandler = (onUpdate, PPM) => {
           })
         : t.sessions;
       const newEnd = newSessions.find(s => targetSId ? s.id === targetSId : true)?.endTime || "";
-      onUpdate({ ...t, duration: String(nd), endTime: newEnd, sessions: newSessions });
+      const updated = { ...t, duration: String(nd), endTime: newEnd, sessions: newSessions };
+      rsCurrent.current = updated;
+      setRsPreview(updated); // 見た目だけ更新（保存しない）
     };
     const up = () => {
       rsRef.current = false;
+      setRsPreview(null);
+      if (rsCurrent.current) {
+        onUpdateRef.current(rsCurrent.current); // 離したときだけ保存
+      }
       document.removeEventListener("mousemove", mv);
       document.removeEventListener("mouseup",   up);
       document.removeEventListener("touchmove", mv);
@@ -408,6 +422,6 @@ export const useResizeHandler = (onUpdate, PPM) => {
     document.addEventListener("mouseup",   up);
     document.addEventListener("touchmove", mv, { passive: false });
     document.addEventListener("touchend",  up);
-  }, [onUpdate, PPM]);
-  return onRSStart;
-};
+  }, [PPM]);
+  return { onRSStart, rsPreview };
+};};
