@@ -1,5 +1,4 @@
 import { useState, useEffect, useMemo } from "react";
-import { createPortal } from "react-dom";
 import { C, DAYS_JP } from "../constants";
 import { localDate, flatten, sameDay, t2m, addDur, parseRepeat, getTasksForDate, getDeadlineTasksForDate, toggleMemo, fetchHolidays, holName, isRed, useResizeHandler } from "../utils";
 import { getGCalEventsForDate } from "../gcal";
@@ -48,23 +47,9 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,taskId:task.id,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
-  const [debugLog, setDebugLog] = useState([]);
-  const addLog = (msg) => setDebugLog(prev => [{time: new Date().toLocaleTimeString(), msg}, ...prev].slice(0,10));
+  const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||localDate()):undefined); };
 
-  const hToggle = (id, date) => {
-    const dayTasks = date ? (dayDataMap[date]?.tasks || []) : [];
-    const t = dayTasks.find(x=>x.id===id) || all.find(x=>x.id===id);
-    addLog(`hToggle called | id="${id}" | date="${date}" | found=${!!t} | _overrideKey="${t?._overrideKey||""}" | _overrideId="${t?._overrideId||""}" | repeat="${t?.repeat||""}" | doneDates=${JSON.stringify(t?.doneDates||[])}`);
-    if (t?._overrideKey && t?._overrideId) {
-      addLog(`→ override path: onToggle("${t._overrideId}", "${t._overrideKey}")`);
-      onToggle(t._overrideId, t._overrideKey); return;
-    }
-    const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
-    addLog(`→ normal path: onToggle("${id}", ${isRep ? `"${date||localDate()}"` : "undefined"})`);
-    onToggle(id, isRep ? (date || localDate()) : undefined);
-  };
-
-  const onRSStart = useResizeHandler(onUpdate, PPM);
+  const { onRSStart, rsPreview } = useResizeHandler(onUpdate, PPM);
 
   const dayStartMin = DAY_START * 60;
   const totalH      = (DAY_END - DAY_START) * HH;
@@ -72,18 +57,6 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
 
   return (
     <div style={{overflowX:"auto"}}>
-      {/* 🛠 デバッグパネル（Portal経由でbodyに直接マウント） */}
-      {createPortal(
-        <div style={{position:"fixed",bottom:0,left:0,right:0,zIndex:99999,background:"#111",color:"#0f0",fontFamily:"monospace",fontSize:11,padding:"6px 10px",maxHeight:160,overflowY:"auto",borderTop:"2px solid #0f0"}}>
-          <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
-            <b>🛠 DEBUG LOG</b>
-            <button onClick={()=>setDebugLog([])} style={{background:"#333",color:"#0f0",border:"1px solid #0f0",padding:"0 8px",cursor:"pointer"}}>clear</button>
-          </div>
-          {debugLog.length===0 && <div style={{color:"#666"}}>✓ を押すとここにログが出ます</div>}
-          {debugLog.map((l,i)=><div key={i}><span style={{color:"#888"}}>[{l.time}]</span> {l.msg}</div>)}
-        </div>,
-        document.body
-      )}
       <div style={{position:"sticky",top:0,zIndex:20,background:C.bg,paddingBottom:2}}>
       <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,marginBottom:8,padding:"5px 0"}}>
         <button onClick={()=>setWeekOffset(o=>o-1)}
@@ -228,8 +201,8 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                 const st=`${String(hh).padStart(2,"0")}:${String(mm).padStart(2,"0")}`;
                 const et=task.duration?addDur(st,Number(task.duration)):"";
                 const newSessions=(task.sessions||[]).length>0
-                  ?task.sessions.map((s,i)=>i===0?{...s,date:d,startDate:d,endDate:"",startTime:st,endTime:et}:s)
-                  :[{id:"s_main",date:d,startDate:d,endDate:"",startTime:st,endTime:et}];
+                  ?task.sessions.map((s,i)=>i===0?{...s,date:d,startDate:d,startTime:st,endTime:et}:s)
+                  :[{id:"s_main",date:d,startDate:d,startTime:st,endTime:et}];
                 onUpdate({...task,sessions:newSessions,startDate:"",startTime:"",endTime:"",isLater:false});
                 setDragTask(null);
               }}
@@ -265,9 +238,13 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   const col = group.indexOf(i);
                   return {...chip, col, totalCols};
                 });
-                return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => (
-                  <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
-                ));
+                return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => {
+                  const prev = rsPreview && rsPreview.id === t.id ? rsPreview : null;
+                  const dispEm = prev ? (prev.endTime ? t2m(prev.endTime) : em) : em;
+                  return (
+                    <TimelineChip key={t._sessionId||t.id} task={prev||t} tags={tags} color={c} startMin={sm} endMin={dispEm} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
+                  );
+                });
               })()}
               {/* GCalタイムチップ */}
               {getGCalDay(d).filter(ev=>ev.startTime&&!ev.isAllDay).map(ev => {

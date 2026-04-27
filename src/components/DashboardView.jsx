@@ -98,12 +98,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     setPopup({task, taskId: task.id, x: Math.min(r.right+8, window.innerWidth-308), y: Math.min(r.top, window.innerHeight-420)});
   };
   const hToggle = (id) => {
-    // override インスタンスは tlTasks にしか存在しない（all=flatten は元タスクのみ）
-    const t = tlTasks.find(x=>x.id===id) || all.find(x=>x.id===id);
-    if (t?._overrideKey && t?._overrideId) {
-      onToggle(t._overrideId, t._overrideKey);
-      return;
-    }
+    const t = all.find(x=>x.id===id);
     const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
     onToggle(id, isRep ? today : undefined);
   };
@@ -141,11 +136,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const sid = task._sessionId;
     let sessions;
     if (sid) {
-      sessions = (task.sessions||[]).map(s => s.id===sid ? {...s, startDate:date, date, endDate:""} : s);
+      sessions = (task.sessions||[]).map(s => s.id===sid ? {...s, startDate:date, date} : s);
     } else {
       sessions = (task.sessions||[]).length > 0
-        ? task.sessions.map((s,i) => i===0 ? {...s, startDate:date, date, endDate:""} : s)
-        : [{id:"s_main", startDate:date, date, endDate:"", startTime:"", endTime:""}];
+        ? task.sessions.map((s,i) => i===0 ? {...s, startDate:date, date} : s)
+        : [{id:"s_main", startDate:date, date, startTime:"", endTime:""}];
     }
     onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
   };
@@ -303,7 +298,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     border:`1px solid ${color}33`,display:"flex",flexDirection:"column",
   });
 
-  const onRSStartDB = useResizeHandler(onUpdate, PPM);
+  const { onRSStart: onRSStartDB, rsPreview: rsPreviewDB } = useResizeHandler(onUpdate, PPM);
 
   const hDropDB = (e, relY) => {
     e.preventDefault(); setDropH(null);
@@ -318,8 +313,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     if (!t) return;
     const et = t.duration ? addDur(st, Number(t.duration)) : "";
     const newSessions = (t.sessions||[]).length > 0
-      ? t.sessions.map((s,i) => i===0 ? {...s, date:today, startDate:today, endDate:"", startTime:st, endTime:et} : s)
-      : [{id:"s_main", date:today, startDate:today, endDate:"", startTime:st, endTime:et}];
+      ? t.sessions.map((s,i) => i===0 ? {...s, date:today, startDate:today, startTime:st, endTime:et} : s)
+      : [{id:"s_main", date:today, startDate:today, startTime:st, endTime:et}];
     onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
     setDragTask&&setDragTask(null);
   };
@@ -411,9 +406,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
             const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
             const col = t._col||0, totalCols = t._totalCols||1;
+            const prev = rsPreviewDB && rsPreviewDB.id === t.id ? rsPreviewDB : null;
+            const dispEm = prev ? (prev.endTime ? t2m(prev.endTime) : em) : em;
             return (
-              <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
-                startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
+              <TimelineChip key={t._sessionId||t.id} task={prev||t} tags={tags} color={c}
+                startMin={sm} endMin={dispEm} dayStartMin={dayStartMin} ppm={PPM}
                 onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
                 onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}
                 onQuickReschedule={(task,label)=>{

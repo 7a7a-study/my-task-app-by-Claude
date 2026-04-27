@@ -41,14 +41,9 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,taskId:task.id,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||viewDate}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
-  const hToggle = (id) => {
-    const t = startTasks.find(x=>x.id===id) || all.find(x=>x.id===id);
-    if (t?._overrideKey && t?._overrideId) { onToggle(t._overrideId, t._overrideKey); return; }
-    const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
-    onToggle(id, isRep ? viewDate : undefined);
-  };
+  const hToggle = (id) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?viewDate:undefined); };
 
-  const onRSStart = useResizeHandler(onUpdate, PPM);
+  const { onRSStart, rsPreview } = useResizeHandler(onUpdate, PPM);
 
   const hDrop = (e, relY) => {
     e.preventDefault(); setDropH(null);
@@ -63,8 +58,8 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
     if (!t) return;
     const et = t.duration ? addDur(st, Number(t.duration)) : "";
     const newSessions = (t.sessions||[]).length > 0
-      ? t.sessions.map((s,i) => i===0 ? {...s, date:viewDate, startDate:viewDate, endDate:"", startTime:st, endTime:et} : s)
-      : [{id:"s_main", date:viewDate, startDate:viewDate, endDate:"", startTime:st, endTime:et}];
+      ? t.sessions.map((s,i) => i===0 ? {...s, date:viewDate, startDate:viewDate, startTime:st, endTime:et} : s)
+      : [{id:"s_main", date:viewDate, startDate:viewDate, startTime:st, endTime:et}];
     onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
     setDragTask(null);
   };
@@ -223,9 +218,13 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
               const col = group.indexOf(i);
               return {...chip, col, totalCols};
             });
-            return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => (
-              <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={hToggle} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
-            ));
+            return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => {
+              const prev = rsPreview && rsPreview.id === t.id ? rsPreview : null;
+              const dispEm = prev ? (prev.endTime ? t2m(prev.endTime) : em) : em;
+              return (
+                <TimelineChip key={t._sessionId||t.id} task={prev||t} tags={tags} color={c} startMin={sm} endMin={dispEm} dayStartMin={dayStartMin} ppm={PPM} onPopup={hp} onToggle={hToggle} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
+              );
+            });
           })()}
           {/* GCalタイムチップ（右側に表示・クリックでGCalを開く） */}
           {gcalTimed.map(ev => {
