@@ -45,11 +45,11 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
   const getGCalDay  = date => gcalDayMap[date] || [];
   const getDeadlineDay = date => dayDataMap[date]?.deadlines || [];
 
-  const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
+  const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,taskId:task.id,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
   const hToggle = (id, date) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?(date||localDate()):undefined); };
 
-  const onRSStart = useResizeHandler(onUpdate, PPM);
+  const { onRSStart, rsPreview } = useResizeHandler(onUpdate, PPM);
 
   const dayStartMin = DAY_START * 60;
   const totalH      = (DAY_END - DAY_START) * HH;
@@ -213,7 +213,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                 onAdd(d,h);
               }}>
               {Array.from({length:DAY_END-DAY_START},(_,i) => (
-                <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}18`}}>
+                <div key={i} style={{position:"absolute",top:i*HH,left:0,right:0,height:HH,borderTop:`1px solid ${C.border}18`,pointerEvents:"none"}}>
                   <div style={{position:"absolute",top:"50%",left:0,right:0,height:1,background:`${C.border}08`}}/>
                 </div>
               ))}
@@ -238,9 +238,13 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
                   const col = group.indexOf(i);
                   return {...chip, col, totalCols};
                 });
-                return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => (
-                  <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c} startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
-                ));
+                return assigned.map(({t,c,sm,em,isDone,col,totalCols}) => {
+                  const prev = rsPreview && rsPreview.id === t.id ? rsPreview : null;
+                  const dispEm = prev ? (prev.endTime ? t2m(prev.endTime) : em) : em;
+                  return (
+                    <TimelineChip key={t._sessionId||t.id} task={prev||t} tags={tags} color={c} startMin={sm} endMin={dispEm} dayStartMin={dayStartMin} ppm={PPM} onPopup={(e,tk)=>hp(e,tk,d)} onToggle={(id)=>hToggle(id,d)} onUpdate={onUpdate} onRSStart={onRSStart} col={col} totalCols={totalCols} isDone={isDone}/>
+                  );
+                });
               })()}
               {/* GCalタイムチップ */}
               {getGCalDay(d).filter(ev=>ev.startTime&&!ev.isAllDay).map(ev => {
@@ -280,7 +284,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
           );
         })}
       </div>
-      {popup && <Popup task={popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onRemoveSession={onRemoveSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={(popup.taskId ? flatten(tasks).find(x=>x.id===popup.taskId) : null)||popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onRemoveSession={onRemoveSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
