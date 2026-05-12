@@ -298,7 +298,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     border:`1px solid ${color}33`,display:"flex",flexDirection:"column",
   });
 
-  const onRSStartDB = useResizeHandler(onUpdate, PPM);
+  const { onRSStart: onRSStartDB, rsPreview: rsPreviewDB } = useResizeHandler(onUpdate, PPM);
 
   const hDropDB = (e, relY) => {
     e.preventDefault(); setDropH(null);
@@ -411,9 +411,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
             const c = tags.find(tg=>t.tags?.includes(tg.id))?.color||C.accent;
             const isDone = t.repeat&&parseRepeat(t.repeat).type!=="なし"?(t.doneDates||[]).includes(today):t.done;
             const col = t._col||0, totalCols = t._totalCols||1;
+            const prev = rsPreviewDB && rsPreviewDB.id === t.id ? rsPreviewDB : null;
+            const dispEm = prev ? (prev.endTime ? t2m(prev.endTime) : em) : em;
             return (
-              <TimelineChip key={t._sessionId||t.id} task={t} tags={tags} color={c}
-                startMin={sm} endMin={em} dayStartMin={dayStartMin} ppm={PPM}
+              <TimelineChip key={t._sessionId||t.id} task={prev||t} tags={tags} color={c}
+                startMin={sm} endMin={dispEm} dayStartMin={dayStartMin} ppm={PPM}
                 onPopup={openPopup} onToggle={hToggle} onUpdate={onUpdate}
                 onRSStart={onRSStartDB} col={col} totalCols={totalCols} isDone={isDone}
                 onQuickReschedule={(task,label)=>{
