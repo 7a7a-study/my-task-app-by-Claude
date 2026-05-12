@@ -20,6 +20,7 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   const lpRef = React.useRef(null);
   const rsLpRef = React.useRef(null); // リサイズ用長押しタイマー
   const rsActiveRef = React.useRef(false); // リサイズ長押し中フラグ
+  const mouseResizingRef = React.useRef(false); // マウスリサイズ中フラグ
 
   const cbTouchedRef = React.useRef(false); // CB領域タッチ済みフラグ
 
@@ -63,7 +64,7 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
   return (
     <div
       draggable={!IS_TOUCH || lpActive}
-      onDragStart={e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
+      onDragStart={e=>{if(mouseResizingRef.current){e.preventDefault();return;} e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);e.stopPropagation();}}
       onDragOver={e=>e.preventDefault()}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
@@ -118,7 +119,7 @@ export const TimelineChip = ({task,tags,color,startMin,endMin,dayStartMin,ppm,on
         </div>
       )}
       <div className="rh"
-        onMouseDown={e=>{if(!IS_TOUCH){onRSStart(e,task);}}}
+        onMouseDown={e=>{if(!IS_TOUCH){e.stopPropagation();e.preventDefault();mouseResizingRef.current=true;onRSStart(e,task);document.addEventListener("mouseup",()=>{mouseResizingRef.current=false;},{once:true});}}}
         onTouchStart={handleRSTouchStart}
         onTouchEnd={handleRSTouchEnd}
         onTouchMove={handleRSTouchMove}
