@@ -424,4 +424,4 @@ export const useResizeHandler = (onUpdate, PPM) => {
     document.addEventListener("touchend",  up);
   }, [PPM]);
   return { onRSStart, rsPreview };
-};};
+};
