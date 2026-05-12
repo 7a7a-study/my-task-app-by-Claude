@@ -303,6 +303,7 @@ export const getTasksForDate = (tasks, date) => {
         .map((s, idx) => {
           const sd = sessionStartDate(s);
           const sid = s.id || (sd + "_" + idx); // idなき古いデータは startDate+index で代替
+          const totalSessions = t.sessions.filter(s => sessionCoversDate(s, date)).length;
           return {
             ...t,
             startDate: sd, startTime: s.startTime, endTime: s.endTime,
@@ -310,7 +311,7 @@ export const getTasksForDate = (tasks, date) => {
             duration: s.startTime && s.endTime
               ? String(t2m(s.endTime) - t2m(s.startTime))
               : (s.startTime ? (t.duration || "") : ""),
-            _sessionId: sid, _sessionOnly: idx > 0,
+            _sessionId: sid, _sessionOnly: totalSessions > 1,
           };
         })
       ),
