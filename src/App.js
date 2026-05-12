@@ -548,10 +548,12 @@ export default function App() {
     setTasks(updTreeLocal(tasks, id, t => ({...t, sessions: [...(t.sessions || []), session]})));
   };
 
-  // 時間枠を1つ削除（sessionのidで特定）
+  // 時間枠を1つ削除（sessionのidで特定）、nullなら全セッションクリア
   const handleRemoveSession = (taskId, sessionId) => {
     setTasks(updTreeLocal(tasks, taskId, t => {
-      const sessions = (t.sessions || []).filter(s => s.id !== sessionId);
+      const sessions = sessionId
+        ? (t.sessions || []).filter(s => s.id !== sessionId)
+        : [];
       return {
         ...t,
         sessions,
