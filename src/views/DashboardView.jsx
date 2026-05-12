@@ -136,11 +136,11 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const sid = task._sessionId;
     let sessions;
     if (sid) {
-      sessions = (task.sessions||[]).map(s => s.id===sid ? {...s, startDate:date, date} : s);
+      sessions = (task.sessions||[]).map(s => s.id===sid ? {...s, startDate:date, date, endDate:""} : s);
     } else {
       sessions = (task.sessions||[]).length > 0
-        ? task.sessions.map((s,i) => i===0 ? {...s, startDate:date, date} : s)
-        : [{id:"s_main", startDate:date, date, startTime:"", endTime:""}];
+        ? task.sessions.map((s,i) => i===0 ? {...s, startDate:date, date, endDate:""} : s)
+        : [{id:"s_main", startDate:date, date, endDate:"", startTime:"", endTime:""}];
     }
     onUpdate({...task, sessions, startDate:"", startTime:"", endTime:"", isLater:false});
   };
@@ -312,9 +312,14 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const t   = tid ? all.find(x=>x.id===tid)||dragTask : dragTask;
     if (!t) return;
     const et = t.duration ? addDur(st, Number(t.duration)) : "";
+    const sid = t._sessionId;
     const newSessions = (t.sessions||[]).length > 0
-      ? t.sessions.map((s,i) => i===0 ? {...s, date:today, startDate:today, startTime:st, endTime:et} : s)
-      : [{id:"s_main", date:today, startDate:today, startTime:st, endTime:et}];
+      ? t.sessions.map((s,i) => {
+          const isTarget = sid ? s.id === sid : i === 0;
+          if (!isTarget) return s;
+          return {...s, date:today, startDate:today, endDate:"", startTime:st, endTime:et};
+        })
+      : [{id:"s_main", date:today, startDate:today, endDate:"", startTime:st, endTime:et}];
     onUpdate({...t, sessions:newSessions, startDate:"", startTime:"", endTime:"", isLater:false});
     setDragTask&&setDragTask(null);
   };
