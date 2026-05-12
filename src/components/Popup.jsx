@@ -159,14 +159,9 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
               {task._sessionOnly ? "⚠️ この時間枠をどうしますか？" : "⚠️ 削除方法を選択"}
             </div>
             <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              {task._sessionOnly && onRemoveSession && (
-                <Btn v="warn" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, task._sessionId); onClose();}}>
-                  📅 この時間枠だけ削除
-                </Btn>
-              )}
-              {!task._sessionOnly && (s0.startDate||s0.date) && onRemoveSession && (
-                <Btn v="warn" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, null); onClose();}}>
-                  📅 日程だけ削除（タスクは残す）
+              {onRemoveSession && (s0.startDate||s0.date) && (
+                <Btn v="warn" style={{fontSize:10,padding:"8px 10px",textAlign:"left",borderRadius:8}} onClick={e=>{e.stopPropagation(); onRemoveSession(task.id, task._sessionId||null); onClose();}}>
+                  📅 この時間枠を削除（タスクは残す）
                 </Btn>
               )}
               <div style={{borderTop:`1px solid ${C.border}`,margin:"2px 0"}}/>
