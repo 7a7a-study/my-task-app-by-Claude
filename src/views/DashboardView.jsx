@@ -493,7 +493,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
 
   const popupLayerJSX = popup ? (
     <Popup
-      task={(popup.taskId ? all.find(x=>x.id===popup.taskId) : null) || popup.task} tags={tags} anchor={{x:popup.x,y:popup.y}}
+      task={popup.task || (popup.taskId ? all.find(x=>x.id===popup.taskId) : null)} tags={tags} anchor={{x:popup.x,y:popup.y}}
       viewDate={today}
       onClose={()=>setPopup(null)}
       onEdit={t=>{onEdit(t);setPopup(null);}}
