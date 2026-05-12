@@ -284,7 +284,7 @@ export const WeekView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDele
           );
         })}
       </div>
-      {popup && <Popup task={(popup.taskId ? flatten(tasks).find(x=>x.id===popup.taskId) : null)||popup.task} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onRemoveSession={onRemoveSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
+      {popup && <Popup task={popup.task||(popup.taskId ? flatten(tasks).find(x=>x.id===popup.taskId) : null)} tags={tags} anchor={popup} viewDate={popup.viewDate} onClose={()=>setPopup(null)} onEdit={onEdit} onToggle={id=>{onToggle(id);setPopup(null);}} onDelete={onDelete} onDuplicate={onDuplicate} onMemoToggle={hMemo} onAddSession={onAddSession} onRemoveSession={onRemoveSession} onSkip={(id,date)=>{onSkip(id,date);setPopup(null);}} onOverride={(id,orig,ov)=>{onOverride(id,orig,ov);setPopup(null);}}/> }
     </div>
   );
 };
