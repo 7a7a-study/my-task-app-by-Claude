@@ -97,7 +97,27 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     const r = e.currentTarget.getBoundingClientRect();
     setPopup({task, taskId: task.id, x: Math.min(r.right+8, window.innerWidth-308), y: Math.min(r.top, window.innerHeight-420)});
   };
-  const hToggle = (id) => {
+  const hToggle = (idOrTask) => {
+    // taskオブジェクト直渡し（_overrideKey付き）の場合に対応
+    if (idOrTask && typeof idOrTask === "object") {
+      const t = idOrTask;
+      if (t._overrideKey && t._overrideId) {
+        onToggle(t._overrideId, t._overrideKey);
+      } else {
+        const isRep = t.repeat && parseRepeat(t.repeat).type !== "なし";
+        onToggle(t.id, isRep ? today : undefined);
+      }
+      return;
+    }
+    const id = idOrTask;
+    // _overrideKey付きIDの場合（元ID_ov_日付 形式）
+    const ovMatch = typeof id === "string" && id.includes("_ov_");
+    if (ovMatch) {
+      // all内でoverrideId一致するものを探す
+      const baseId = id.split("_ov_")[0];
+      const t = all.find(x => x.id === baseId);
+      if (t) { onToggle(baseId, id); return; }
+    }
     const t = all.find(x=>x.id===id);
     const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
     onToggle(id, isRep ? today : undefined);
@@ -202,9 +222,16 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     });
   }, [timedTasks]); // eslint-disable-line
 
+  // 親タスクマップ（子タスクの parentId → 親タスク名）
+  const parentMap = useMemo(() => {
+    const map = {};
+    all.forEach(t => { map[t.id] = t.title; });
+    return map;
+  }, [all]); // eslint-disable-line
+
   const MiniRow = ({task, showDate, draggable: isDraggable, showQuick, showQuickOverwrite, week7Mode}) => {
     const c = tags.find(tg => task.tags?.includes(tg.id))?.color || C.accent;
-    const childTag = tags.find(tg => task.tags?.includes(tg.id) && tg.parentId);
+    const taskTags = tags.filter(tg => task.tags?.includes(tg.id));
     const isOver = task.deadlineDate && task.deadlineDate < today && !task.done;
     // week7Modeの繰り返しタスクは未来日なので常に未完了表示
     const isDone = week7Mode && task.repeat && parseRepeat(task.repeat).type !== "なし"
@@ -213,62 +240,88 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         ? (task.doneDates||[]).includes(today)
         : task.done;
 
-    // 今後7日間の日時枠情報（繰り返し含む）
+    // 親タスク名
+    const parentName = task.parentId ? parentMap[task.parentId] : null;
+
+    // 今後7日間：直近の未来セッション日付＋時刻を表示
     const sessionDateStr = (() => {
       if (!showDate) return "";
       if (task.repeat && parseRepeat(task.repeat).type !== "なし") {
-        // 繰り返しはsessions[0]の時間情報だけ表示
         const s0 = task.sessions?.[0];
         return s0?.startTime ? s0.startTime + (s0.endTime ? `〜${s0.endTime}` : "") : "繰返";
+      }
+      if (week7Mode) {
+        const futureSessions = (task.sessions||[])
+          .filter(s => { const sd = s.startDate || s.date || ""; return sd >= tomorrow; })
+          .sort((a,b) => (a.startDate||a.date||"").localeCompare(b.startDate||b.date||""));
+        if (futureSessions.length > 0) {
+          const s = futureSessions[0];
+          const dateStr = fd(s.startDate || s.date);
+          const timeStr = s.startTime ? " " + s.startTime + (s.endTime ? `〜${s.endTime}` : "") : "";
+          return dateStr + timeStr;
+        }
       }
       return task.sessions?.[0]?.startDate || task.sessions?.[0]?.date || "";
     })();
 
     return (
       <div style={{padding:"4px 0",borderBottom:`1px solid ${C.border}18`,opacity:isDone?.55:1}}>
-        <div style={{display:"flex",alignItems:"center",gap:7,cursor:isDraggable?"grab":"pointer"}}
+        <div style={{display:"flex",alignItems:"flex-start",gap:7,cursor:isDraggable?"grab":"pointer"}}
           draggable={!!isDraggable}
           onDragStart={isDraggable ? e=>{e.dataTransfer.effectAllowed="move";e.dataTransfer.setData("taskId",task.id);setDragTask&&setDragTask(task);} : undefined}
           onDragEnd={isDraggable ? ()=>setDragTask&&setDragTask(null) : undefined}
           onClick={e=>openPopup(e,task)}>
-          <div onClick={e=>{e.stopPropagation();hToggle(task.id);}}
+          <div onClick={e=>{e.stopPropagation();hToggle(task);}}
             style={{width:12,height:12,borderRadius:3,border:`2px solid ${isDone?c:C.border}`,
-              background:isDone?c:"transparent",flexShrink:0,cursor:"pointer",
+              background:isDone?c:"transparent",flexShrink:0,cursor:"pointer",marginTop:2,
               display:"flex",alignItems:"center",justifyContent:"center"}}>
             {isDone && <span style={{color:"#fff",fontSize:7,fontWeight:900}}>✓</span>}
           </div>
-          <span style={{fontSize:12,color:isDone?C.textMuted:C.text,
-            textDecoration:isDone?"line-through":"none",
-            flex:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{task.title}</span>
-          {childTag && <span style={{fontSize:8,color:childTag.color,fontWeight:600,flexShrink:0,
-            padding:"1px 5px",borderRadius:8,background:childTag.color+"18"}}>{childTag.name}</span>}
-          {showDate && (() => {
-            const hasDL = !!task.deadlineDate;
-            const isOver2 = hasDL && task.deadlineDate < today;
-            const dlColor = isOver2 ? C.danger : C.warn;
-            const hasSession = task._w7session && sessionDateStr;
-            // 締切あり
-            if (hasDL) {
-              const dlLabel = (isOver2 ? "⚠ " : "") + fd(task.deadlineDate) + "締";
-              // 日時枠もあるかどうかをアイコンで付記
-              const sessionHint = hasSession
-                ? <span style={{fontSize:9,color:C.accent,flexShrink:0,marginLeft:2}}>📅</span>
-                : <span style={{fontSize:9,color:C.textMuted,flexShrink:0,marginLeft:2,opacity:.5}}>□</span>;
-              return (
-                <span style={{display:"flex",alignItems:"center",gap:1,flexShrink:0}}>
-                  <span style={{fontSize:9,color:dlColor,fontWeight:isOver2?700:500}}>{dlLabel}</span>
-                  {sessionHint}
+          <div style={{flex:1,overflow:"hidden",minWidth:0}}>
+            {parentName && (
+              <div style={{fontSize:9,color:C.textMuted,marginBottom:1,overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>
+                {parentName} ›
+              </div>
+            )}
+            <span style={{fontSize:12,color:isDone?C.textMuted:C.text,
+              textDecoration:isDone?"line-through":"none",
+              display:"block",overflow:"hidden",whiteSpace:"nowrap",textOverflow:"ellipsis"}}>{task.title}</span>
+            {showDate && (() => {
+              const hasDL = !!task.deadlineDate;
+              const isOver2 = hasDL && task.deadlineDate < today;
+              const dlColor = isOver2 ? C.danger : C.warn;
+              const hasSession = task._w7session && sessionDateStr;
+              if (hasDL) {
+                const dlLabel = (isOver2 ? "⚠ " : "") + fd(task.deadlineDate) + "締";
+                const sessionHint = hasSession
+                  ? <span style={{fontSize:9,color:C.accent,flexShrink:0,marginLeft:2}}>📅</span>
+                  : <span style={{fontSize:9,color:C.textMuted,flexShrink:0,marginLeft:2,opacity:.5}}>□</span>;
+                return (
+                  <span style={{display:"flex",alignItems:"center",gap:1}}>
+                    <span style={{fontSize:9,color:dlColor,fontWeight:isOver2?700:500}}>{dlLabel}</span>
+                    {sessionHint}
+                  </span>
+                );
+              }
+              if (sessionDateStr) return (
+                <span style={{fontSize:9,color:C.accent,display:"block",marginTop:1}}>
+                  📅{week7Mode ? sessionDateStr : (task.repeat&&parseRepeat(task.repeat).type!=="なし" ? sessionDateStr : fd(sessionDateStr))}
                 </span>
               );
-            }
-            // セッションのみ
-            if (sessionDateStr) return (
-              <span style={{fontSize:9,color:C.accent,flexShrink:0}}>
-                📅{task.repeat&&parseRepeat(task.repeat).type!=="なし" ? sessionDateStr : fd(sessionDateStr)}
-              </span>
-            );
-            return null;
-          })()}
+              return null;
+            })()}
+          </div>
+          {/* タグ縦並び・一番右 */}
+          {taskTags.length > 0 && (
+            <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end",flexShrink:0,marginLeft:4}}>
+              {taskTags.map(tg => (
+                <span key={tg.id} style={{fontSize:8,color:tg.color,fontWeight:600,
+                  padding:"1px 5px",borderRadius:8,background:tg.color+"18",whiteSpace:"nowrap"}}>
+                  {tg.name}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
         {showQuick && !isDone && <QuickBtns task={task} mode="add"/>}
         {showQuickOverwrite && !isDone && <QuickBtns task={task} mode="overwrite"/>}
