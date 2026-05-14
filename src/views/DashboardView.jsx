@@ -73,24 +73,31 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       }
     });
     return result.sort((a, b) => {
-      const dateOf = t => {
+      const dateTimeOf = t => {
         if (t.repeat && parseRepeat(t.repeat).type !== "なし") {
-          // 繰り返し：直近の一致日
           for (let i = 1; i <= 7; i++) {
             const d = new Date(today); d.setDate(d.getDate() + i);
             const ds = localDate(d);
-            if (matchesRepeat(t, ds)) return ds;
+            if (matchesRepeat(t, ds)) {
+              const s0 = t.sessions?.[0];
+              const time = s0?.startTime || "99:99";
+              return ds + " " + time;
+            }
           }
           return "9";
         }
-        // 通常：直近の未来セッション
-        const futureDates = (t.sessions||[])
-          .map(s => s.startDate || s.date || "")
-          .filter(s => s >= tomorrow)
-          .sort();
-        return futureDates[0] || t.deadlineDate || "9";
+        const futureSessions = (t.sessions||[])
+          .filter(s => (s.startDate || s.date || "") >= tomorrow)
+          .sort((a,b) => (a.startDate||a.date||"").localeCompare(b.startDate||b.date||""));
+        if (futureSessions.length > 0) {
+          const s = futureSessions[0];
+          const date = s.startDate || s.date || "";
+          const time = s.startTime || "99:99";
+          return date + " " + time;
+        }
+        return (t.deadlineDate || "9") + " 99:99";
       };
-      return dateOf(a).localeCompare(dateOf(b));
+      return dateTimeOf(a).localeCompare(dateTimeOf(b));
     });
   })();
 
@@ -188,12 +195,12 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
   ];
 
   const QuickBtns = ({task, mode}) => (
-    <div style={{display:"flex",flexDirection:"column",gap:1}}>
+    <div style={{display:"flex",flexDirection:"row",gap:2,flexWrap:"nowrap"}}>
       {quickDates().map(({label,date,color}) => (
         <button key={label}
           onClick={e=>{e.stopPropagation(); mode==="overwrite" ? quickScheduleOverwrite(task,date) : quickScheduleAdd(task,date);}}
           style={{fontSize:7,padding:"1px 4px",borderRadius:5,border:`1px solid ${color}55`,
-            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.3,whiteSpace:"nowrap",textAlign:"center"}}>
+            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.3,whiteSpace:"nowrap"}}>
           {label}
         </button>
       ))}
@@ -341,26 +348,22 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               return null;
             })()}
           </div>
-          {/* QuickBtns（左）＋タグ（右）を横並び、最大高さ制限 */}
+          {/* QuickBtns（横1行）＋タグ 縦並び、右端 */}
           {(taskTags.length > 0 || (!isDone && (showQuick || showQuickOverwrite))) && (
-            <div style={{display:"flex",alignItems:"flex-start",gap:3,flexShrink:0,marginLeft:4,maxHeight:36,overflow:"hidden"}}>
+            <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end",flexShrink:0,marginLeft:4}}>
               {!isDone && (showQuick || showQuickOverwrite) && (
                 <QuickBtns task={task} mode={showQuick ? "add" : "overwrite"}/>
               )}
-              {taskTags.length > 0 && (
-                <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
-                  {taskTags.map(tg => (
-                    <span key={tg.id} style={{fontSize:8,color:tg.color,fontWeight:600,
-                      padding:"1px 5px",borderRadius:8,background:tg.color+"18",whiteSpace:"nowrap"}}>
-                      {tg.name}
-                    </span>
-                  ))}
-                </div>
-              )}
+              {taskTags.map(tg => (
+                <span key={tg.id} style={{fontSize:8,color:tg.color,fontWeight:600,
+                  padding:"1px 5px",borderRadius:8,background:tg.color+"18",whiteSpace:"nowrap"}}>
+                  {tg.name}
+                </span>
+              ))}
             </div>
           )}
         </div>
-        {/* QuickBtnsはタグ列の下に縦並びで追加（行幅を増やさない） */}
+
       </div>
     );
   };
