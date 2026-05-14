@@ -98,10 +98,10 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     setPopup({task, taskId: task.id, x: Math.min(r.right+8, window.innerWidth-308), y: Math.min(r.top, window.innerHeight-420)});
   };
   const hToggle = (idOrTask) => {
-    // taskオブジェクト直渡し（_overrideKey付き）の場合に対応
     if (idOrTask && typeof idOrTask === "object") {
       const t = idOrTask;
       if (t._overrideKey && t._overrideId) {
+        // 今回のみ変更タスク: 元IDにorigDateでdoneDates更新
         onToggle(t._overrideId, t._overrideKey);
       } else {
         const isRep = t.repeat && parseRepeat(t.repeat).type !== "なし";
@@ -110,13 +110,13 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       return;
     }
     const id = idOrTask;
-    // _overrideKey付きIDの場合（元ID_ov_日付 形式）
-    const ovMatch = typeof id === "string" && id.includes("_ov_");
-    if (ovMatch) {
-      // all内でoverrideId一致するものを探す
-      const baseId = id.split("_ov_")[0];
-      const t = all.find(x => x.id === baseId);
-      if (t) { onToggle(baseId, id); return; }
+    // _ov_ 形式のID（今回のみ変更タスク）
+    if (typeof id === "string" && id.includes("_ov_")) {
+      const parts = id.split("_ov_");
+      const baseId = parts[0];
+      const origDate = parts[1];
+      onToggle(baseId, origDate);
+      return;
     }
     const t = all.find(x=>x.id===id);
     const isRep = t?.repeat && parseRepeat(t.repeat).type !== "なし";
@@ -171,14 +171,14 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     {label:"来週",   date:nextWeekday(today),  color:C.info},
   ];
 
-  const QuickBtns = ({task, mode}) => (
-    <div style={{display:"flex",gap:3,marginTop:4,flexWrap:"wrap"}}>
+  const QuickBtns = ({task, mode, vertical}) => (
+    <div style={{display:"flex",flexDirection:vertical?"column":"row",gap:2,flexWrap:vertical?"nowrap":"wrap",marginTop:vertical?0:4}}>
       {quickDates().map(({label,date,color}) => (
         <button key={label}
           onClick={e=>{e.stopPropagation(); mode==="overwrite" ? quickScheduleOverwrite(task,date) : quickScheduleAdd(task,date);}}
-          style={{fontSize:8,padding:"2px 6px",borderRadius:8,border:`1px solid ${color}55`,
-            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.4}}>
-          {label}→
+          style={{fontSize:7,padding:"1px 4px",borderRadius:6,border:`1px solid ${color}55`,
+            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.4,whiteSpace:"nowrap"}}>
+          {label}
         </button>
       ))}
     </div>
@@ -222,7 +222,7 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     });
   }, [timedTasks]); // eslint-disable-line
 
-  // 親タスクマップ（子タスクの parentId → 親タスク名）
+  // 親タスクマップ（_pid → 親タスク名）
   const parentMap = useMemo(() => {
     const map = {};
     all.forEach(t => { map[t.id] = t.title; });
@@ -241,14 +241,28 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
         : task.done;
 
     // 親タスク名
-    const parentName = task.parentId ? parentMap[task.parentId] : null;
+    const parentName = task._pid ? parentMap[task._pid] : null;
 
     // 今後7日間：直近の未来セッション日付＋時刻を表示
     const sessionDateStr = (() => {
       if (!showDate) return "";
       if (task.repeat && parseRepeat(task.repeat).type !== "なし") {
+        // 繰り返し：直近の一致日を探す
+        if (week7Mode) {
+          const days = [];
+          for (let i = 1; i <= 7; i++) {
+            const d = new Date(today); d.setDate(d.getDate() + i);
+            days.push(localDate(d));
+          }
+          const nextDay = days.find(d => matchesRepeat(task, d));
+          if (nextDay) {
+            const s0 = task.sessions?.[0];
+            const timeStr = s0?.startTime ? " " + s0.startTime + (s0.endTime ? `〜${s0.endTime}` : "") : "";
+            return fd(nextDay) + timeStr;
+          }
+        }
         const s0 = task.sessions?.[0];
-        return s0?.startTime ? s0.startTime + (s0.endTime ? `〜${s0.endTime}` : "") : "繰返";
+        return s0?.startTime ? s0.startTime + (s0.endTime ? `〜${s0.endTime}` : "") : "";
       }
       if (week7Mode) {
         const futureSessions = (task.sessions||[])
@@ -311,8 +325,8 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               return null;
             })()}
           </div>
-          {/* タグ縦並び・一番右 */}
-          {taskTags.length > 0 && (
+          {/* タグ＋QuickBtns 縦並び・一番右 */}
+          {(taskTags.length > 0 || (!isDone && (showQuick || showQuickOverwrite))) && (
             <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end",flexShrink:0,marginLeft:4}}>
               {taskTags.map(tg => (
                 <span key={tg.id} style={{fontSize:8,color:tg.color,fontWeight:600,
@@ -320,11 +334,12 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
                   {tg.name}
                 </span>
               ))}
+              {!isDone && showQuick && <QuickBtns task={task} mode="add" vertical/>}
+              {!isDone && showQuickOverwrite && <QuickBtns task={task} mode="overwrite" vertical/>}
             </div>
           )}
         </div>
-        {showQuick && !isDone && <QuickBtns task={task} mode="add"/>}
-        {showQuickOverwrite && !isDone && <QuickBtns task={task} mode="overwrite"/>}
+        {/* QuickBtnsはタグ列の下に縦並びで追加（行幅を増やさない） */}
       </div>
     );
   };
