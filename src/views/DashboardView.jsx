@@ -73,7 +73,23 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
       }
     });
     return result.sort((a, b) => {
-      const dateOf = t => t.deadlineDate || (t.sessions||[]).map(s=>s.startDate||s.date||"").filter(Boolean).sort()[0] || "9";
+      const dateOf = t => {
+        if (t.repeat && parseRepeat(t.repeat).type !== "なし") {
+          // 繰り返し：直近の一致日
+          for (let i = 1; i <= 7; i++) {
+            const d = new Date(today); d.setDate(d.getDate() + i);
+            const ds = localDate(d);
+            if (matchesRepeat(t, ds)) return ds;
+          }
+          return "9";
+        }
+        // 通常：直近の未来セッション
+        const futureDates = (t.sessions||[])
+          .map(s => s.startDate || s.date || "")
+          .filter(s => s >= tomorrow)
+          .sort();
+        return futureDates[0] || t.deadlineDate || "9";
+      };
       return dateOf(a).localeCompare(dateOf(b));
     });
   })();
@@ -171,13 +187,13 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
     {label:"来週",   date:nextWeekday(today),  color:C.info},
   ];
 
-  const QuickBtns = ({task, mode, vertical}) => (
-    <div style={{display:"flex",flexDirection:vertical?"column":"row",gap:2,flexWrap:vertical?"nowrap":"wrap",marginTop:vertical?0:4}}>
+  const QuickBtns = ({task, mode}) => (
+    <div style={{display:"flex",flexDirection:"column",gap:1}}>
       {quickDates().map(({label,date,color}) => (
         <button key={label}
           onClick={e=>{e.stopPropagation(); mode==="overwrite" ? quickScheduleOverwrite(task,date) : quickScheduleAdd(task,date);}}
-          style={{fontSize:7,padding:"1px 4px",borderRadius:6,border:`1px solid ${color}55`,
-            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.4,whiteSpace:"nowrap"}}>
+          style={{fontSize:7,padding:"1px 4px",borderRadius:5,border:`1px solid ${color}55`,
+            background:color+"15",color,cursor:"pointer",fontWeight:600,lineHeight:1.3,whiteSpace:"nowrap",textAlign:"center"}}>
           {label}
         </button>
       ))}
@@ -325,17 +341,22 @@ export const DashboardView = ({tasks,tags,today,onToggle,onEdit,onDelete,onDupli
               return null;
             })()}
           </div>
-          {/* タグ＋QuickBtns 縦並び・一番右 */}
+          {/* QuickBtns（左）＋タグ（右）を横並び、最大高さ制限 */}
           {(taskTags.length > 0 || (!isDone && (showQuick || showQuickOverwrite))) && (
-            <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end",flexShrink:0,marginLeft:4}}>
-              {taskTags.map(tg => (
-                <span key={tg.id} style={{fontSize:8,color:tg.color,fontWeight:600,
-                  padding:"1px 5px",borderRadius:8,background:tg.color+"18",whiteSpace:"nowrap"}}>
-                  {tg.name}
-                </span>
-              ))}
-              {!isDone && showQuick && <QuickBtns task={task} mode="add" vertical/>}
-              {!isDone && showQuickOverwrite && <QuickBtns task={task} mode="overwrite" vertical/>}
+            <div style={{display:"flex",alignItems:"flex-start",gap:3,flexShrink:0,marginLeft:4,maxHeight:36,overflow:"hidden"}}>
+              {!isDone && (showQuick || showQuickOverwrite) && (
+                <QuickBtns task={task} mode={showQuick ? "add" : "overwrite"}/>
+              )}
+              {taskTags.length > 0 && (
+                <div style={{display:"flex",flexDirection:"column",gap:2,alignItems:"flex-end"}}>
+                  {taskTags.map(tg => (
+                    <span key={tg.id} style={{fontSize:8,color:tg.color,fontWeight:600,
+                      padding:"1px 5px",borderRadius:8,background:tg.color+"18",whiteSpace:"nowrap"}}>
+                      {tg.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           )}
         </div>
