@@ -41,7 +41,14 @@ export const DayView = ({tasks,tags,today,onUpdate,onAdd,onToggle,onEdit,onDelet
 
   const hp = (e,task,vd) => { const r=e.currentTarget.getBoundingClientRect(); setPopup({task,taskId:task.id,x:Math.min(r.right+8,window.innerWidth-308),y:Math.min(r.top,window.innerHeight-350),viewDate:vd||viewDate}); };
   const hMemo = (id,idx) => { const t=all.find(x=>x.id===id); if(t)onUpdate({...t,memo:toggleMemo(t.memo,idx)}); setPopup(p=>p?{...p,task:{...p.task,memo:toggleMemo(p.task.memo,idx)}}:null); };
-  const hToggle = (id) => { const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?viewDate:undefined); };
+  const hToggle = (id) => {
+    if (typeof id === "string" && id.includes("_ov_")) {
+      const [baseId, origDate] = id.split("_ov_");
+      onToggle(baseId, origDate);
+      return;
+    }
+    const t=all.find(x=>x.id===id); const isRep=t?.repeat&&parseRepeat(t.repeat).type!=="なし"; onToggle(id, isRep?viewDate:undefined);
+  };
 
   const { onRSStart, rsPreview } = useResizeHandler(onUpdate, PPM);
 
