@@ -42,7 +42,7 @@ export const Popup = ({task,tags,onClose,onEdit,onToggle,onDelete,onMemoToggle,o
       <div onClick={e=>e.stopPropagation()} style={{position:"fixed",top:Math.min(anchor?.y||80,window.innerHeight-420),left:Math.min(anchor?.x||80,window.innerWidth-308),background:C.surface,borderRadius:12,padding:13,border:`1px solid ${C.border}`,width:296,boxShadow:"0 16px 48px rgba(0,0,0,.68)",zIndex:501,maxHeight:"90vh",overflowY:"auto"}}>
         <div style={{position:"absolute",top:0,left:0,right:0,height:3,borderRadius:"12px 12px 0 0",background:`linear-gradient(90deg,${tc},${tc}55)`}}/>
         <div style={{display:"flex",alignItems:"flex-start",gap:8,marginBottom:8,marginTop:3}}>
-          <CB checked={task.done} onChange={()=>{onToggle(task._overrideId||task.id);onClose();}} size={16} color={tc}/>
+          <CB checked={task.done} onChange={()=>{onToggle(task._overrideId||task.id, task._overrideKey||undefined);onClose();}} size={16} color={tc}/>
           <div style={{flex:1,minWidth:0}}>
             {task._pt && <div style={{fontSize:9,color:C.textMuted,marginBottom:1}}>📁 {task._pt}</div>}
             <div style={{fontSize:13,fontWeight:700,textDecoration:task.done?"line-through":"none",color:task.done?C.textMuted:C.text,lineHeight:1.3}}>{task.title}</div>
